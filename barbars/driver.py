@@ -1096,10 +1096,10 @@ class Game:
 
     @staticmethod
     def _item_blocks(html: str) -> list[tuple[str, str]]:
-        """Разбить страницу рюкзака на блоки предметов: (html блока, href индекса)."""
+        """Разбить страницу рюкзака/сундука на блоки предметов: (html блока, href индекса)."""
         blocks: list[tuple[str, str]] = []
         for chunk in html.split('<div class="hr"></div>'):
-            m = re.search(r'href="([^"]*items:(\d+):(?:wearLink|toStoreLink)[^"]*)"', chunk)
+            m = re.search(r'href="([^"]*items:(\d+):[^"]*)"', chunk)
             if m:
                 blocks.append((chunk, m.group(2)))
         return blocks
@@ -1118,7 +1118,10 @@ class Game:
         return out
 
     def equip_better_items(self, limit: int = 8) -> int:
-        """Надеть вещи, помеченные «Лучше (+N)» — герой становится сильнее."""
+        """Надеть вещи, помеченные «Лучше (+N)» — герой становится сильнее.
+
+        Также подтягиваем «Лучше» из сундука: там тоже лежат вещи сильнее надетых.
+        """
         worn = 0
         for _ in range(limit):
             self.goto("https://barbars.ru/user/rack")
@@ -1129,11 +1132,123 @@ class Game:
                     target = index
                     break
             if target is None:
-                break
+                # ищем «Лучше» в сундуке и переносим в рюкзак
+                self.goto("https://barbars.ru/user/store")
+                store_html = self.p.content()
+                store_target = None
+                for chunk, index in self._item_blocks(store_html):
+                    if "Лучше" in chunk and f"items:{index}:toRackLink" in chunk:
+                        store_target = index
+                        break
+                if store_target is None:
+                    break
+                if not self.click_href(f"items:{store_target}:toRackLink"):
+                    break
+                continue
             if not self.click_href(f"items:{target}:wearLink"):
                 break
             worn += 1
         return worn
+
+    def crack_items(self, limit: int = 20, keep_better: bool = True) -> int:
+        """Разобрать вещи в рюкзаке на железо (ссылка `crackLink`).
+
+        По правилу игрока всё, что можно, превращается в железо; вещи с
+        пометкой «Лучше» не трогаем — их надо надеть, а не сломать.
+        """
+        cracked = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/rack")
+            html = self.p.content()
+            target = None
+            for chunk, index in self._item_blocks(html):
+                if f"items:{index}:crackIronPanel:crackLink" not in chunk:
+                    continue
+                if keep_better and "Лучше" in chunk:
+                    continue
+                target = index
+                break
+            if target is None:
+                break
+            if not self.click_href(f"items:{target}:crackIronPanel:crackLink"):
+                break
+            cracked += 1
+        return cracked
+
+    def crack_all_items(self) -> bool:
+        """«Разобрать всё на железо» — аварийный вариант для полного рюкзака."""
+        self.goto("https://barbars.ru/user/rack")
+        return self.click_href("crackAllIronLink")
+
+    def master_state(self) -> dict[str, Any]:
+        """Одна загрузка /user/master: варианты параметров и цена мастерства.
+
+        {"params": [{"param": "strength", "cost": 10000, "gain": 8,
+        "currency": "iron", "href": ...}], "mastery": {"iron": 35000, "mifril": 200}}
+        """
+        self.goto("https://barbars.ru/user/master")
+        html = self.p.content()
+        params: list[dict[str, Any]] = []
+        for m in re.finditer(r"moreParamsPanel:(\w+):upBlock:upLink", html):
+            segment = html[m.end():m.end() + 400]
+            # валюта стоимости: иконка сразу после «за»
+            cost_m = re.search(
+                r"за\s*<span[^>]*>\s*<img[^>]*icons/(\w+)\.png[^>]*/>\s*<span>([\d.,]+[KkMm]?)</span>",
+                segment,
+            )
+            if not cost_m:
+                continue
+            gain_m = re.search(r"\+[^0-9]{0,40}(\d+)", segment)
+            currency = {
+                "money_gold": "gold",
+                "money_silver": "silver",
+                "ironbar": "iron",
+                "mifrilbar": "mifril",
+                "silverbar": "silver",
+            }.get(cost_m.group(1), cost_m.group(1))
+            params.append(
+                {
+                    "param": m.group(1),
+                    "cost": parse_amount(cost_m.group(2)),
+                    "gain": int(gain_m.group(1)) if gain_m else 1,
+                    "currency": currency,
+                    "href": f"moreParamsPanel:{m.group(1)}:upBlock:upLink",
+                }
+            )
+        mastery: dict[str, int] = {}
+        m = re.search(r"upgradeLink", html)
+        if m:
+            segment = html[m.start():m.start() + 500]
+            for icon, number in re.findall(
+                r"icons/(ironbar|mifrilbar|money_\w+)\.png[^>]*/>\s*<span>([\d.,]+[KkMm]?)</span>",
+                segment,
+            ):
+                key = {"ironbar": "iron", "mifrilbar": "mifril", "money_gold": "gold"}.get(icon, icon)
+                mastery[key] = parse_amount(number)
+        return {"params": params, "mastery": mastery}
+
+    def master_upgrade_options(self) -> list[dict[str, Any]]:
+        """Параметры героя, которые можно улучшить: /user/master.
+
+        Возвращает список: {"param": "strength", "cost": 10000, "currency": "iron"}.
+        Улучшение параметров у разных героев стоит то золота, то железа —
+        золото по правилам не тратим, поэтому его пропускаем.
+        """
+        return self.master_state()["params"]
+
+    def upgrade_master_param(self, href: str) -> bool:
+        """Нажать «улучшить» у конкретного параметра на /user/master."""
+        self.goto("https://barbars.ru/user/master")
+        return self.click_href(href)
+
+    def mastery_level_cost(self) -> dict[str, int]:
+        """Стоимость повышения уровня мастерства: {"iron": ..., "mifril": ...}."""
+        return self.master_state()["mastery"]
+
+    def upgrade_mastery_level(self) -> bool:
+        """Повысить уровень мастерства (кнопка «Повысить за …»)."""
+        self.goto("https://barbars.ru/user/master")
+        return self.click_href("upgradeLink")
 
     def stash_items(self, keep: int = 4, limit: int = 20) -> int:
         """Сложить лишние вещи в сундук, чтобы освободить рюкзак.

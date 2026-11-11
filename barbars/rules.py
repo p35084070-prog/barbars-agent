@@ -69,6 +69,9 @@ class GameState:
     autocrack_kind: str = ""
     # рюкзак: шаг «рюкзак» не дал эффекта (сундук полон, надеть нечего)
     gear_blocked: bool = False
+    # прокачка: варианты улучшения параметров героя (железо) и мастерства
+    master_options: list[dict[str, Any]] = field(default_factory=list)
+    mastery_cost: dict[str, int] = field(default_factory=dict)
     # рюкзак и сундук: сколько занято
     bag: dict[str, int] = field(default_factory=dict)
     # фарм-события: какие из них сейчас не запускаются (кулдаун)
@@ -272,11 +275,17 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if sell is not None:
         return sell
 
-    # 9. Рюкзак: надеть лучшие вещи и убрать лишнее в сундук.
+    # 9. Рюкзак: надеть лучшие вещи и разобрать остальное на железо.
     #    Забитый рюкзак блокирует новый дроп — из-за этого встаёт опыт.
     gear = _pick_gear(state, config)
     if gear is not None:
         return gear
+
+    # 9a. Прокачка параметров героя железом (/user/master).
+    #     Золото по правилам не тратим, поэтому берём только железные варианты.
+    upgrade = _pick_upgrade(state, config)
+    if upgrade is not None:
+        return upgrade
 
     # 10. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
     #     Основной способ прокачки для новых героев (у них нет клана и подземелий).
@@ -339,11 +348,13 @@ def _pick_farm(state: GameState, config: dict[str, Any]) -> Decision | None:
 
 
 def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
-    """Разбор рюкзака: надеть лучшее, лишнее — в сундук.
+    """Рюкзак: надеть лучшее, остальное разобрать на железо.
 
-    Включается флагом `gear.enabled`. Если рюкзак и сундук полны, включает
-    более агрессивный авторазбор (`gear.overflow_crack`), чтобы дропы
-    превращались в железо, а не копились.
+    Включается флагом `gear.enabled`. По правилу игрока всё, что можно,
+    превращается в железо: сначала надеваем вещи с пометкой «Лучше (+N)»
+    (они сильнее надетых), затем ломаем остальное (`gear.crack`).
+    Если рюкзак и сундук полны, включает более агрессивный авторазбор
+    (`gear.overflow_crack`), чтобы дропы превращались в железо, а не копились.
     """
     cfg = config.get("gear", {})
     if not cfg.get("enabled"):
@@ -357,7 +368,9 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
     if used <= keep:
         return None
     overflow = (used >= total) and (chest_used >= chest_total)
-    if overflow:
+    crack = bool(cfg.get("crack", True))
+    if overflow and not crack:
+        # Разбор на железо выключен: сундук полон, дропы разбираем авторазбором.
         kind = str(cfg.get("overflow_crack", "autoCrackUncommonLink"))
         if state.autocrack_kind != kind:
             return Decision(
@@ -366,16 +379,80 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
                 reason="рюкзак и сундук полны — включаем разбор добычи",
             )
         return None
-    # Сундук полон: сложить вещи некуда, и надеть обычно тоже нечего.
-    # Повторять такой шаг бессмысленно — он блокирует фарм, поэтому
-    # ждём (state.gear_blocked), пока сундук не освободится.
-    if state.gear_blocked and chest_used >= chest_total:
+    # Уже пробовали разгрузить рюкзак и не вышло — ждём новый дроп (пауза в цикле).
+    if state.gear_blocked:
         return None
     return Decision(
         "gear",
         target="рюкзак",
-        params={"keep_bag": keep, "max_equip": int(cfg.get("max_equip", 8))},
-        reason=f"рюкзак заполнен на {used}/{total} — надеваем лучшее и убираем лишнее",
+        params={
+            "keep_bag": keep,
+            "max_equip": int(cfg.get("max_equip", 8)),
+            "crack": crack,
+        },
+        reason=f"рюкзак заполнен на {used}/{total} — надеваем лучшее и разбираем остальное",
+    )
+
+
+def _pick_upgrade(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Прокачка параметров героя железом (/user/master).
+
+    Правило игрока: железо тратится на прокачку. Золото по правилам не
+    тратим, поэтому варианты за золото пропускаем.
+    """
+    cfg = config.get("upgrade", {})
+    if not cfg.get("enabled"):
+        return None
+    keep_iron = int(cfg.get("keep_iron", 0))
+    iron = int(state.iron or 0)
+
+    # Сначала уровень мастерства: он даёт общий бонус ко всему (+N%).
+    # Стоит 35K железа + 200 мифрила (только у героев с открытым мастерством).
+    if cfg.get("mastery", False):
+        mcost = state.mastery_cost or {}
+        need_iron = int(mcost.get("iron", 0))
+        need_mifril = int(mcost.get("mifril", 0))
+        keep_mifril = int(cfg.get("keep_mifril", 0))
+        if need_iron and iron - need_iron >= keep_iron:
+            if int(state.mifril or 0) - need_mifril >= keep_mifril:
+                return Decision(
+                    "upgrade_mastery",
+                    target="мастерство",
+                    params={"iron": need_iron, "mifril": need_mifril},
+                    reason=(
+                        f"повышаем уровень мастерства за {need_iron} железа "
+                        f"и {need_mifril} мифрила"
+                    ),
+                )
+
+    if iron <= keep_iron:
+        return None
+    best: dict[str, Any] | None = None
+    best_ratio = 0.0
+    for option in state.master_options:
+        if option.get("currency") != "iron":
+            continue
+        cost = int(option.get("cost", 0))
+        if cost <= 0 or iron - cost < keep_iron:
+            continue
+        gain = max(1, int(option.get("gain", 1)))
+        ratio = gain / cost
+        if best is None or ratio > best_ratio:
+            best, best_ratio = option, ratio
+    if best is None:
+        return None
+    return Decision(
+        "upgrade",
+        target=str(best.get("param", "")),
+        params={
+            "href": str(best.get("href", "")),
+            "cost": int(best.get("cost", 0)),
+            "gain": int(best.get("gain", 1)),
+        },
+        reason=(
+            f"качаем параметр {best.get('param')} "
+            f"(+{best.get('gain', 1)}) за {best.get('cost')} железа"
+        ),
     )
 
 

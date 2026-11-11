@@ -27,7 +27,7 @@
     "stop_after_fights": 0,
     "login_timeout_sec": 600,
     "login_then_play": true,
-    "cycle_max_sec": 300
+    "cycle_max_sec": 600
   },
   "daily_award": {
     "enabled": true
@@ -185,7 +185,16 @@
     "enabled": true,
     "keep_bag": 4,
     "max_equip": 8,
+    "crack": true,
+    "crack_limit": 10,
     "overflow_crack": "autoCrackUncommonLink"
+  },
+  "upgrade": {
+    "enabled": true,
+    "mastery": false,
+    "keep_iron": 2000,
+    "keep_mifril": 0,
+    "check_interval_min": 10
   },
   "daily_file": "state/firewhite/daily.json"
 }

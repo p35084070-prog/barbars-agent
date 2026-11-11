@@ -44,6 +44,10 @@ class Agent:
         self.well_checked_at: float = 0.0
         self.exp_cache: list[dict[str, Any]] = []
         self.exp_checked_at: float = 0.0
+        # прокачка параметров героя: варианты улучшения (/user/master) и кэш
+        self.master_cache: list[dict[str, Any]] = []
+        self.mastery_cache: dict[str, int] = {}
+        self.master_checked_at: float = 0.0
         # текущий режим авторазбора (нужно, чтобы не включать его заново)
         self.autocrack_kind: str = ""
         # крайний срок работы (0 = работаем бесконечно); нужен в облаке,
@@ -58,6 +62,7 @@ class Agent:
         # рюкзак: если разгрузить его не вышло (сундук полон и надеть нечего),
         # повторять тот же шаг бессмысленно — он блокирует фарм. Ждём полчаса.
         self.gear_blocked_until: float = 0.0
+        self.gear_blocked_sig: tuple[int, int] = (0, 0)
         self.daily = self._load_daily()
 
     # ------------------------------------------------------------------ логи
@@ -164,7 +169,16 @@ class Agent:
         if self.quest_blocked_until > time.time():
             state.quests = []
         if self.gear_blocked_until > time.time():
-            state.gear_blocked = True
+            # пауза действует, только пока содержимое рюкзака/сундука не изменилось:
+            # пришёл новый дроп — снова пробуем надеть/разобрать
+            sig = (
+                int((state.bag or {}).get("bag_used", 0) or 0),
+                int((state.bag or {}).get("chest_used", 0) or 0),
+            )
+            if sig == self.gear_blocked_sig:
+                state.gear_blocked = True
+            else:
+                self.gear_blocked_until = 0.0
         self.daily = self._load_daily()
         state.sold_today = int(self.daily.get("sold", 0))
         state.exp_buys_today = int(self.daily.get("exp", 0))
@@ -176,6 +190,7 @@ class Agent:
         self._check_market(state)
         self._check_well(state)
         self._check_exp(state)
+        self._check_master(state)
         self._maybe_daily_award()
         self.log("состояние: " + state.summary())
 
@@ -260,6 +275,10 @@ class Agent:
             self._do_tower(decision)
         elif decision.action == "gear":
             self._do_gear(decision)
+        elif decision.action == "upgrade":
+            self._do_upgrade(decision)
+        elif decision.action == "upgrade_mastery":
+            self._do_upgrade_mastery(decision)
         elif decision.action == "wait":
             time.sleep(2)
 
@@ -281,26 +300,69 @@ class Agent:
             self.log(f"награда: не удалось получить — {exc}", "WARN")
 
     def _do_gear(self, decision: rules.Decision) -> None:
-        """Надеть лучшие вещи и убрать лишнее в сундук."""
+        """Рюкзак: сначала надеть «Лучше», потом разобрать остальное на железо.
+
+        Порядок именно такой: вещь с пометкой «Лучше (+N)» сильнее надетой,
+        её надо надеть, а уже всё остальное можно превратить в железо.
+        """
         keep = int(decision.params.get("keep_bag", 4))
         max_equip = int(decision.params.get("max_equip", 8))
+        crack = bool(decision.params.get("crack", True))
         worn = self.game.equip_better_items(limit=max_equip)
-        moved = self.game.stash_items(keep=keep)
+        cracked = 0
+        moved = 0
+        if crack:
+            # разбираем всё, кроме «Лучше» — эти вещи уже надеты выше
+            cracked = self.game.crack_items(limit=int(self.config.get("gear", {}).get("crack_limit", 25)))
+            # остаток (уже надетые дубли/хлам без «Лучше») — в сундук, если есть место
+            moved = self.game.stash_items(keep=keep)
+        else:
+            moved = self.game.stash_items(keep=keep)
         counts = self.game.bag_counts()
         self.log(
-            f"рюкзак: надето {worn}, в сундук {moved}, "
+            f"рюкзак: надето {worn}, разобрано {cracked}, в сундук {moved}, "
             f"рюкзак {counts.get('bag_used')}/{counts.get('bag_total')}, "
             f"сундук {counts.get('chest_used')}/{counts.get('chest_total')}"
         )
-        if worn == 0 and moved == 0:
+        if worn == 0 and cracked == 0 and moved == 0:
             # Ничего не изменилось: сундук полон и надеть нечего. Повторять
-            # этот шас бессмысленно — он блокирует фарм, поэтому ставим паузу.
+            # этот шаг бессмысленно — он блокирует фарм, поэтому ставим паузу.
             self.gear_blocked_until = time.time() + 1800
+            self.gear_blocked_sig = (
+                int(counts.get("bag_used", 0) or 0),
+                int(counts.get("chest_used", 0) or 0),
+            )
             self.log(
-                "рюкзак разгрузить не удалось (сундук полон) — ждём 30 мин, "
-                "идём фармить",
+                "рюкзак разгрузить не удалось (нечего надеть и нечего разобрать) — "
+                "ждём 30 мин, идём фармить",
                 "WARN",
             )
+
+    def _do_upgrade_mastery(self, decision: rules.Decision) -> None:
+        """Повышение уровня мастерства: железо + мифрил (постоянный бонус)."""
+        iron = int(decision.params.get("iron", 0))
+        mifril = int(decision.params.get("mifril", 0))
+        if self.game.upgrade_mastery_level():
+            self._bump("upgrade")
+            self.log(f"прокачка: уровень мастерства повышен (за {iron} железа и {mifril} мифрила)")
+        else:
+            self.log("прокачка: повысить мастерство не удалось", "WARN")
+            self.master_checked_at = 0.0
+
+    def _do_upgrade(self, decision: rules.Decision) -> None:
+        """Прокачка параметра героя железом (/user/master)."""
+        href = str(decision.params.get("href", ""))
+        param = decision.target or "?"
+        cost = int(decision.params.get("cost", 0))
+        if not href:
+            self.log("прокачка: нет ссылки на улучшение", "WARN")
+            return
+        if self.game.upgrade_master_param(href):
+            self._bump("upgrade")
+            self.log(f"прокачка: параметр {param} улучшен за {cost} железа")
+        else:
+            self.log(f"прокачка: улучшить {param} не удалось", "WARN")
+            self.master_checked_at = 0.0
 
     def _do_tower(self, decision: rules.Decision) -> None:
         """Фарм башни: бесплатный бой, капает опыт, железо, бутылочки и вещи."""
@@ -398,6 +460,42 @@ class Agent:
             return
         self.exp_checked_at = now
         state.exp_options = list(self.exp_cache)
+
+    def _check_master(self, state: rules.GameState) -> None:
+        """Раз в 10 минут читаем варианты прокачки параметров героя (/user/master).
+
+        По правилу игрока железо тратится на прокачку. Золотые варианты
+        (у keis параметры стоят золота) пропускаются — золото не тратим.
+        """
+        if not self.config.get("upgrade", {}).get("enabled"):
+            return
+        interval = float(self.config.get("upgrade", {}).get("check_interval_min", 10)) * 60
+        now = time.time()
+        if self.master_checked_at and now - self.master_checked_at < interval:
+            state.master_options = list(self.master_cache)
+            state.mastery_cost = dict(self.mastery_cache)
+            return
+        try:
+            info = self.game.master_state()
+        except Exception as exc:
+            self.log(f"прокачка: не удалось прочитать варианты: {exc}", "WARN")
+            return
+        self.master_cache = list(info.get("params", []))
+        self.mastery_cache = dict(info.get("mastery", {}))
+        self.master_checked_at = now
+        state.master_options = list(self.master_cache)
+        state.mastery_cost = dict(info.get("mastery", {}))
+        iron_opts = [o for o in self.master_cache if o.get("currency") == "iron"]
+        if iron_opts:
+            self.log(
+                "прокачка: железные варианты — "
+                + ", ".join(f"{o['param']}+{o.get('gain', 1)} за {o['cost']}" for o in iron_opts)
+            )
+        if state.mastery_cost:
+            self.log(
+                "прокачка: уровень мастерства — "
+                + ", ".join(f"{k} {v}" for k, v in state.mastery_cost.items())
+            )
 
     def _do_exp(self, decision: rules.Decision) -> None:
         """Покупка опыта у мудреца за железо (золото не трогаем)."""

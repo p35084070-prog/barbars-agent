@@ -185,7 +185,16 @@
     "enabled": true,
     "keep_bag": 4,
     "max_equip": 8,
+    "crack": true,
+    "crack_limit": 10,
     "overflow_crack": "autoCrackUncommonLink"
+  },
+  "upgrade": {
+    "enabled": true,
+    "mastery": false,
+    "keep_iron": 2000,
+    "keep_mifril": 0,
+    "check_interval_min": 10
   },
   "daily_file": "state/firewhite/daily.json"
 }

@@ -175,7 +175,16 @@
     "enabled": true,
     "keep_bag": 4,
     "max_equip": 8,
+    "crack": true,
+    "crack_limit": 10,
     "overflow_crack": "autoCrackUncommonLink"
+  },
+  "upgrade": {
+    "enabled": true,
+    "mastery": true,
+    "keep_iron": 50000,
+    "keep_mifril": 0,
+    "check_interval_min": 10
   },
   "state_dir": "logs/keis",
   "daily_file": "state/keis/daily.json",

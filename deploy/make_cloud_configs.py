@@ -55,6 +55,8 @@ def patch_actions(src: str, dst: str, profile: str, account: str, daily: str) ->
     run = cfg.setdefault("run", {})
     run["idle_sleep_sec"] = 60
     run["idle_sleep_no_fights_sec"] = 300
+    # разбор рюкзака идёт по одной вещи (с перезагрузкой страницы) — цикл длиннее
+    run["cycle_max_sec"] = 600
     fight = cfg.setdefault("fight", {})
     fight["max_turns"] = 40
     fight["energy_wait_sec"] = 2

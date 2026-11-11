@@ -72,8 +72,8 @@ d = rules.decide(state, config)
 assert d.action != "altar", d
 print("decide: ok")
 
-# --- рюкзак: зацикливание при полном сундуке -----------------------
-# Сундук полон (25/25), рюкзак 9/20: сложить вещи некуда и надеть нечего.
+# --- рюкзак: разбор на железо и отсутствие зацикливания ------------
+# Сундук полон (25/25), рюкзак 9/20: ничего не надеть и не разобрать.
 # Шаг «рюкзак» не должен блокировать фарм, когда он бесполезен.
 bag_state = rules.GameState(
     hp=1000, max_hp=4042, energy=4000, max_energy=4076, level=67, klass="медик",
@@ -89,16 +89,58 @@ bag_state.autocrack_set_today = True
 bag_state.farm_skip = [e["name"] for e in config["farm"]["events"]]
 d = rules.decide(bag_state, config)
 assert d.action != "gear", f"шаг рюкзака не должен блокировать фарм: {d}"
-# а когда сундук ещё не полон — шаг рюкзака обязателен
+# блокировка снята (например, пришёл новый дроп) — шаг рюкзака обязателен
+bag_state.gear_blocked = False
 bag_state.bag = {"bag_used": 9, "bag_total": 20, "chest_used": 10, "chest_total": 25}
 d = rules.decide(bag_state, config)
 assert d.action == "gear", d
-# рюкзак и сундук полны — включаем разбор добычи
+assert d.params["crack"] is True, d  # по новому правилу остальное — на железо
+# рюкзак и сундук полны: сначала ручной разбор, авторазбор — только если ручного нет
 bag_state.bag = {"bag_used": 20, "bag_total": 20, "chest_used": 25, "chest_total": 25}
 bag_state.autocrack_kind = ""
 d = rules.decide(bag_state, config)
+assert d.action == "gear", d
+cfg_no_crack = json.loads(json.dumps(config))
+cfg_no_crack["gear"]["crack"] = False
+d = rules.decide(bag_state, cfg_no_crack)
 assert d.action == "autocrack", d
 print("gear loop: ok")
+
+# --- прокачка параметров железом ----------------------------------
+up_state = rules.GameState(
+    hp=1000, max_hp=4042, energy=4000, max_energy=4076, level=14, klass="воин",
+    iron=100_000, mifril=0, gold=0, silver=0, talent_points=0,
+    free_dungeon=0, free_duel=0,
+    bag={"bag_used": 0, "bag_total": 20, "chest_used": 0, "chest_total": 20},
+)
+up_state.altar_bonus = 12.5
+up_state.altar_expires_in_min = 120
+up_state.well_gift_taken_today = True
+up_state.autocrack_set_today = True
+up_state.farm_skip = [e["name"] for e in config["farm"]["events"]]
+up_state.master_options = [
+    {"param": "strength", "cost": 10_000, "gain": 8, "currency": "iron",
+     "href": "moreParamsPanel:strength:upBlock:upLink"},
+    {"param": "health", "cost": 100, "gain": 24, "currency": "gold",
+     "href": "moreParamsPanel:health:upBlock:upLink"},
+]
+d = rules.decide(up_state, config)
+assert d.action == "upgrade", d
+assert d.target == "strength", d  # золотой вариант пропускаем
+# железа не хватает (оставляем запас) — прокачки нет
+up_state.iron = 50_000
+d = rules.decide(up_state, config)
+assert d.action != "upgrade", d
+# уровень мастерства: 35K железа + 200 мифрила
+up_state.iron = 100_000
+up_state.mifril = 300
+up_state.mastery_cost = {"iron": 35_000, "mifril": 200}
+d = rules.decide(up_state, config)
+assert d.action == "upgrade_mastery", d
+up_state.mifril = 100  # мифрила не хватает
+d = rules.decide(up_state, config)
+assert d.action == "upgrade", d  # вернулись к прокачке параметра
+print("upgrade: ok")
 
 # --- боевая политика ----------------------------------------------
 cs = rules.CombatState(our_hp=1000, our_energy=3748, enemy_hp=49000,
