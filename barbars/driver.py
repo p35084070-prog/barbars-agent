@@ -393,14 +393,30 @@ class Game:
             self.p.fill("input[name='password']", password, timeout=8000)
             self.human.pause("action")
             self.p.click("input[type='submit'], button:has-text('Войти')", timeout=8000)
+            try:
+                self.p.wait_for_load_state("domcontentloaded", timeout=15000)
+            except Exception:
+                pass
             self._settle()
             self.human.pause("page")
         except Exception as exc:
             print(f"[вход] автовход не удался: {exc}")
             return False
         ok = self.is_authenticated()
-        print("[вход] автовход выполнен" if ok else "[вход] автовход не прошёл")
-        return ok
+        if ok:
+            print("[вход] автовход выполнен")
+            return True
+        # диагностика: показываем, что игра ответила вместо входа
+        try:
+            body = " ".join(self.body_text().split())
+        except Exception:
+            body = ""
+        print(f"[вход] автовход не прошёл, страница: {body[:400]}")
+        try:
+            self.dump_page("login-failed", self.config.get("_root", "."))
+        except Exception:
+            pass
+        return False
 
     def browser_alive(self) -> bool:
         """Жив ли ещё браузер (окно могли закрыть)."""
