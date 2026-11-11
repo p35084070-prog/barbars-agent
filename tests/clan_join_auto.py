@@ -80,7 +80,10 @@ def login(ctx, creds: Path) -> None:
     body = " ".join(page.inner_text("body").split())
     if "Вход для игроков" not in body:
         return
-    user, password = creds.read_text(encoding="utf-8").splitlines()[:2]
+    raw = creds.read_text(encoding="utf-8-sig")
+    lines = [l.strip().lstrip("\ufeff").strip() for l in raw.splitlines()]
+    lines = [l for l in lines if l]
+    user, password = lines[0], lines[1]
     page.goto("https://barbars.ru/login", wait_until="domcontentloaded", timeout=60_000)
     page.fill("input[name='login']", user)
     page.fill("input[name='password']", password)

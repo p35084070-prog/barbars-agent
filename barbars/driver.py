@@ -121,6 +121,16 @@ class GameError(RuntimeError):
     pass
 
 
+def clean_credential(value: str) -> str:
+    """Убрать BOM и прочие невидимые символы из строки учётных данных.
+
+    Файл с учётными данными может прийти с UTF-8 BOM (например, после
+    пересборки в PowerShell) — иначе логин уходит в игру как '\ufeffник'
+    и она отвечает «Неверный ник или пароль».
+    """
+    return value.strip().lstrip("\ufeff").strip()
+
+
 class Game:
     """Обёртка над страницей браузера."""
 
@@ -350,7 +360,9 @@ class Game:
             raw_file = auth.get("credentials_file", "credentials.txt")
             path = self._credentials_file(raw_file)
             if path.exists():
-                lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+                raw = path.read_text(encoding="utf-8-sig")
+                lines = [clean_credential(line) for line in raw.splitlines()]
+                lines = [line for line in lines if line]
                 if len(lines) >= 2:
                     user = user or lines[0]
                     password = password or lines[1]
