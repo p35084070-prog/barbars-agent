@@ -2,6 +2,9 @@
 profile/
 profile-*/
 logs/
+probe-*/
+probe-keis/
+probe-keis2/
 
 # Учётные данные — никогда не в репозиторий
 credentials/

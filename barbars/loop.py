@@ -55,6 +55,9 @@ class Agent:
         # аналогично для клановых заданий: если «Взять задание» недоступно
         # (задание занято другим игроком), возвращаемся к нему позже
         self.quest_blocked_until: float = 0.0
+        # рюкзак: если разгрузить его не вышло (сундук полон и надеть нечего),
+        # повторять тот же шаг бессмысленно — он блокирует фарм. Ждём полчаса.
+        self.gear_blocked_until: float = 0.0
         self.daily = self._load_daily()
 
     # ------------------------------------------------------------------ логи
@@ -160,6 +163,8 @@ class Agent:
         state.autocrack_kind = self.autocrack_kind
         if self.quest_blocked_until > time.time():
             state.quests = []
+        if self.gear_blocked_until > time.time():
+            state.gear_blocked = True
         self.daily = self._load_daily()
         state.sold_today = int(self.daily.get("sold", 0))
         state.exp_buys_today = int(self.daily.get("exp", 0))
@@ -287,6 +292,15 @@ class Agent:
             f"рюкзак {counts.get('bag_used')}/{counts.get('bag_total')}, "
             f"сундук {counts.get('chest_used')}/{counts.get('chest_total')}"
         )
+        if worn == 0 and moved == 0:
+            # Ничего не изменилось: сундук полон и надеть нечего. Повторять
+            # этот шас бессмысленно — он блокирует фарм, поэтому ставим паузу.
+            self.gear_blocked_until = time.time() + 1800
+            self.log(
+                "рюкзак разгрузить не удалось (сундук полон) — ждём 30 мин, "
+                "идём фармить",
+                "WARN",
+            )
 
     def _do_tower(self, decision: rules.Decision) -> None:
         """Фарм башни: бесплатный бой, капает опыт, железо, бутылочки и вещи."""

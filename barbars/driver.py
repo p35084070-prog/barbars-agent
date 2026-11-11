@@ -1214,7 +1214,7 @@ class Game:
                 continue
             if "damageLastTargetLink" in href or "damageOgreLink" in href:
                 return True
-            if text.startswith(("Бить", "Атаковать", "Жечь")):
+            if text.startswith(("Бить", "Атаковать", "Жечь", "Ударить", "Атака")):
                 return True
         return False
 
@@ -1224,6 +1224,9 @@ class Game:
         Активности разные: у одних сразу есть противник («Бить ...»),
         у других нужно нажать «Войти в замок» / «Начать бой!» / «Встать в очередь»
         и дождаться, пока противник появится (арена, выживание, клановые боссы).
+
+        У клановых боссов вход двухшаговый: «Начать бой!» → панель готовности
+        «Я готов!» → и только после этого начинается бой.
         """
         result: dict[str, Any] = {"ok": False, "stage": "", "note": ""}
         self.goto(url)
@@ -1247,10 +1250,16 @@ class Game:
             return result
 
         deadline = time.time() + max(10, wait_sec)
+        ready_clicked = False
         while time.time() < deadline:
             if self.has_combat_button():
                 result.update(ok=True, stage="fight")
                 return result
+            # панель готовности (клановые боссы): нужно подтвердить «Я готов!»
+            if not ready_clicked and self.click_href("readyLink"):
+                ready_clicked = True
+                result["stage"] = "Я готов!"
+                continue
             self.reload()
             time.sleep(6)
         result["note"] = "бой не начался за отведённое время"

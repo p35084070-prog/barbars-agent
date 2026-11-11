@@ -67,6 +67,8 @@ class GameState:
     # авторазбор
     autocrack_set_today: bool = False
     autocrack_kind: str = ""
+    # рюкзак: шаг «рюкзак» не дал эффекта (сундук полон, надеть нечего)
+    gear_blocked: bool = False
     # рюкзак и сундук: сколько занято
     bag: dict[str, int] = field(default_factory=dict)
     # фарм-события: какие из них сейчас не запускаются (кулдаун)
@@ -363,6 +365,11 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
                 target=kind,
                 reason="рюкзак и сундук полны — включаем разбор добычи",
             )
+        return None
+    # Сундук полон: сложить вещи некуда, и надеть обычно тоже нечего.
+    # Повторять такой шаг бессмысленно — он блокирует фарм, поэтому
+    # ждём (state.gear_blocked), пока сундук не освободится.
+    if state.gear_blocked and chest_used >= chest_total:
         return None
     return Decision(
         "gear",

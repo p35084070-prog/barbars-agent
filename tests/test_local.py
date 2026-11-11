@@ -72,6 +72,34 @@ d = rules.decide(state, config)
 assert d.action != "altar", d
 print("decide: ok")
 
+# --- рюкзак: зацикливание при полном сундуке -----------------------
+# Сундук полон (25/25), рюкзак 9/20: сложить вещи некуда и надеть нечего.
+# Шаг «рюкзак» не должен блокировать фарм, когда он бесполезен.
+bag_state = rules.GameState(
+    hp=1000, max_hp=4042, energy=4000, max_energy=4076, level=67, klass="медик",
+    iron=518_754, gold=30, silver=21, talent_points=0,
+    free_dungeon=0, free_duel=0,
+    bag={"bag_used": 9, "bag_total": 20, "chest_used": 25, "chest_total": 25},
+    gear_blocked=True,
+)
+bag_state.altar_bonus = 12.5
+bag_state.altar_expires_in_min = 120
+bag_state.well_gift_taken_today = True
+bag_state.autocrack_set_today = True
+bag_state.farm_skip = [e["name"] for e in config["farm"]["events"]]
+d = rules.decide(bag_state, config)
+assert d.action != "gear", f"шаг рюкзака не должен блокировать фарм: {d}"
+# а когда сундук ещё не полон — шаг рюкзака обязателен
+bag_state.bag = {"bag_used": 9, "bag_total": 20, "chest_used": 10, "chest_total": 25}
+d = rules.decide(bag_state, config)
+assert d.action == "gear", d
+# рюкзак и сундук полны — включаем разбор добычи
+bag_state.bag = {"bag_used": 20, "bag_total": 20, "chest_used": 25, "chest_total": 25}
+bag_state.autocrack_kind = ""
+d = rules.decide(bag_state, config)
+assert d.action == "autocrack", d
+print("gear loop: ok")
+
 # --- боевая политика ----------------------------------------------
 cs = rules.CombatState(our_hp=1000, our_energy=3748, enemy_hp=49000,
                         attack_links=["Бить разгневанного призрака"],
