@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -126,6 +127,26 @@ class Agent:
     # ------------------------------------------------------------------ цикл
 
     def run_once(self) -> rules.Decision:
+        watchdog = threading.Timer(
+            float(self.config.get("run", {}).get("cycle_max_sec", 300)),
+            self._abort_cycle,
+        )
+        watchdog.daemon = True
+        watchdog.start()
+        try:
+            return self._run_once_inner()
+        finally:
+            watchdog.cancel()
+
+    def _abort_cycle(self) -> None:
+        """Сторож: цикл завис — закрываем браузер, агент его перезапустит."""
+        self.log("цикл завис дольше лимита — перезапускаю браузер", "WARN")
+        try:
+            self.game.close()
+        except Exception:
+            pass
+
+    def _run_once_inner(self) -> rules.Decision:
         if not self.game.browser_alive():
             self.log("браузер закрыт — перезапускаю и вхожу заново", "WARN")
             if not self.game.restart():
@@ -595,6 +616,7 @@ class Agent:
                 self.log("  отступил")
                 return "отступление"
             elif decision.action == "wait_energy":
+                turns += 1  # иначе ожидание энергии может длиться вечно
                 # Энергия капает на сервере, но в HTML обновляется только при
                 # перезагрузке страницы — иначе цикл зависает на старом значении.
                 energy_now = cs.our_energy or 0

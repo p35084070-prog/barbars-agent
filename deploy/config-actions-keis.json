@@ -26,7 +26,8 @@
     "action_delay_sec": 1.5,
     "stop_after_fights": 0,
     "login_timeout_sec": 600,
-    "login_then_play": true
+    "login_then_play": true,
+    "cycle_max_sec": 300
   },
   "altar": {
     "enabled": true,
