@@ -1,8 +1,8 @@
 {
   "date": "2026-11-11",
   "sold": 0,
-  "exp": 1,
-  "gift": true,
-  "autocrack": true,
+  "exp": 0,
+  "gift": false,
+  "autocrack": false,
   "award": false
 }
