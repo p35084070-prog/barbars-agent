@@ -15,6 +15,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urljoin
 
 from playwright.sync_api import sync_playwright
 
@@ -140,28 +141,36 @@ def main() -> int:
         link.click()
         page_a.wait_for_load_state("domcontentloaded", timeout=60_000)
         invite = page_a.query_selector("a:has-text('Пригласить в клан')")
-        if not invite:
-            log("кнопки приглашения нет")
-            ctx_a.close()
-            ctx_b.close()
-            return 2
-        invite.click()
-        page_a.wait_for_load_state("domcontentloaded", timeout=60_000)
-        log(f"приглашение отправлено: {' '.join(page_a.inner_text('body').split())[:150]}")
+        if invite:
+            invite.click()
+            page_a.wait_for_load_state("domcontentloaded", timeout=60_000)
+            log(f"приглашение отправлено: {' '.join(page_a.inner_text('body').split())[:150]}")
+        else:
+            # приглашение, скорее всего, уже висит — идём принимать
+            log("кнопки приглашения нет (приглашение, вероятно, уже отправлено)")
 
         # герой принимает приглашение
         for _ in range(6):
             page_b.goto("https://barbars.ru/", wait_until="domcontentloaded", timeout=60_000)
             body = " ".join(page_b.inner_text("body").split())
-            if re.search(r"Вступить|Принять приглашение|Приглашение в клан", body, re.I):
+            if re.search(r"приглашает тебя в клан|вступить|принять|приглашени", body, re.I):
                 log(f"герой видит приглашение: {body[:200]}")
-                for word in ("Вступить", "Принять", "Приглашение"):
-                    btn = page_b.query_selector(f"a:has-text('{word}')")
-                    if btn:
-                        btn.click()
-                        page_b.wait_for_load_state("domcontentloaded", timeout=60_000)
-                        log(f"нажато «{word}»")
-                        break
+                accepted = False
+                # сперва пробуем штатную ссылку «принять» (acceptLink)
+                accept = page_b.query_selector("a[href*='acceptLink']")
+                if accept:
+                    accept.click()
+                    page_b.wait_for_load_state("domcontentloaded", timeout=60_000)
+                    log("нажато «принять» (acceptLink)")
+                    accepted = True
+                if not accepted:
+                    for word in ("принять", "Вступить", "Принять", "Приглашение"):
+                        btn = page_b.query_selector(f"a:has-text('{word}')")
+                        if btn:
+                            btn.click()
+                            page_b.wait_for_load_state("domcontentloaded", timeout=60_000)
+                            log(f"нажато «{word}»")
+                            break
                 break
             time.sleep(3)
         else:
@@ -183,22 +192,22 @@ def main() -> int:
                 if idx < 0:
                     log("героя нет в списке участников")
                     break
-                block = html[max(0, idx - 1500) : idx + 1500]
-                rank = next((r for r in RANKS if f">{r}" in block or f">{r} " in block), None)
+                # блок участника: от ближайшего <div> до следующего </div><div>
+                start = html.rfind("<div>", 0, idx)
+                end = html.find("<div>", idx)
+                block = html[start:end if end > 0 else idx + 2000]
+                m = re.search(r"<span>\s*(рядовой|офицер|генерал|маршал|лидер)\s*</span>", block)
+                rank = m.group(1) if m else None
                 log(f"текущий ранг: {rank}")
                 if rank == "генерал":
                     log("ранг генерал получен")
                     break
-                promote = None
-                for candidate in page_a.query_selector_all("a:has-text('повысить')"):
-                    if candidate.get_attribute("href"):
-                        promote = candidate
-                        break
-                if not promote:
+                m = re.search(r'href="([^"]*promoteLink[^"]*)"', block)
+                if not m:
                     log("кнопки повышения нет")
                     break
-                promote.click()
-                page_a.wait_for_load_state("domcontentloaded", timeout=60_000)
+                page_a.goto(urljoin(page_a.url, m.group(1).replace("&amp;", "&")),
+                            wait_until="domcontentloaded", timeout=60_000)
                 time.sleep(1)
         else:
             log("герой пока не в клане")
