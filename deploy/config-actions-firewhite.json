@@ -22,7 +22,7 @@
   },
   "run": {
     "idle_sleep_sec": 60,
-    "idle_sleep_no_fights_sec": 900,
+    "idle_sleep_no_fights_sec": 300,
     "action_delay_sec": 1.5,
     "stop_after_fights": 0,
     "login_timeout_sec": 600,
@@ -34,7 +34,7 @@
   "tower_farm": {
     "enabled": true,
     "max_level": 0,
-    "rounds": 4
+    "rounds": 2
   },
   "altar": {
     "enabled": true,
@@ -141,8 +141,8 @@
     "hp_flee_threshold": 30,
     "use_potions_below_hp": 25,
     "energy_attack_threshold": 0.85,
-    "energy_wait_sec": 3,
-    "max_turns": 80,
+    "energy_wait_sec": 2,
+    "max_turns": 40,
     "prefer_heal": false
   },
   "targets": [

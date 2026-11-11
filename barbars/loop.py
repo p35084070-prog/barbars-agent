@@ -43,6 +43,9 @@ class Agent:
         self.well_checked_at: float = 0.0
         self.exp_cache: list[dict[str, Any]] = []
         self.exp_checked_at: float = 0.0
+        # крайний срок работы (0 = работаем бесконечно); нужен в облаке,
+        # чтобы аккуратно выйти даже посреди боя
+        self.deadline: float = 0.0
         self.daily = self._load_daily()
 
     # ------------------------------------------------------------------ логи
@@ -154,7 +157,8 @@ class Agent:
     def run_forever(self, max_iterations: int = 0, duration_sec: float = 0.0) -> None:
         """Основной цикл. duration_sec > 0 — аккуратно выйти после указанного времени."""
         iteration = 0
-        deadline = time.time() + duration_sec if duration_sec else 0.0
+        self.deadline = time.time() + duration_sec if duration_sec else 0.0
+        deadline = self.deadline
         self.log("агент запущен")
         while True:
             if deadline and time.time() >= deadline:
@@ -516,6 +520,9 @@ class Agent:
         stale_energy_checks = 0
         last_energy = None
         while turns < max_turns:
+            if self.deadline and time.time() >= self.deadline:
+                self.log("  выходим по лимиту времени")
+                return "время вышло"
             cs = self.game.combat()
             if cs.log_lines:
                 new_log = cs.log_lines[-1]

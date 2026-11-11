@@ -51,6 +51,15 @@ def patch_actions(src: str, dst: str, profile: str, account: str, daily: str) ->
     cfg.setdefault("auth", {})["credentials_file"] = f"credentials/{account}.txt"
     cfg["auth"].pop("username_env", None)
     cfg["auth"].pop("password_env", None)
+    # в облаке сессия короткая: меньше ходов в бою, короче сон, меньше раундов башни
+    run = cfg.setdefault("run", {})
+    run["idle_sleep_sec"] = 60
+    run["idle_sleep_no_fights_sec"] = 300
+    fight = cfg.setdefault("fight", {})
+    fight["max_turns"] = 40
+    fight["energy_wait_sec"] = 2
+    tower = cfg.setdefault("tower_farm", {})
+    tower["rounds"] = 2
     (OUT / dst).write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     print("записан:", dst)
 
