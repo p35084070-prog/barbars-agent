@@ -1,17 +1,21 @@
 name: agent-firewhite
 
+# Схема: длинный сеанс фарма (5,5 часа) + самоперезапуск + cron-страховка.
+# Один запуск = одна сессия в игре (логин один раз), поэтому не нужно
+# входить в игру каждые 15 минут.
+
 on:
   schedule:
-    # каждые 20 минут: GitHub для публичных репозиториев не тарифицирует минуты
     - cron: '*/20 * * * *'
   workflow_dispatch:
     inputs:
       duration:
         description: 'Сколько минут работать'
-        default: '45'
+        default: '330'
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: agent-firewhite
@@ -20,7 +24,7 @@ concurrency:
 jobs:
   play:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
@@ -48,9 +52,10 @@ jobs:
           python -u run.py play \
             --config deploy/config-actions-firewhite.json \
             --headless \
-            --duration "${{ github.event.inputs.duration || '45' }}"
+            --duration "${{ github.event.inputs.duration || '330' }}"
 
       - name: Сохранить дневные счётчики
+        if: always()
         run: |
           git config user.name 'barbars-bot'
           git config user.email 'bot@users.noreply.github.com'
@@ -65,10 +70,20 @@ jobs:
             done
           fi
 
+      - name: Следующий сеанс
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST \
+            "repos/${{ github.repository }}/actions/workflows/agent-firewhite.yml/dispatches" \
+            -f ref=main \
+            || echo 'не удалось запланировать следующий сеанс (подстрахует cron)'
+
       - name: Логи
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: logs-firewhite-${{ github.run_number }}
           path: logs/firewhite
-          retention-days: 30
+          retention-days: 14

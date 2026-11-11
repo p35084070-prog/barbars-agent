@@ -2,6 +2,9 @@ name: clan-watch
 
 # Раз в 15 минут: проверяем уровень нового героя и, если он 11+,
 # приглашаем его в клан «Слепые ТИТАНЫ» и повышаем до генерала.
+# Цикл живёт внутри одного задания (cron в Actions может опаздывать),
+# cron оставлен как страховка.
+
 on:
   schedule:
     - cron: '*/15 * * * *'
@@ -9,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: clan-watch
@@ -17,7 +21,7 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 355
     steps:
       - uses: actions/checkout@v4
 
@@ -36,18 +40,23 @@ jobs:
           KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
           KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
           FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
-          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHILE_PASSWORD }}
         run: |
           mkdir -p credentials
           printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
           printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
           chmod 600 credentials/*.txt
 
-      - name: Проверка уровня и вступление в клан
+      - name: Цикл проверки уровня (каждые 15 минут)
         env:
           BARBARS_CREDS_KEIS: credentials/keis.txt
           BARBARS_CREDS_FIREWHITE: credentials/firewhite.txt
-        run: python -u tests/clan_join_auto.py
+        run: |
+          for i in $(seq 1 23); do
+            echo "=== проверка $i ($(date -u +%H:%M:%S)) ==="
+            python -u tests/clan_join_auto.py || true
+            if [ "$i" -lt 23 ]; then sleep 900; fi
+          done
 
       - name: Логи клана
         if: always()
@@ -55,4 +64,4 @@ jobs:
         with:
           name: clan-watch-${{ github.run_number }}
           path: logs/clan-auto.log
-          retention-days: 30
+          retention-days: 14
