@@ -134,6 +134,7 @@ class Game:
         self.hero_id: int | None = None
         self.guild_id: int | None = None
         self.human = Humanizer(config.get("humanize"))
+        self.headless = bool(config.get("headless", False))
         self.credentials = self._load_credentials(config)
 
     # ------------------------------------------------------------------ lifecycle
@@ -142,6 +143,7 @@ class Game:
         if self.page is not None:
             return
         headless = self.config.get("headless", False) if headless is None else headless
+        self.headless = bool(headless)
         Path(self.profile_dir).mkdir(parents=True, exist_ok=True)
         self._playwright = sync_playwright().start()
         self._context = self._playwright.chromium.launch_persistent_context(
@@ -346,17 +348,39 @@ class Game:
         password = os.environ.get(auth.get("password_env", "BARBARS_PASS"), "").strip()
         if not (user and password):
             raw_file = auth.get("credentials_file", "credentials.txt")
-            path = Path(raw_file)
-            if not path.is_absolute() and config.get("_root"):
-                path = Path(config["_root"]) / raw_file
+            path = self._credentials_file(raw_file)
             if path.exists():
                 lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
                 if len(lines) >= 2:
                     user = user or lines[0]
                     password = password or lines[1]
+            else:
+                print(f"[вход] файл учётных данных не найден: {path}")
         if user and password:
             return user, password
         return None
+
+    def _credentials_file(self, raw: str) -> Path:
+        """Где искать файл учётных данных.
+
+        Путь в конфиге может быть относительным: сначала пробуем относительно
+        каталога конфига, затем относительно корня репозитория (в облаке
+        конфиги лежат в deploy/, а файл — в корне).
+        """
+        path = Path(raw)
+        if path.is_absolute():
+            return path
+        candidates = []
+        root = self.config.get("_root")
+        if root:
+            candidates.append(Path(root) / path)
+        repo_root = Path(__file__).resolve().parents[1]
+        candidates.append(repo_root / path)
+        candidates.append(Path.cwd() / path)
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return candidates[0]
 
     def auto_login(self) -> bool:
         """Войти автоматически, если есть сохранённые учётные данные."""
@@ -445,6 +469,10 @@ class Game:
             return True
         if self.auto_login():
             return True
+        if self.headless:
+            # в облаке/без окна ждать ручной вход бессмысленно — выходим сразу
+            print("[вход] автовход не удался, а браузер без окна — продолжать нечем")
+            return False
         print("[вход] Сессия не активна: войди в игру в открытом окне браузера.")
         return self.wait_for_login(timeout_sec=timeout_sec)
 
