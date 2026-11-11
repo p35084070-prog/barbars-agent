@@ -43,6 +43,8 @@ class Agent:
         self.well_checked_at: float = 0.0
         self.exp_cache: list[dict[str, Any]] = []
         self.exp_checked_at: float = 0.0
+        # текущий режим авторазбора (нужно, чтобы не включать его заново)
+        self.autocrack_kind: str = ""
         # крайний срок работы (0 = работаем бесконечно); нужен в облаке,
         # чтобы аккуратно выйти даже посреди боя
         self.deadline: float = 0.0
@@ -131,6 +133,7 @@ class Agent:
         self.last_state = state
         if self.talent_blocked_until > time.time():
             state.talent_points = 0
+        state.autocrack_kind = self.autocrack_kind
         self.daily = self._load_daily()
         state.sold_today = int(self.daily.get("sold", 0))
         state.exp_buys_today = int(self.daily.get("exp", 0))
@@ -224,6 +227,8 @@ class Agent:
             self._do_activity(decision)
         elif decision.action == "tower":
             self._do_tower(decision)
+        elif decision.action == "gear":
+            self._do_gear(decision)
         elif decision.action == "wait":
             time.sleep(2)
 
@@ -243,6 +248,19 @@ class Agent:
                 self.log("награда: ежедневная награда недоступна")
         except Exception as exc:
             self.log(f"награда: не удалось получить — {exc}", "WARN")
+
+    def _do_gear(self, decision: rules.Decision) -> None:
+        """Надеть лучшие вещи и убрать лишнее в сундук."""
+        keep = int(decision.params.get("keep_bag", 4))
+        max_equip = int(decision.params.get("max_equip", 8))
+        worn = self.game.equip_better_items(limit=max_equip)
+        moved = self.game.stash_items(keep=keep)
+        counts = self.game.bag_counts()
+        self.log(
+            f"рюкзак: надето {worn}, в сундук {moved}, "
+            f"рюкзак {counts.get('bag_used')}/{counts.get('bag_total')}, "
+            f"сундук {counts.get('chest_used')}/{counts.get('chest_total')}"
+        )
 
     def _do_tower(self, decision: rules.Decision) -> None:
         """Фарм башни: бесплатный бой, капает опыт, железо, бутылочки и вещи."""
@@ -379,6 +397,7 @@ class Agent:
         kind = decision.target or "autoCrackCommonLink"
         if self.game.set_autocrack(kind):
             self._bump("autocrack", True)
+            self.autocrack_kind = kind
             self.log(f"авторазбор: включён режим {kind}")
         else:
             self.log("авторазбор: переключатель не найден", "WARN")

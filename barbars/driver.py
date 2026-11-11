@@ -1092,6 +1092,83 @@ class Game:
         result["message"] = f"варианта «{iron_amount} железа» нет"
         return result
 
+    # ------------------------------------------------------------------ рюкзак и вещи
+
+    @staticmethod
+    def _item_blocks(html: str) -> list[tuple[str, str]]:
+        """Разбить страницу рюкзака на блоки предметов: (html блока, href индекса)."""
+        blocks: list[tuple[str, str]] = []
+        for chunk in html.split('<div class="hr"></div>'):
+            m = re.search(r'href="([^"]*items:(\d+):(?:wearLink|toStoreLink)[^"]*)"', chunk)
+            if m:
+                blocks.append((chunk, m.group(2)))
+        return blocks
+
+    def bag_counts(self) -> dict[str, int]:
+        """Сколько мест в рюкзаке и сундуке, и сколько занято."""
+        self.goto("https://barbars.ru/user/rack")
+        text = self.body_text()
+        out = {"bag_used": 0, "bag_total": 0, "chest_used": 0, "chest_total": 0}
+        m = re.search(r"Рюкзак\s*\((\d+)\s*/\s*(\d+)\)", text)
+        if m:
+            out["bag_used"], out["bag_total"] = int(m.group(1)), int(m.group(2))
+        m = re.search(r"Открыть сундук\s*\((\d+)\s*/\s*(\d+)\)", text)
+        if m:
+            out["chest_used"], out["chest_total"] = int(m.group(1)), int(m.group(2))
+        return out
+
+    def equip_better_items(self, limit: int = 8) -> int:
+        """Надеть вещи, помеченные «Лучше (+N)» — герой становится сильнее."""
+        worn = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/rack")
+            html = self.p.content()
+            target = None
+            for chunk, index in self._item_blocks(html):
+                if "Лучше" in chunk and f"items:{index}:wearLink" in chunk:
+                    target = index
+                    break
+            if target is None:
+                break
+            if not self.click_href(f"items:{target}:wearLink"):
+                break
+            worn += 1
+        return worn
+
+    def stash_items(self, keep: int = 4, limit: int = 20) -> int:
+        """Сложить лишние вещи в сундук, чтобы освободить рюкзак.
+
+        Сначала убираем вещи без пометки «Лучше» (они хуже надетых).
+        """
+        moved = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/rack")
+            text = self.body_text()
+            m = re.search(r"Рюкзак\s*\((\d+)\s*/\s*(\d+)\)", text)
+            used = int(m.group(1)) if m else 0
+            if used <= keep:
+                break
+            m = re.search(r"Открыть сундук\s*\((\d+)\s*/\s*(\d+)\)", text)
+            if m and int(m.group(1)) >= int(m.group(2)):
+                break  # сундук полон
+            html = self.p.content()
+            target = None
+            for chunk, index in self._item_blocks(html):
+                if f"items:{index}:toStoreLink" in chunk and "Лучше" not in chunk:
+                    target = index
+                    break
+            if target is None:
+                for chunk, index in self._item_blocks(html):
+                    if f"items:{index}:toStoreLink" in chunk:
+                        target = index
+                        break
+            if target is None:
+                break
+            if not self.click_href(f"items:{target}:toStoreLink"):
+                break
+            moved += 1
+        return moved
+
     def autocrack_active(self) -> str | None:
         """Какой режим авторазбора включён сейчас.
 

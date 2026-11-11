@@ -66,6 +66,9 @@ class GameState:
     well_gift_taken_today: bool = False
     # авторазбор
     autocrack_set_today: bool = False
+    autocrack_kind: str = ""
+    # рюкзак и сундук: сколько занято
+    bag: dict[str, int] = field(default_factory=dict)
     # фарм-события: какие из них сейчас не запускаются (кулдаун)
     farm_skip: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -102,6 +105,13 @@ def collect_state(game: Game, config: dict[str, Any]) -> GameState:
         limits = game.fight_limits()
         state.free_dungeon = limits.get("dungeon", state.free_dungeon)
         state.free_duel = limits.get("duel", state.free_duel)
+
+    # 1b. Рюкзак: сколько занято (нужно, чтобы знать, что дроп не влезает).
+    if config.get("gear", {}).get("enabled"):
+        try:
+            state.bag = game.bag_counts()
+        except Exception:
+            state.bag = {}
 
     # 2. Страница героя: статы, опыт, ресурсы, таланты, id героя и клана.
     game.goto("https://barbars.ru/user")
@@ -260,7 +270,13 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if sell is not None:
         return sell
 
-    # 9. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
+    # 9. Рюкзак: надеть лучшие вещи и убрать лишнее в сундук.
+    #    Забитый рюкзак блокирует новый дроп — из-за этого встаёт опыт.
+    gear = _pick_gear(state, config)
+    if gear is not None:
+        return gear
+
+    # 10. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
     #     Основной способ прокачки для новых героев (у них нет клана и подземелий).
     tower = _pick_tower(state, config)
     if tower is not None:
@@ -318,6 +334,42 @@ def _pick_farm(state: GameState, config: dict[str, Any]) -> Decision | None:
             reason=f"фармим событие: {name}",
         )
     return None
+
+
+def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Разбор рюкзака: надеть лучшее, лишнее — в сундук.
+
+    Включается флагом `gear.enabled`. Если рюкзак и сундук полны, включает
+    более агрессивный авторазбор (`gear.overflow_crack`), чтобы дропы
+    превращались в железо, а не копились.
+    """
+    cfg = config.get("gear", {})
+    if not cfg.get("enabled"):
+        return None
+    bag = state.bag or {}
+    used = int(bag.get("bag_used", 0) or 0)
+    total = int(bag.get("bag_total", 20) or 20)
+    chest_used = int(bag.get("chest_used", 0) or 0)
+    chest_total = int(bag.get("chest_total", 20) or 20)
+    keep = int(cfg.get("keep_bag", 4))
+    if used <= keep:
+        return None
+    overflow = (used >= total) and (chest_used >= chest_total)
+    if overflow:
+        kind = str(cfg.get("overflow_crack", "autoCrackUncommonLink"))
+        if state.autocrack_kind != kind:
+            return Decision(
+                "autocrack",
+                target=kind,
+                reason="рюкзак и сундук полны — включаем разбор добычи",
+            )
+        return None
+    return Decision(
+        "gear",
+        target="рюкзак",
+        params={"keep_bag": keep, "max_equip": int(cfg.get("max_equip", 8))},
+        reason=f"рюкзак заполнен на {used}/{total} — надеваем лучшее и убираем лишнее",
+    )
 
 
 def _pick_tower(state: GameState, config: dict[str, Any]) -> Decision | None:

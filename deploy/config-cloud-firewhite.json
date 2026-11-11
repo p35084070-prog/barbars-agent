@@ -94,7 +94,7 @@
   },
   "autocrack": {
     "enabled": true,
-    "kind": "autoCrackCommonLink"
+    "kind": "autoCrackUncommonLink"
   },
   "farm": {
     "enabled": true,
@@ -180,5 +180,11 @@
   },
   "account": "firewhite",
   "state_dir": "logs/firewhite",
+  "gear": {
+    "enabled": true,
+    "keep_bag": 4,
+    "max_equip": 8,
+    "overflow_crack": "autoCrackUncommonLink"
+  },
   "daily_file": "state/firewhite/daily.json"
 }

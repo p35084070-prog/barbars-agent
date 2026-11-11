@@ -170,6 +170,12 @@
     "max_calls_per_hour": 60,
     "max_tokens": 700
   },
+  "gear": {
+    "enabled": true,
+    "keep_bag": 4,
+    "max_equip": 8,
+    "overflow_crack": "autoCrackUncommonLink"
+  },
   "state_dir": "logs/keis",
   "daily_file": "state/keis/daily.json",
   "account": "keis"
