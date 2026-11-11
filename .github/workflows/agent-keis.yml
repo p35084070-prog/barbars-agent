@@ -44,7 +44,7 @@ jobs:
 
       - name: Фарм
         run: |
-          python -u run.py \
+          python -u run.py play \
             --config deploy/config-actions-keis.json \
             --headless \
             --duration "${{ github.event.inputs.duration || '45' }}"
