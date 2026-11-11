@@ -51,6 +51,9 @@ class Agent:
         # если очко таланта не потратилось (кнопки нет) — не пытаемся заново
         # каждый цикл, иначе агент не доходит до фарма
         self.talent_blocked_until: float = 0.0
+        # аналогично для клановых заданий: если «Взять задание» недоступно
+        # (задание занято другим игроком), возвращаемся к нему позже
+        self.quest_blocked_until: float = 0.0
         self.daily = self._load_daily()
 
     # ------------------------------------------------------------------ логи
@@ -134,6 +137,8 @@ class Agent:
         if self.talent_blocked_until > time.time():
             state.talent_points = 0
         state.autocrack_kind = self.autocrack_kind
+        if self.quest_blocked_until > time.time():
+            state.quests = []
         self.daily = self._load_daily()
         state.sold_today = int(self.daily.get("sold", 0))
         state.exp_buys_today = int(self.daily.get("exp", 0))
@@ -524,7 +529,8 @@ class Agent:
         if self.game.take_clan_quest(index):
             self.log(f"взято клановое задание: {decision.target}")
         else:
-            self.log("задание не взято (кнопка не найдена)")
+            self.quest_blocked_until = time.time() + 900
+            self.log("задание не взято (кнопка не найдена) — вернусь к заданиям через 15 мин")
 
     def _do_fight(self, decision: rules.Decision) -> None:
         href = decision.params.get("href")
