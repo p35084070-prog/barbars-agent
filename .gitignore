@@ -1,0 +1,26 @@
+# Профили браузера и логи
+profile/
+profile-*/
+logs/
+
+# Учётные данные — никогда не в репозиторий
+credentials/
+credentials.txt
+credentials-*.json
+*.credentials
+.env
+
+# Локальные конфиги (с путями к рабочему столу) — в облаке свои
+config.json
+config-firewhite.json
+
+# Разобранные страницы игры и временные дампы
+knowledge/discovered/
+*.html
+proxy_hit.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

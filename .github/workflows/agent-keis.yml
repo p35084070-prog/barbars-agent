@@ -1,0 +1,73 @@
+name: agent-keis
+
+on:
+  schedule:
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Сколько минут работать'
+        default: '45'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-keis
+  cancel-in-progress: false
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Учётные данные из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          chmod 600 credentials/keis.txt
+
+      - name: Фарм
+        run: |
+          python -u run.py \
+            --config deploy/config-actions-keis.json \
+            --headless \
+            --duration "${{ github.event.inputs.duration || '45' }}"
+
+      - name: Сохранить дневные счётчики
+        run: |
+          git config user.name 'barbars-bot'
+          git config user.email 'bot@users.noreply.github.com'
+          git add state/keis
+          if git diff --cached --quiet; then
+            echo 'счётчики не изменились'
+          else
+            git commit -m 'state(keis): дневные счётчики'
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push origin HEAD:main && break
+              sleep 10
+            done
+          fi
+
+      - name: Логи
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-keis-${{ github.run_number }}
+          path: logs/keis
+          retention-days: 30

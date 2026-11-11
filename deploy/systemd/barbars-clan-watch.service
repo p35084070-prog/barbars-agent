@@ -1,0 +1,18 @@
+[Unit]
+Description=Варвары — watcher клана (вступление нового героя и повышение до генерала)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=barbars
+Group=barbars
+WorkingDirectory=/opt/barbars-agent
+Environment=PYTHONPATH=/opt/barbars-agent
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -c 'while true; do /opt/barbars-agent/.venv/bin/python -u tests/clan_join_auto.py; sleep 900; done'
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

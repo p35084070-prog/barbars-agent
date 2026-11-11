@@ -1,0 +1,58 @@
+name: clan-watch
+
+# Раз в 15 минут: проверяем уровень нового героя и, если он 11+,
+# приглашаем его в клан «Слепые ТИТАНЫ» и повышаем до генерала.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: clan-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Учётные данные из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          chmod 600 credentials/*.txt
+
+      - name: Проверка уровня и вступление в клан
+        env:
+          BARBARS_CREDS_KEIS: credentials/keis.txt
+          BARBARS_CREDS_FIREWHITE: credentials/firewhite.txt
+        run: python -u tests/clan_join_auto.py
+
+      - name: Логи клана
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clan-watch-${{ github.run_number }}
+          path: logs/clan-auto.log
+          retention-days: 30

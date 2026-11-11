@@ -1,0 +1,523 @@
+"""Правила поведения агента: что делать дальше и как вести бой.
+
+Правила детерминированные и дешёвые. Неоднозначные развилки (какую цель бить,
+какой талант качать) выносятся к LLM-советнику (llm.py).
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass, field
+from typing import Any
+
+from . import pages
+from .driver import CombatState, Game, Status
+
+
+@dataclass
+class Decision:
+    """Что агент собирается сделать сейчас."""
+
+    action: str  # fight | repair | talent | quest | donate | wait | explore
+    target: str = ""
+    params: dict[str, Any] = field(default_factory=dict)
+    reason: str = ""
+
+
+@dataclass
+class GameState:
+    now: str = ""
+    hp: int | None = None
+    max_hp: int | None = None
+    energy: int | None = None
+    max_energy: int | None = None
+    level: int | None = None
+    xp_cur: int | None = None
+    xp_need: int | None = None
+    participation: int | None = None
+    klass: str = ""
+    profession: str = ""
+    gold: int | None = None
+    silver: int | None = None
+    iron: int | None = None
+    mifril: int | None = None
+    bottles: int | None = None
+    talent_points: int = 0
+    needs_repair: bool = False
+    repair_cost: int | None = None
+    altar_bonus: float | None = None
+    altar_expires_in_min: float | None = None
+    altar_options: list[dict[str, Any]] = field(default_factory=list)
+    free_dungeon: int = 0
+    free_duel: int = 0
+    targets: list[pages.FightTarget] = field(default_factory=list)
+    quests: list[pages.ClanQuest] = field(default_factory=list)
+    active_quest: str = ""
+    # торговля
+    market_prices: dict[str, float] = field(default_factory=dict)  # серебро за единицу
+    market_checked: bool = False
+    my_lots: list[dict[str, Any]] = field(default_factory=list)
+    sold_today: int = 0
+    # опыт у мудреца
+    exp_options: list[dict[str, Any]] = field(default_factory=list)
+    exp_buys_today: int = 0
+    # колодец удачи
+    well_gift_available: bool = False
+    well_gift_taken_today: bool = False
+    # авторазбор
+    autocrack_set_today: bool = False
+    # фарм-события: какие из них сейчас не запускаются (кулдаун)
+    farm_skip: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    def summary(self) -> str:
+        return (
+            f"ур={self.level} класс={self.klass or '?'} hp={self.hp}/{self.max_hp} "
+            f"энергия={self.energy}/{self.max_energy} "
+            f"золото={self.gold} серебро={self.silver} железо={self.iron} "
+            f"мифрил={self.mifril} бутылки={self.bottles} "
+            f"опыт={pages.fmt_amount(self.xp_cur)}/{pages.fmt_amount(self.xp_need)} "
+            f"участие={pages.fmt_amount(self.participation)} "
+            f"свободных_очков_талантов={self.talent_points} "
+            f"бесплатных_боёв=подземелья:{self.free_dungeon}/дуэли:{self.free_duel}"
+        )
+
+
+# --------------------------------------------------------------------- сбор состояния
+
+
+def collect_state(game: Game, config: dict[str, Any]) -> GameState:
+    state = GameState()
+    # 1. Главная: список доступных боёв + текущие здоровье/энергия.
+    game.goto("https://barbars.ru/")
+    st = game.status()
+    state.hp, state.energy = st.hp, st.energy
+    state.targets = pages.home_targets(game)
+    for t in state.targets:
+        if t.kind in {"dungeon", "tower"} and t.fights_left is not None:
+            state.free_dungeon = max(state.free_dungeon, t.fights_left)
+        if t.kind == "duel" and t.fights_left is not None:
+            state.free_duel = max(state.free_duel, t.fights_left)
+    if not state.targets:
+        limits = game.fight_limits()
+        state.free_dungeon = limits.get("dungeon", state.free_dungeon)
+        state.free_duel = limits.get("duel", state.free_duel)
+
+    # 2. Страница героя: статы, опыт, ресурсы, таланты, id героя и клана.
+    game.goto("https://barbars.ru/user")
+    st = game.status()
+    state.hp = state.hp if state.hp is not None else st.hp
+    state.energy = state.energy if state.energy is not None else st.energy
+    state.gold, state.silver = st.gold, st.silver
+    state.iron, state.mifril, state.bottles = st.iron, st.mifril, st.bottles
+
+    hero = game.hero()
+    state.level = hero.level
+    state.klass = hero.klass or ""
+    state.xp_cur, state.xp_need = hero.xp_cur, hero.xp_need
+    state.participation = hero.participation
+    state.profession = hero.profession or ""
+    state.max_hp = state.hp or hero.max_hp
+    state.max_energy = hero.max_energy or state.energy
+
+    # 3. Свободные очки талантов — на странице талантов.
+    game.goto("https://barbars.ru/user/stances")
+    state.talent_points = game.talent_points()
+
+    # 4. Снаряжение: есть ли что чинить и сколько это стоит железа.
+    if game.hero_id:
+        game.goto(f"https://barbars.ru/user/body/id/{game.hero_id}")
+        repair = pages.repair_info(game)
+        state.needs_repair = bool(repair.get("needed"))
+        state.repair_cost = repair.get("cost")
+
+    # 5. Клановые задания.
+    if game.guild_id:
+        game.goto(f"https://barbars.ru/guild/quests/0/{game.guild_id}")
+        state.active_quest = pages.active_clan_quest(game)
+        state.quests = pages.clan_quests(game)
+    return state
+
+
+# --------------------------------------------------------------------- выбор действия
+
+
+def decide(state: GameState, config: dict[str, Any]) -> Decision:
+    """Главный цикл: чини → качай таланты → бери задание → бейся → жертвуй → жди."""
+    spend = config.get("spend", {})
+    fight_cfg = config.get("fight", {})
+
+    # 1. Починка снаряжения — железо тратится только на ремонт, это всегда полезно.
+    if fight_cfg.get("repair_enabled", True) and state.needs_repair:
+        cost = state.repair_cost
+        if cost is None or (state.iron or 0) >= cost:
+            return Decision("repair", reason=f"чиним снаряжение (железа нужно {cost})")
+
+    # 2. Алтарь клана: пожертвование даёт бонус ко всем параметрам клана.
+    #    Бонус протухает примерно через 2,5 часа, и он ЗАМЕНЯЕТСЯ новым:
+    #    жертвовать вариантом с меньшим бонусом, чем уже есть, нельзя.
+    altar_cfg = config.get("altar", {})
+    if altar_cfg.get("enabled", True):
+        renew_before = float(altar_cfg.get("renew_before_min", 25))
+        current_bonus = float(state.altar_bonus or 0)
+        expired = current_bonus <= 0
+        nearly_over = (
+            state.altar_expires_in_min is not None and state.altar_expires_in_min <= renew_before
+        )
+        if expired or nearly_over:
+            # По решению игрока алтарь продлевается ТОЛЬКО железом:
+            # серебро и золото на алтарь не тратим.
+            allowed = {"iron"}
+            if altar_cfg.get("allow_silver", False):
+                allowed.add("silver")
+            candidates = [o for o in state.altar_options if o.get("kind") in allowed]
+            # не понижаем бонус: идём от лучшего бонуса к худшему, но только среди доступных
+            candidates.sort(key=lambda o: (o.get("bonus") or 0, -int(o.get("cost") or 0)), reverse=True)
+            for best in candidates:
+                best_bonus = float(best.get("bonus") or 0)
+                # бонус протух — продлеваем любой доступный вариант;
+                # если ещё жив — продлеваем только не меньшим бонусом
+                if not (expired or best_bonus >= current_bonus):
+                    continue
+                kind = best.get("kind")
+                if kind == "iron":
+                    keep = int(altar_cfg.get("keep_iron", 50_000))
+                    need = int(best.get("cost") or altar_cfg.get("amount", 1250))
+                    if (state.iron or 0) - keep >= need:
+                        return Decision(
+                            "altar",
+                            target="iron",
+                            params={"amount": need},
+                            reason=f"пожертвуем {need} железа в алтарь (бонус +{best_bonus}%)",
+                        )
+                elif kind == "silver":
+                    # «Пожертвовать 87» — это серебро, а не золото (золото не тратим)
+                    need = int(best.get("cost") or 87)
+                    keep_silver = int(altar_cfg.get("keep_silver", 20))
+                    if (state.silver or 0) - need >= keep_silver:
+                        return Decision(
+                            "altar",
+                            target="silver",
+                            params={"amount": need},
+                            reason=f"пожертвуем {need} серебра в алтарь (бонус +{best_bonus}%)",
+                        )
+
+    # 3. Бесплатный ежедневный подарок колодца удачи.
+    well_cfg = config.get("well", {})
+    if well_cfg.get("gift_enabled", True) and state.well_gift_available and not state.well_gift_taken_today:
+        return Decision("well_gift", reason="забираем бесплатный ежедневный подарок колодца удачи")
+
+    # 4. Свободные очки талантов.
+    if state.talent_points > 0:
+        return Decision("talent", reason=f"не потрачено очков талантов: {state.talent_points}")
+
+    # 5. Клановое задание — если активного нет, берём подходящее.
+    if not state.active_quest and state.quests:
+        wanted = _pick_quest(state)
+        return Decision("quest", target=wanted, params={"index": wanted.index}, reason="берём клановое задание")
+
+    # 6. Бой — если есть бесплатные бои и герой не на нуле.
+    target = _pick_target(state, config)
+    if target is not None:
+        return Decision("fight", target=target.title, params={"href": target.href}, reason="используем бесплатный бой")
+    if spend.get("allow_gold_fights") and target is None:
+        paid = [t for t in state.targets if t.kind in {"dungeon", "duel"}]
+        if paid:
+            return Decision(
+                "fight",
+                target=paid[0].title,
+                params={"href": paid[0].href, "paid": True},
+                reason="платный бой за золото разрешён",
+            )
+
+    # 7. Опыт у мудреца — платим железом (золото не трогаем).
+    exp_cfg = config.get("exp", {})
+    if exp_cfg.get("enabled", True) and state.exp_buys_today < int(exp_cfg.get("max_per_day", 1)):
+        keep_iron = int(exp_cfg.get("keep_iron", 100_000))
+        free_iron = (state.iron or 0) - keep_iron
+        options = [
+            o
+            for o in state.exp_options
+            if o.get("currency") == "iron"
+            and o.get("amount", 0) <= free_iron
+            and o.get("amount", 0) >= int(exp_cfg.get("min_iron", 5000))
+        ]
+        if options:
+            # выгоднее брать максимум процента за железо
+            best = max(options, key=lambda o: o.get("percent", 0))
+            return Decision(
+                "exp",
+                target=str(best["amount"]),
+                params={"amount": best["amount"], "percent": best.get("percent")},
+                reason=f"покупаем {best.get('percent')}% опыта у мудреца за {best['amount']} железа",
+            )
+
+    # 8. Продажа ресурсов на аукционе: мифрил и бутылочки (железо не продаём).
+    cancel = _pick_cancel(state, config)
+    if cancel is not None:
+        return cancel
+    sell = _pick_sale(state, config)
+    if sell is not None:
+        return sell
+
+    # 9. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
+    #     Основной способ прокачки для новых героев (у них нет клана и подземелий).
+    tower = _pick_tower(state, config)
+    if tower is not None:
+        return tower
+
+    # 10. Авторазбор вещей в железо/мифрил.
+    crack_cfg = config.get("autocrack", {})
+    if crack_cfg.get("enabled") and not state.autocrack_set_today:
+        kind = crack_cfg.get("kind", "autoCrackCommonLink")
+        return Decision("autocrack", target=kind, reason="включаем авторазбор вещей")
+
+    # 11. Вклад в хранилище клана — только излишки железа, и только если разрешено.
+    donate_cfg = spend.get("clan_donate", {})
+    if donate_cfg.get("enabled") and donate_cfg.get("iron"):
+        chunk = int(donate_cfg.get("iron_amount", 50_000))
+        keep = int(donate_cfg.get("keep_iron", 500_000))
+        if (state.iron or 0) - keep >= chunk:
+            return Decision("donate", target="iron", params={"amount": chunk}, reason="вкладываем излишки железа в клан")
+
+    # 12. Фарм-события: все активности, где можно фармить бесплатно
+    #     (клановые боссы, арена, выживание, замки, башни, битва героев).
+    #     Стоят ниже разовых дел (опыт, авторазбор, продажа), чтобы они не терялись.
+    farm = _pick_farm(state, config)
+    if farm is not None:
+        return farm
+
+    # 13. Ничего не делаем — ждём регенерации/обновления лимитов.
+    no_fights = state.free_dungeon <= 0 and state.free_duel <= 0
+    return Decision(
+        "wait",
+        params={"long": no_fights},
+        reason="дневные бои исчерпаны, ждём обновления лимитов" if no_fights else "нет доступных действий, ждём регенерации энергии",
+    )
+
+
+def _pick_farm(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Выбрать фарм-событие: любая активность, где можно качать опыт и ресурсы.
+
+    Пропускаем события, которые недавно не удалось запустить (кулдаун),
+    и не тратим на них ни золота, ни участия.
+    """
+    farm_cfg = config.get("farm", {})
+    if not farm_cfg.get("enabled", True):
+        return None
+    skip = set(state.farm_skip or [])
+    for event in farm_cfg.get("events", []):
+        name = event.get("name", "")
+        url = event.get("url", "")
+        if not url or name in skip:
+            continue
+        return Decision(
+            "activity",
+            target=name,
+            params={"url": url, "wait_sec": int(farm_cfg.get("wait_sec", 120))},
+            reason=f"фармим событие: {name}",
+        )
+    return None
+
+
+def _pick_tower(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Фарм башни (/game/towers) — бесплатный бой с добычей опыта и ресурсов.
+
+    Включается флагом `tower_farm.enabled`. Опционально `tower_farm.max_level`:
+    выше этого уровня башня больше не фармится (0 — без ограничения).
+    """
+    cfg = config.get("tower_farm", {})
+    if not cfg.get("enabled"):
+        return None
+    max_level = int(cfg.get("max_level", 0) or 0)
+    if max_level and (state.level or 0) > max_level:
+        return None
+    return Decision(
+        "tower",
+        target="башня",
+        params={"rounds": int(cfg.get("rounds", 3))},
+        reason="фармим башню: опыт, железо, бутылочки и вещи",
+    )
+
+
+def _pick_cancel(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Снять свой лот, если рынок просел ниже цены лота.
+
+    Лот висит 24 часа и стоит 5 серебра аренды; если за это время рынок упал,
+    лучше снять лот и выставить его позже по новой цене.
+    """
+    market = config.get("market", {})
+    if not market.get("enabled", True):
+        return None
+    drift = float(market.get("cancel_drift_ratio", 1.2))
+    for lot in state.my_lots:
+        resource = lot.get("resource", "")
+        unit = state.market_prices.get(resource)
+        if not unit:
+            continue
+        lot_unit = lot.get("unit_price_silver", 0.0)
+        if lot_unit > unit * drift:
+            return Decision(
+                "cancel_lot",
+                target=resource,
+                params={"unit_price": lot_unit},
+                reason=(
+                    f"снимаем лот {resource}: цена {lot_unit:.2f} сер/шт выше рынка {unit:.2f}"
+                ),
+            )
+    return None
+
+
+def _pick_sale(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Какой ресурс и по какой цене выставить на аукционе ресурсов.
+
+    Продаём только мифрил и бутылочки (железо нужно на починку/алтарь/опыт).
+    Цену берём лучшую рыночную за единицу и слегка снижаем, чтобы лот ушёл быстрее.
+    Лот стоит 5 серебра за 24 часа — выставляем только если выручка заметно больше.
+    """
+    market = config.get("market", {})
+    if not market.get("enabled", True):
+        return None
+    if state.sold_today >= int(market.get("max_lots_per_day", 2)):
+        return None
+    reserves = market.get("reserve", {})
+    min_amount = market.get("min_amount", {})
+    min_price = market.get("min_unit_price", {})
+    min_revenue = int(market.get("min_revenue_silver", 500))
+
+    have_map = {"mifril": state.mifril or 0, "bottles": state.bottles or 0}
+    # если по этому ресурсу уже висит наш лот — второй не выставляем
+    busy = {lot.get("resource") for lot in state.my_lots}
+    for resource in market.get("resources", ["mifril", "bottles"]):
+        if resource in busy:
+            continue
+        have = have_map.get(resource, 0)
+        reserve = int(reserves.get(resource, 0))
+        surplus = have - reserve
+        if surplus < int(min_amount.get(resource, 1000)):
+            continue
+        unit = state.market_prices.get(resource)
+        if not unit:
+            continue
+        if unit < float(min_price.get(resource, 0.0)):
+            continue
+        # цена за единицу: чуть ниже лучшей рыночной, с ограничением снизу
+        price_per_unit = unit - float(market.get("price_discount", 0.01))
+        price_per_unit = max(price_per_unit, float(min_price.get(resource, 0.0)))
+        total = int(price_per_unit * surplus)
+        if total < min_revenue:
+            continue
+        gold, silver = divmod(total, 100)
+        if gold <= 0 and silver <= 0:
+            continue
+        return Decision(
+            "sell",
+            target=resource,
+            params={"amount": surplus, "gold": gold, "silver": silver, "unit_price": price_per_unit},
+            reason=(
+                f"продаём {surplus} {resource} по {price_per_unit:.3f} сер/шт "
+                f"(выручка {gold}з {silver}с)"
+            ),
+        )
+    return None
+
+
+def _repair_cost(config: dict[str, Any]) -> int | None:
+    return config.get("fight", {}).get("repair_reserve", None)
+
+
+def _pick_quest(state: GameState) -> pages.ClanQuest:
+    """Приоритет: задания, которые мы реально выполняем текущими боями."""
+    priority = (
+        "Усиленная прокачка",
+        "Рейд на драконов",
+        "Лицом к лицу",
+        "Покорение турниров",
+        "Кровавая арена",
+        "Выжить любой ценой",
+        "Великие свершения",
+    )
+    for want in priority:
+        for q in state.quests:
+            if want.lower() in (q.title + " " + q.description).lower():
+                return q
+    return state.quests[0]
+
+
+def _pick_target(state: GameState, config: dict[str, Any]) -> pages.FightTarget | None:
+    """Какой бой взять: приоритет из конфига, иначе — по типу и остатку попыток."""
+    order = config.get("targets", ["dungeon", "tower", "duel", "arena", "survival", "greats", "contests"])
+    by_kind: dict[str, list[pages.FightTarget]] = {}
+    for t in state.targets:
+        by_kind.setdefault(t.kind, []).append(t)
+    for kind in order:
+        options = by_kind.get(kind) or []
+        if not options:
+            continue
+        # дуэли и подземелья — только если есть бесплатные попытки
+        if kind == "duel" and state.free_duel <= 0:
+            continue
+        if kind == "dungeon" and state.free_dungeon <= 0:
+            continue
+        if kind == "tower" and state.free_dungeon <= 0:
+            continue
+        options.sort(key=lambda t: (t.fights_left is None, -(t.fights_left or 0)))
+        return options[0]
+    return None
+
+
+# --------------------------------------------------------------------- политика боя
+
+
+class CombatPolicy:
+    """Пошаговая логика внутри боя."""
+
+    def __init__(self, config: dict[str, Any]):
+        cfg = config.get("fight", {})
+        self.hp_flee = cfg.get("hp_flee_threshold", 30)
+        self.potion_below = cfg.get("use_potions_below_hp", 25)
+        self.energy_threshold = cfg.get("energy_attack_threshold", 0.85)
+        self.max_turns = cfg.get("max_turns", 80)
+        self.prefer_heal = cfg.get("prefer_heal", False)
+
+    def choose(self, cs: CombatState, status: Status, state: GameState) -> Decision:
+        """Что нажать в этом ходе."""
+        if cs.victory is True:
+            return Decision("finish", reason="победа")
+        if cs.victory is False:
+            return Decision("finish", reason="поражение")
+
+        max_hp = state.max_hp or cs.our_hp or 0
+        hp_ratio = (cs.our_hp or 0) / max_hp if max_hp else 1.0
+
+        # Зелье при низком здоровье.
+        if cs.potion_links and hp_ratio * 100 < self.potion_below:
+            return Decision("potion", params={"text": cs.potion_links[0]}, reason="хилка на низком HP")
+
+        # Умения: сначала «увеличивает урон» перед ударом, затем защита.
+        boost = next((a for a in cs.abilities if a["ready"] and "увеличивает урон" in a.get("desc", "")), None)
+        shield = next((a for a in cs.abilities if a["ready"] and "уменьшает урон" in a.get("desc", "")), None)
+        dodge = next((a for a in cs.abilities if a["ready"] and "уворот" in a.get("desc", "")), None)
+
+        if boost:
+            return Decision("ability", target=boost["name"], params={"href": boost["href"]}, reason="буст урона")
+        if shield and hp_ratio * 100 < 70:
+            return Decision("ability", target=shield["name"], params={"href": shield["href"]}, reason="щит при низком HP")
+        if dodge and hp_ratio * 100 < 45:
+            return Decision("ability", target=dodge["name"], params={"href": dodge["href"]}, reason="уклонение при низком HP")
+
+        # Критическое здоровье — отступаем, а не продолжаем бить.
+        if cs.flee_links and hp_ratio * 100 < self.hp_flee:
+            return Decision("flee", params={"text": cs.flee_links[0]}, reason="HP критическое, отступаем")
+
+        # Энергия должна быть почти максимальной: урон растёт с зарядом меча.
+        energy_max = state.max_energy or cs.our_energy or 0
+        energy_now = cs.our_energy or 0
+        if energy_max and energy_now < energy_max * self.energy_threshold:
+            return Decision("wait_energy", reason=f"ждём энергию {energy_now}/{energy_max}")
+
+        if cs.attack_links:
+            return Decision("attack", reason="обычный удар")
+        if cs.heal_links and self.prefer_heal:
+            return Decision("heal", params={"text": cs.heal_links[0]}, reason="лечим союзника")
+        return Decision("wait", reason="нет доступных действий в бою")

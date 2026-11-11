@@ -1,0 +1,22 @@
+[Unit]
+Description=Варвары — агент keis (первый аккаунт)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=barbars
+Group=barbars
+WorkingDirectory=/opt/barbars-agent
+Environment=PYTHONPATH=/opt/barbars-agent
+Environment=PYTHONUNBUFFERED=1
+# Ключ LLM необязателен: без него агент работает на правилах.
+# Environment=ANTHROPIC_API_KEY=sk-ant-...
+ExecStart=/opt/barbars-agent/.venv/bin/python -u run.py --config config-keis.json play
+Restart=always
+RestartSec=15
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
