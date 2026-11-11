@@ -46,6 +46,9 @@ class Agent:
         # крайний срок работы (0 = работаем бесконечно); нужен в облаке,
         # чтобы аккуратно выйти даже посреди боя
         self.deadline: float = 0.0
+        # если очко таланта не потратилось (кнопки нет) — не пытаемся заново
+        # каждый цикл, иначе агент не доходит до фарма
+        self.talent_blocked_until: float = 0.0
         self.daily = self._load_daily()
 
     # ------------------------------------------------------------------ логи
@@ -126,6 +129,8 @@ class Agent:
                 return rules.Decision("wait", reason="браузер недоступен")
         state = rules.collect_state(self.game, self.config)
         self.last_state = state
+        if self.talent_blocked_until > time.time():
+            state.talent_points = 0
         self.daily = self._load_daily()
         state.sold_today = int(self.daily.get("sold", 0))
         state.exp_buys_today = int(self.daily.get("exp", 0))
@@ -488,7 +493,8 @@ class Agent:
                 self.log(f"талант улучшен: {talent.name} ({detail})")
                 return
             self.log(f"талант {talent.name} не изучен: {detail}")
-        self.log("не удалось потратить очко таланта")
+        self.log("не удалось потратить очко таланта — вернусь к талантам позже")
+        self.talent_blocked_until = time.time() + 1800
 
     def _do_quest(self, decision: rules.Decision) -> None:
         if not self.game.guild_id:
