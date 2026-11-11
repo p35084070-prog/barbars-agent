@@ -177,6 +177,8 @@
     "max_equip": 8,
     "crack": true,
     "crack_limit": 15,
+    "crack_chest": true,
+    "crack_chest_limit": 15,
     "keep_mythic": true,
     "sell_store": true,
     "sell_limit": 3,

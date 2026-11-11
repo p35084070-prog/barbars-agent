@@ -1243,6 +1243,41 @@ class Game:
             return False
         return self.click_href("crackIronPanel:crackLink")
 
+    def crack_chest_items(
+        self,
+        limit: int = 20,
+        keep_mythic: bool = True,
+        keep_better: bool = True,
+    ) -> int:
+        """Разобрать вещи в сундуке на железо.
+
+        В списке сундука разбора нет (только «в рюкзак»), поэтому ломаем со
+        страницы вещи — ссылка `actionBlock:crackIronPanel:crackLink` там есть
+        и работает (проверено: эпическая вещь из сундука разобралась).
+
+        Мифические вещи (`bonusdarkiron`) не ломаем; «Лучше» сначала надеваем.
+        """
+        cracked = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/store")
+            html = self.p.content()
+            target: str | None = None
+            for chunk, index in self._item_blocks(html):
+                if keep_better and "Лучше" in chunk:
+                    continue
+                if keep_mythic and "bonusdarkiron" in chunk:
+                    continue
+                item_id = re.search(r'href="(?:\.\./)*item/id/(\d+)"', chunk)
+                if item_id:
+                    target = item_id.group(1)
+                    break
+            if target is None:
+                break
+            if not self._crack_item_page(target):
+                break
+            cracked += 1
+        return cracked
+
     def crack_all_items(self) -> bool:
         """«Разобрать всё на железо» — аварийный вариант для полного рюкзака."""
         self.goto("https://barbars.ru/user/rack")

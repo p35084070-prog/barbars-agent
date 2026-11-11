@@ -104,6 +104,11 @@ cfg_no_crack = json.loads(json.dumps(config))
 cfg_no_crack["gear"]["crack"] = False
 d = rules.decide(bag_state, cfg_no_crack)
 assert d.action == "autocrack", d
+# рюкзак пуст, но сундук полон — чистим сундук (там копится старый хлам)
+bag_state.gear_blocked = False
+bag_state.bag = {"bag_used": 0, "bag_total": 20, "chest_used": 20, "chest_total": 20}
+d = rules.decide(bag_state, config)
+assert d.action == "gear", d
 print("gear loop: ok")
 
 # --- прокачка параметров железом ----------------------------------

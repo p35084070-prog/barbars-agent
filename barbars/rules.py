@@ -365,7 +365,9 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
     chest_used = int(bag.get("chest_used", 0) or 0)
     chest_total = int(bag.get("chest_total", 20) or 20)
     keep = int(cfg.get("keep_bag", 4))
-    if used <= keep:
+    crack_chest = bool(cfg.get("crack_chest", True))
+    chest_full = chest_used >= chest_total
+    if used <= keep and not (crack_chest and chest_full):
         return None
     overflow = (used >= total) and (chest_used >= chest_total)
     crack = bool(cfg.get("crack", True))

@@ -324,6 +324,15 @@ class Agent:
                 keep_better=True,
                 keep_mythic=bool(gear_cfg.get("keep_mythic", True)),
             )
+            # сундук: там копится старый хлам (1-11 ур), разбираем его со
+            # страницы вещи — иначе место для нового дропа закончится
+            if bool(gear_cfg.get("crack_chest", True)):
+                chest_cracked = self.game.crack_chest_items(
+                    limit=int(gear_cfg.get("crack_chest_limit", 15)),
+                    keep_mythic=bool(gear_cfg.get("keep_mythic", True)),
+                    keep_better=True,
+                )
+                cracked += chest_cracked
         counts = self.game.bag_counts()
         # рюкзак переполнен, а надеть/сломать больше нечего — часть вещей
         # (мифические, не поместившиеся в снаряжение) продаём на витрине клана
