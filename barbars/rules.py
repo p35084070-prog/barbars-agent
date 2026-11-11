@@ -389,6 +389,7 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
             "keep_bag": keep,
             "max_equip": int(cfg.get("max_equip", 8)),
             "crack": crack,
+            "sell_store": bool(cfg.get("sell_store", True)),
         },
         reason=f"рюкзак заполнен на {used}/{total} — надеваем лучшее и разбираем остальное",
     )

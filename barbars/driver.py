@@ -1154,16 +1154,16 @@ class Game:
         self,
         limit: int = 20,
         keep_better: bool = True,
-        keep_legendary: bool = True,
+        keep_mythic: bool = True,
     ) -> int:
         """Разобрать вещи в рюкзаке на железо.
 
-        Правило игрока: ломаем всё, что не надето и не нужно, кроме самых
-        ценных (легендарных). Пометка «Лучше» означает «сильнее надетого» —
-        такую вещь сначала надевают, и только потом ломать её нельзя.
+        Правило игрока: ломаем всё, что не надето и не нужно, кроме мифических
+        вещей (иконка `bonusdarkiron`) — их не ломаем. Пометка «Лучше» означает
+        «сильнее надетого» — такую вещь сначала надевают, и ломать её нельзя.
 
         Ссылка разбора `items:N:crackIronPanel:crackLink` есть в списке рюкзака
-        не у всех вещей (у эпических и легендарных её нет) — для них разбор
+        не у всех вещей (у эпических и мифических её нет) — для них разбор
         делается со страницы вещи (`actionBlock:crackIronPanel:crackLink`).
         """
         cracked = 0
@@ -1174,8 +1174,8 @@ class Game:
             for chunk, index in self._item_blocks(html):
                 if keep_better and "Лучше" in chunk:
                     continue
-                if keep_legendary and "bonusdarkiron" in chunk:
-                    continue  # легендарные (мифические) не ломаем
+                if keep_mythic and "bonusdarkiron" in chunk:
+                    continue  # мифические вещи не ломаем
                 if f"items:{index}:crackIronPanel:crackLink" in chunk:
                     target = ("list", index)
                     break
@@ -1193,6 +1193,47 @@ class Game:
                 break
             cracked += 1
         return cracked
+
+    def sell_item_to_store(self, item_id: str) -> bool:
+        """Выставить вещь на «Витрину клана» (/guild/public/store).
+
+        Со страницы вещи ссылка `actionBlock:toPublicStoreLink` сразу отправляет
+        вещь на витрину клана (без формы). Это единственный способ продать
+        снаряжение: обычный аукцион — только для ресурсов.
+        """
+        self.goto(f"https://barbars.ru/item/id/{item_id}")
+        return self.click_href("toPublicStoreLink")
+
+    def sell_extra_items(self, limit: int = 3) -> int:
+        """Выставить ненужные вещи на витрину клана.
+
+        Берём мифические вещи (их нельзя разобрать на железо), которые не
+        помечаются как «Лучше» и которые нельзя надеть (нет ссылки «надеть»):
+        они только занимают рюкзак. Такие вещи идут на витрину — так они
+        продаются за серебро/золото, а не просто исчезают.
+        """
+        sold = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/rack")
+            html = self.p.content()
+            target: str | None = None
+            for chunk, index in self._item_blocks(html):
+                if "bonusdarkiron" not in chunk:
+                    continue
+                if "Лучше" in chunk:
+                    continue
+                if f"items:{index}:wearLink" in chunk:
+                    continue  # можно надеть — сначала надеваем, не продаём
+                item_id = re.search(r'href="(?:\.\./)*item/id/(\d+)"', chunk)
+                if item_id:
+                    target = item_id.group(1)
+                    break
+            if target is None:
+                break
+            if not self.sell_item_to_store(target):
+                break
+            sold += 1
+        return sold
 
     def _crack_item_page(self, item_id: str) -> bool:
         """Разобрать вещь со страницы самой вещи (`/item/id/<id>`)."""

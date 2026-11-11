@@ -300,46 +300,54 @@ class Agent:
             self.log(f"награда: не удалось получить — {exc}", "WARN")
 
     def _do_gear(self, decision: rules.Decision) -> None:
-        """Рюкзак: сначала надеть «Лучше», потом разобрать остальное на железо.
+        """Рюкзак: надеть «Лучше», разобрать остальное на железо, лишнее — на витрину.
 
         Порядок именно такой: вещь с пометкой «Лучше (+N)» сильнее надетой,
-        её надо надеть, а уже всё остальное можно превратить в железо.
+        её надо надеть; остальное (кроме мифических) превращаем в железо;
+        мифические, которые не надели, выставляем на «Витрину клана» —
+        это единственный способ продать снаряжение (обычный аукцион — только
+        для ресурсов).
         """
         keep = int(decision.params.get("keep_bag", 4))
         max_equip = int(decision.params.get("max_equip", 8))
         crack = bool(decision.params.get("crack", True))
+        sell_store = bool(decision.params.get("sell_store", True))
+        gear_cfg = self.config.get("gear", {})
         worn = self.game.equip_better_items(limit=max_equip)
         cracked = 0
         moved = 0
+        sold = 0
         if crack:
-            # разбираем всё, кроме «Лучше» (их надо надеть) и легендарных
-            gear_cfg = self.config.get("gear", {})
+            # разбираем всё, кроме «Лучше» (их надо надеть) и мифических
             cracked = self.game.crack_items(
                 limit=int(gear_cfg.get("crack_limit", 10)),
                 keep_better=True,
-                keep_legendary=bool(gear_cfg.get("keep_legendary", True)),
+                keep_mythic=bool(gear_cfg.get("keep_mythic", True)),
             )
-            # остаток (уже надетые дубли/хлам без «Лучше») — в сундук, если есть место
-            moved = self.game.stash_items(keep=keep)
-        else:
-            moved = self.game.stash_items(keep=keep)
+        counts = self.game.bag_counts()
+        # рюкзак переполнен, а надеть/сломать больше нечего — часть вещей
+        # (мифические, не поместившиеся в снаряжение) продаём на витрине клана
+        if sell_store and int(counts.get("bag_used", 0) or 0) >= int(counts.get("bag_total", 20) or 20):
+            sold = self.game.sell_extra_items(limit=int(gear_cfg.get("sell_limit", 3)))
+        moved = self.game.stash_items(keep=keep)
         counts = self.game.bag_counts()
         self.log(
-            f"рюкзак: надето {worn}, разобрано {cracked}, в сундук {moved}, "
+            f"рюкзак: надето {worn}, разобрано {cracked}, на витрину {sold}, в сундук {moved}, "
             f"рюкзак {counts.get('bag_used')}/{counts.get('bag_total')}, "
             f"сундук {counts.get('chest_used')}/{counts.get('chest_total')}"
         )
-        if worn == 0 and cracked == 0 and moved == 0:
+        if worn == 0 and cracked == 0 and moved == 0 and sold == 0:
             # Ничего не изменилось: сундук полон и надеть нечего. Повторять
             # этот шаг бессмысленно — он блокирует фарм, поэтому ставим паузу.
-            self.gear_blocked_until = time.time() + 1800
+            pause_min = int(gear_cfg.get("pause_min", 10))
+            self.gear_blocked_until = time.time() + pause_min * 60
             self.gear_blocked_sig = (
                 int(counts.get("bag_used", 0) or 0),
                 int(counts.get("chest_used", 0) or 0),
             )
             self.log(
                 "рюкзак разгрузить не удалось (нечего надеть и нечего разобрать) — "
-                "ждём 30 мин, идём фармить",
+                f"ждём {pause_min} мин, идём фармить",
                 "WARN",
             )
 

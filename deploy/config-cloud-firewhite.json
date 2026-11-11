@@ -183,10 +183,14 @@
   "state_dir": "logs/firewhite",
   "gear": {
     "enabled": true,
-    "keep_bag": 4,
+    "keep_bag": 2,
     "max_equip": 8,
     "crack": true,
-    "crack_limit": 10,
+    "crack_limit": 15,
+    "keep_mythic": true,
+    "sell_store": true,
+    "sell_limit": 3,
+    "pause_min": 10,
     "overflow_crack": "autoCrackUncommonLink"
   },
   "upgrade": {
