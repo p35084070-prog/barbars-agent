@@ -312,8 +312,13 @@ class Agent:
         cracked = 0
         moved = 0
         if crack:
-            # разбираем всё, кроме «Лучше» — эти вещи уже надеты выше
-            cracked = self.game.crack_items(limit=int(self.config.get("gear", {}).get("crack_limit", 25)))
+            # разбираем всё, кроме «Лучше» (их надо надеть) и легендарных
+            gear_cfg = self.config.get("gear", {})
+            cracked = self.game.crack_items(
+                limit=int(gear_cfg.get("crack_limit", 10)),
+                keep_better=True,
+                keep_legendary=bool(gear_cfg.get("keep_legendary", True)),
+            )
             # остаток (уже надетые дубли/хлам без «Лучше») — в сундук, если есть место
             moved = self.game.stash_items(keep=keep)
         else:

@@ -1150,30 +1150,57 @@ class Game:
             worn += 1
         return worn
 
-    def crack_items(self, limit: int = 20, keep_better: bool = True) -> int:
-        """Разобрать вещи в рюкзаке на железо (ссылка `crackLink`).
+    def crack_items(
+        self,
+        limit: int = 20,
+        keep_better: bool = True,
+        keep_legendary: bool = True,
+    ) -> int:
+        """Разобрать вещи в рюкзаке на железо.
 
-        По правилу игрока всё, что можно, превращается в железо; вещи с
-        пометкой «Лучше» не трогаем — их надо надеть, а не сломать.
+        Правило игрока: ломаем всё, что не надето и не нужно, кроме самых
+        ценных (легендарных). Пометка «Лучше» означает «сильнее надетого» —
+        такую вещь сначала надевают, и только потом ломать её нельзя.
+
+        Ссылка разбора `items:N:crackIronPanel:crackLink` есть в списке рюкзака
+        не у всех вещей (у эпических и легендарных её нет) — для них разбор
+        делается со страницы вещи (`actionBlock:crackIronPanel:crackLink`).
         """
         cracked = 0
         for _ in range(limit):
             self.goto("https://barbars.ru/user/rack")
             html = self.p.content()
-            target = None
+            target: tuple[str, str] | None = None
             for chunk, index in self._item_blocks(html):
-                if f"items:{index}:crackIronPanel:crackLink" not in chunk:
-                    continue
                 if keep_better and "Лучше" in chunk:
                     continue
-                target = index
-                break
+                if keep_legendary and "bonusdarkiron" in chunk:
+                    continue  # легендарные (мифические) не ломаем
+                if f"items:{index}:crackIronPanel:crackLink" in chunk:
+                    target = ("list", index)
+                    break
+                item_id = re.search(r'href="(?:\.\./)*item/id/(\d+)"', chunk)
+                if item_id:
+                    target = ("page", item_id.group(1))
+                    break
             if target is None:
                 break
-            if not self.click_href(f"items:{target}:crackIronPanel:crackLink"):
+            if target[0] == "list":
+                ok = self.click_href(f"items:{target[1]}:crackIronPanel:crackLink")
+            else:
+                ok = self._crack_item_page(target[1])
+            if not ok:
                 break
             cracked += 1
         return cracked
+
+    def _crack_item_page(self, item_id: str) -> bool:
+        """Разобрать вещь со страницы самой вещи (`/item/id/<id>`)."""
+        self.goto(f"https://barbars.ru/item/id/{item_id}")
+        html = self.p.content()
+        if "crackIronPanel:crackLink" not in html:
+            return False
+        return self.click_href("crackIronPanel:crackLink")
 
     def crack_all_items(self) -> bool:
         """«Разобрать всё на железо» — аварийный вариант для полного рюкзака."""
