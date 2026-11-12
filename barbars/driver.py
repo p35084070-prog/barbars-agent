@@ -1181,12 +1181,18 @@ class Game:
         for link in self.p.locator("a").all():
             try:
                 text = " ".join((link.inner_text() or "").split())
+                href = link.get_attribute("href") or ""
             except Exception:
                 continue
             if text != "Я готов!":
                 continue
-            href = link.get_attribute("href") or ""
-            if "readyLink" not in href and not self.click_href("readyPanel:readyLink"):
+            if "readyLink" in href:
+                try:
+                    link.scroll_into_view_if_needed(timeout=3000)
+                    link.click(timeout=8000)
+                except Exception:
+                    continue
+            elif not self.click_href("readyPanel:readyLink"):
                 continue
             self._settle()
             return True
