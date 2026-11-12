@@ -757,35 +757,39 @@ class Agent:
             return
 
         deadline = time.time() + stay_sec
-        closed_since = 0.0
+        next_room_check = 0.0
         while time.time() < deadline:
-            info = self.game.raid_room(url)
-            if info.get("closed"):
-                # идёт попытка — успеваем войти в боевую панель
+            now = time.time()
+            if now >= next_room_check:
+                next_room_check = now + 12
+                info = self.game.raid_room(url)
+                if info.get("closed"):
+                    # идёт попытка — заходим в боевую панель
+                    if self.game.join_current_fight():
+                        self.log("рейд: вошли в общий бой")
+                        self._raid_fight()
+                        return
+                else:
+                    ready = len(info.get("ready") or [])
+                    waiting = len(info.get("waiting") or [])
+                    self.log(f"рейд: в зале {ready + waiting} (готовых {ready})")
+                    # держим свою готовность: она сбрасывается, когда кто-то заходит
+                    self.game.raid_ready()
+                    if can_start and ready >= min_party and info.get("can_start"):
+                        if self.game.raid_start():
+                            self.log("рейд: начали общий бой с боссом")
+                            time.sleep(2)
+                            if self.game.join_current_fight():
+                                self._raid_fight()
+                            return
+            else:
+                # между проверками зала быстро смотрим боевую панель:
+                # окно попытки короткое, вход нужен мгновенный
                 if self.game.join_current_fight():
                     self.log("рейд: вошли в общий бой")
                     self._raid_fight()
                     return
-                if not closed_since:
-                    closed_since = time.time()
-                # окно попытки короткое: первую минуту смотрим часто, потом реже
-                time.sleep(3 if (time.time() - closed_since) < 60 else 15)
-                continue
-            closed_since = 0.0
-
-            ready = len(info.get("ready") or [])
-            waiting = len(info.get("waiting") or [])
-            self.log(f"рейд: в зале {ready + waiting} (готовых {ready})")
-            # держим свою готовность: она сбрасывается, когда кто-то заходит
-            self.game.raid_ready()
-            if can_start and ready >= min_party and info.get("can_start"):
-                if self.game.raid_start():
-                    self.log("рейд: начали общий бой с боссом")
-                    time.sleep(2)
-                    if self.game.join_current_fight():
-                        self._raid_fight()
-                    return
-            time.sleep(8)
+                time.sleep(3)
 
         self.log("рейд: окно вышло, ждём следующего")
 

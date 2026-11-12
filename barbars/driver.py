@@ -1157,13 +1157,18 @@ class Game:
         Пока герой в бою, на странице пещер есть ссылка «Вернуться в бой»
         (`returnToGamePanel:currentGameLink`) — по ней открывается боевая панель.
         """
-        self.goto("https://barbars.ru/game/dungeons")
-        if "Вернуться в бой" not in self.body_text():
-            return False
-        if not self.click_text("Вернуться в бой"):
-            return False
-        self._settle()
-        return "Покинуть бой" in self.body_text()
+        if "Покинуть бой" in self.body_text():
+            return True
+        for url in ("https://barbars.ru/game/dungeons", "https://barbars.ru/"):
+            self.goto(url)
+            if "Вернуться в бой" not in self.body_text():
+                continue
+            if not self.click_text("Вернуться в бой"):
+                continue
+            self._settle()
+            if "Покинуть бой" in self.body_text():
+                return True
+        return False
 
     def raid_room(self, url: str) -> dict[str, Any]:
         """Состояние зала кланового босса (/game/dragonDungeon и подобные)."""
