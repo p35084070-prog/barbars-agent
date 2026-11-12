@@ -106,10 +106,10 @@
     "check_interval_min": 30
   },
   "well": {
-    "gift_enabled": false,
+    "gift_enabled": true,
     "check_interval_min": 60,
     "book_enabled": false,
-    "enabled": false
+    "enabled": true
   },
   "autocrack": {
     "enabled": true,

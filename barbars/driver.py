@@ -587,12 +587,53 @@ class Game:
         st = Status()
         st.hp = self._icon_value(["life.png", "lifealert.gif", "lifealt.gif"])
         st.energy = self._icon_value(["energy.png"])
-        st.gold = self._icon_value(["money_gold.png"])
-        st.silver = self._icon_value(["money_silver.png"])
-        st.iron = self._icon_value(["ironbar.png"])
-        st.mifril = self._icon_value(["mifrilbar.png"])
-        st.bottles = self._icon_value(["bottle.png"])
+        # ресурсы берём из блока «ресурсы» в шапке: иконка железа ещё встречается
+        # в других местах (например, «разобрать на 281» у нового предмета),
+        # и первый попавшийся элемент давал не баланс, а чужое число
+        st.gold = self._resource_value("money_gold.png")
+        st.silver = self._resource_value("money_silver.png")
+        st.iron = self._resource_value("ironbar.png")
+        st.mifril = self._resource_value("mifrilbar.png")
+        st.bottles = self._resource_value("bottle.png")
         return st
+
+    def _resource_value(self, icon: str) -> int | None:
+        """Счётчик ресурса из блока ресурсов в шапке.
+
+        Блок ищем по бутылочке (bottle.png) — он есть всегда, когда виден
+        счётчик. Иконка железа встречается и в других местах (например,
+        «разобрать на 225» у только что полученного предмета), и первый
+        попавшийся элемент давал не баланс, а чужое число.
+        """
+        try:
+            raw = self.p.evaluate(
+                """icon => {
+                    const all = Array.from(document.querySelectorAll('img'));
+                    const bottle = all.find(i => (i.getAttribute('src') || '').includes('bottle.png'));
+                    if (!bottle) return '';
+                    let box = bottle.parentElement;
+                    while (box) {
+                        const hit = Array.from(box.querySelectorAll('img'))
+                            .find(i => (i.getAttribute('src') || '').includes(icon));
+                        if (hit) {
+                            const span = hit.nextElementSibling;
+                            if (span && span.textContent) return span.textContent.trim();
+                        }
+                        box = box.parentElement;
+                    }
+                    return '';
+                }""",
+                icon,
+            )
+            if raw:
+                return parse_amount(str(raw))
+        except Exception:
+            pass
+        return self._icon_value([icon])
+
+    def close_new_item_panel(self) -> bool:
+        """Закрыть панель «новый предмет» (после подарка/находки)."""
+        return self.click_href("newItemMessageBlock:hideLink")
 
     def _icon_value(self, icon_names: list[str]) -> int | None:
         """Значение рядом с иконкой: <img src=...><span>123</span>."""
