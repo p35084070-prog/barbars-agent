@@ -1151,11 +1151,15 @@ class Game:
         self._settle()
         return True
 
-    def join_current_fight(self) -> bool:
+    def join_current_fight(self, lair_url: str = "") -> bool:
         """Если идёт бой, в котором мы участвуем, — вернуться в него.
 
         Пока герой в бою, на странице пещер есть ссылка «Вернуться в бой»
         (`returnToGamePanel:currentGameLink`) — по ней открывается боевая панель.
+
+        Для кланового босса работает и другой путь: во время попытки страница
+        зала (`/game/dragonDungeon`) отдаёт боевую панель участнику — достаточно
+        её перезагрузить. Поэтому зал проверяем последним, если указан.
         """
         if "Покинуть бой" in self.body_text():
             return True
@@ -1167,6 +1171,11 @@ class Game:
                 continue
             self._settle()
             if "Покинуть бой" in self.body_text():
+                return True
+        if lair_url:
+            self.goto(lair_url)
+            text = self.body_text()
+            if "Бить дракона" in text or "Лечить союзников" in text:
                 return True
         return False
 

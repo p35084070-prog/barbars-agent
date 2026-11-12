@@ -460,7 +460,7 @@ def parse_raid_room(html: str, text: str = "") -> dict[str, Any]:
     """Зал кланового босса (/game/dragonDungeon и подобные).
 
     Возвращает: {"closed", "reopen_in", "hp", "warriors", "healers", "ready",
-    "waiting", "limit", "in_fight", "can_start"}.
+    "waiting", "limit", "in_fight", "locked_out", "can_start"}.
     """
     text = text or " ".join(re.sub("<[^>]+>", " ", html).split())
     out: dict[str, Any] = {
@@ -478,7 +478,11 @@ def parse_raid_room(html: str, text: str = "") -> dict[str, Any]:
     m = re.search(r"Откроется через[:\s]*([\d:]+)", text)
     if m:
         out["reopen_in"] = m.group(1)
-    out["closed"] = ("Вход закрыт" in text) or ("Пустая пещера" in text)
+    out["closed"] = (
+        ("Вход закрыт" in text)
+        or ("Пустая пещера" in text)
+        or ("Бой начался" in text)
+    )
 
     # иконки-параметры: HP босса (%), воины, лекари, часы
     for m in re.finditer(
@@ -510,12 +514,16 @@ def parse_raid_room(html: str, text: str = "") -> dict[str, Any]:
             entry = {"id": hero.group(1), "name": hero.group(2)}
             (out["ready"] if "check_green" in chunk else out["waiting"]).append(entry)
 
+    # Боевую панель во время попытки отдаётся участнику прямо на странице зала:
+    # «Бить дракона» (воин) или «Лечить союзников» (медик) + «<кто-то> начал бой».
+    # «Покинуть бой» не годится как признак: он есть и на странице отказа
+    # («Вход закрыт. Бой начался… ты не можешь принять участие»).
     out["in_fight"] = (
-        "Ты начал бой" in text
-        or "Бить дракона" in text
+        "Бить дракона" in text
         or "Лечить союзников" in text
-        or "Покинуть бой" in text
+        or "начал бой" in text
     )
+    out["locked_out"] = "не можешь принять участие" in text
     return out
 
 

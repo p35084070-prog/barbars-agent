@@ -760,6 +760,7 @@ def _pick_raid(state: GameState, config: dict[str, Any]) -> Decision | None:
             "min_party": int(cfg.get("min_party", 2)),
             "stay_sec": int(cfg.get("stay_sec", 600)),
             "can_start": bool(cfg.get("can_start", True)),
+            "room_check_sec": int(cfg.get("room_check_sec", 8)),
         },
         reason=(
             f"рейд на босса: HP {info.get('hp', 100)}%, в зале {ready + waiting} "
@@ -966,7 +967,7 @@ class CombatPolicy:
         self.max_turns = cfg.get("max_turns", 80)
         self.prefer_heal = cfg.get("prefer_heal", False)
 
-    def choose(self, cs: CombatState, status: Status, state: GameState) -> Decision:
+    def choose(self, cs: CombatState, status: Status, state: GameState, force: bool = False) -> Decision:
         """Что нажать в этом ходе."""
         if cs.victory is True:
             return Decision("finish", reason="победа")
@@ -997,9 +998,12 @@ class CombatPolicy:
             return Decision("flee", params={"text": cs.flee_links[0]}, reason="HP критическое, отступаем")
 
         # Энергия должна быть почти максимальной: урон растёт с зарядом меча.
+        # В бою с боссом окно попытки короткое: лечить (у медика удара нет)
+        # надо сразу, а вот удар лучше делать с полным зарядом.
         energy_max = state.max_energy or cs.our_energy or 0
         energy_now = cs.our_energy or 0
-        if energy_max and energy_now < energy_max * self.energy_threshold:
+        need_energy = not (force and not cs.attack_links)
+        if need_energy and energy_max and energy_now < energy_max * self.energy_threshold:
             return Decision("wait_energy", reason=f"ждём энергию {energy_now}/{energy_max}")
 
         if cs.attack_links:
