@@ -38,7 +38,8 @@
     "stay_sec": 600,
     "min_party": 2,
     "can_start": true,
-    "max_fights_per_day": 10
+    "max_fights_per_day": 10,
+    "max_turns": 70
   },
   "tower_farm": {
     "enabled": true,

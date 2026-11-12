@@ -797,8 +797,14 @@ class Agent:
         self.log("рейд: окно вышло, ждём следующего")
 
     def _raid_fight(self) -> None:
-        """Бой с боссом: воин бьёт, медик лечит."""
-        outcome = self._fight_loop(force=True)
+        """Бой с боссом: воин бьёт, медик лечит.
+
+        Лимит ходов тут свой: попытка длится около пяти минут, а обычного
+        лимита боёв (40 ходов в облаке) не хватает — воин успевал сделать
+        только 40 ударов и выходил из боя, не дожидаясь конца попытки.
+        """
+        limit = int(self.config.get("raid", {}).get("max_turns", 70))
+        outcome = self._fight_loop(force=True, max_turns=limit)
         self.fights_done += 1
         self._bump("raid")
         self.log(
@@ -1445,11 +1451,11 @@ class Agent:
         # выходим из боя на главную, чтобы состояние обновилось
         self.game.click_text("Покинуть бой")
 
-    def _fight_loop(self, force: bool = False) -> str:
+    def _fight_loop(self, force: bool = False, max_turns: int = 0) -> str:
         """Пошаговый бой. `force` — режим босса: не ждём энергию перед лечением
-        и считаем нанесённый по боссу урон."""
+        и считаем нанесённый по боссу урон. `max_turns` — свой лимит ходов."""
         turns = 0
-        max_turns = int(self.config.get("fight", {}).get("max_turns", 80))
+        limit = max_turns or int(self.config.get("fight", {}).get("max_turns", 80))
         last_log = ""
         stale_energy_checks = 0
         stalls = 0
@@ -1463,7 +1469,7 @@ class Agent:
             self.last_damage = damage
             return text
 
-        while turns < max_turns:
+        while turns < limit:
             if self.deadline and time.time() >= self.deadline:
                 self.log("  выходим по лимиту времени")
                 return done("время вышло")
