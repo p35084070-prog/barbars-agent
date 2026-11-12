@@ -16,8 +16,11 @@ r"""Адаптер канала ОК: даёт драйверу игру «Ва�
 Этот модуль решает три задачи:
   1) OkFrameAdapter — обёртка над кадром игры с API, совместимым с Page
      (goto/locator/inner_text/content/...), причём goto сам дописывает
-     jsessionid и ходит по относительным путям от текущего URL кадра;
-  2) OkSession — установка handshake с ОК и поиск кадра игры;
+     jsessionid, а относительные пути разрешает от корня сайта — так же,
+     как это делает обычный Game на barbars.ru;
+  2) OkGame — установка handshake с ОК и поиск кадра игры. ОК периодически
+     пересоздаёт игровой iframe, поэтому кадр ищется заново при каждом
+     обращении, а «зависший» переход повторяется на свежем кадре;
   3) OkGame — готовая игра для агента: базовый URL переключается на
      od.barbars.ru, а логин не нужен (сессия уже есть).
 
@@ -91,126 +94,127 @@ def session_from_file(path: str | Path) -> tuple[list[dict], str]:
 
 
 class OkFrameAdapter:
-    """Кадр игры как «страница»: методы те же, что у Page, но с учётом сессии."""
+    """Кадр игры как «страница»: методы те же, что у Page, но с учётом сессии.
 
-    def __init__(self, frame: Frame, page: Page):
-        self._frame = frame
-        self._page = page
+    Кадр берётся не один раз, а у игры: ОК периодически пересоздаёт iframe,
+    и старый объект Frame после этого отваливается (навигация по нему виснет
+    до таймаута). Поэтому каждый запрос адреса идёт через OkGame.current_frame.
+    """
+
+    def __init__(self, game: "OkGame"):
+        self._game = game
 
     # -------------------------------------------------------------- состояние кадра
     @property
     def frame(self) -> Frame:
-        return self._frame
+        return self._game.current_frame()
 
     @property
     def page(self) -> Page:
-        return self._page
+        return self._game.ok_page  # type: ignore[return-value]
 
     @property
     def url(self) -> str:
-        return self._frame.url
+        return self._game.current_url()
 
-    @property
     def title(self) -> str:
+        """Заголовок страницы (у Playwright Page это метод, а не свойство)."""
         try:
-            return self._frame.title()
+            return self.frame.title()
         except Exception:  # noqa: BLE001
             return ""
 
     def is_closed(self) -> bool:
         try:
-            return self._frame.is_detached()
+            return self.frame.is_detached()
         except Exception:  # noqa: BLE001
             return True
 
     @property
     def jsessionid(self) -> str:
         """Java-сессия игры: ищем в HTML кадра, потом в его URL."""
-        try:
-            html = self._frame.content()
-        except Exception:  # noqa: BLE001
-            html = ""
-        m = JSESSION_RE.search(html) or JSESSION_RE.search(self._frame.url)
-        return m.group(1) if m else ""
+        return self._game.jsessionid
 
     # -------------------------------------------------------------- навигация
     def _resolve(self, url: str) -> str:
         """Собрать абсолютный URL так, чтобы сохранить jsessionid."""
-        if not url.startswith("http"):
-            # относительный путь — от текущего URL кадра (там уже есть сессия)
-            url = urljoin(self._frame.url, url)
+        url = OkGame._to_ok_host(url)
         sid = self.jsessionid
         if sid and "jsessionid=" not in url and url.startswith(GAME_HOST):
             url = f"{url};jsessionid={sid}"
         return url
 
     def goto(self, url: str, wait_until: str = "domcontentloaded", **kwargs: Any) -> Any:
-        target = self._resolve(url)
-        return self._frame.goto(target, wait_until=wait_until, **kwargs)
+        return self._game.goto_frame(url, wait_until=wait_until, **kwargs)
 
     def reload(self, **kwargs: Any) -> Any:
-        return self._frame.reload(**kwargs)
+        """У Frame нет reload() — просто переходим на текущий адрес заново."""
+        url = self.url
+        if not url:
+            return None
+        wait_until = kwargs.pop("wait_until", "domcontentloaded")
+        return self._game.goto_frame(url, wait_until=wait_until, **kwargs)
 
     def wait_for_load_state(self, state: str = "load", **kwargs: Any) -> Any:
-        return self._frame.wait_for_load_state(state, **kwargs)
+        return self.frame.wait_for_load_state(state, **kwargs)
 
     # -------------------------------------------------------------- чтение
     def content(self) -> str:
-        return self._frame.content()
+        return self.frame.content()
 
     def inner_text(self, selector: str, **kwargs: Any) -> str:
-        return self._frame.inner_text(selector, **kwargs)
+        return self.frame.inner_text(selector, **kwargs)
 
     def text_content(self, selector: str, **kwargs: Any) -> str | None:
-        return self._frame.text_content(selector, **kwargs)
+        return self.frame.text_content(selector, **kwargs)
 
     def locator(self, selector: str, **kwargs: Any) -> Any:
-        return self._frame.locator(selector, **kwargs)
+        return self.frame.locator(selector, **kwargs)
 
     def query_selector(self, selector: str, **kwargs: Any) -> Any:
-        return self._frame.query_selector(selector, **kwargs)
+        return self.frame.query_selector(selector, **kwargs)
 
     def query_selector_all(self, selector: str, **kwargs: Any) -> Any:
-        return self._frame.query_selector_all(selector, **kwargs)
+        return self.frame.query_selector_all(selector, **kwargs)
 
     def title_text(self) -> str:
-        return self.title
+        return self.title()
 
     # -------------------------------------------------------------- ввод
     def fill(self, selector: str, value: str, **kwargs: Any) -> Any:
-        return self._frame.locator(selector).fill(value, **kwargs)
+        return self.frame.locator(selector).fill(value, **kwargs)
 
     def click(self, selector: str, **kwargs: Any) -> Any:
-        return self._frame.locator(selector).click(**kwargs)
+        return self.frame.locator(selector).click(**kwargs)
 
     def select_option(self, selector: str, value: Any = None, **kwargs: Any) -> Any:
-        return self._frame.locator(selector).select_option(value, **kwargs)
+        return self.frame.locator(selector).select_option(value, **kwargs)
 
     def check(self, selector: str, **kwargs: Any) -> Any:
-        return self._frame.locator(selector).check(**kwargs)
+        return self.frame.locator(selector).check(**kwargs)
 
     def uncheck(self, selector: str, **kwargs: Any) -> Any:
-        return self._frame.locator(selector).uncheck(**kwargs)
+        return self.frame.locator(selector).uncheck(**kwargs)
 
     def press(self, selector: str, key: str, **kwargs: Any) -> Any:
-        return self._frame.locator(selector).press(key, **kwargs)
+        return self.frame.locator(selector).press(key, **kwargs)
 
     # -------------------------------------------------------------- прочее
     def mouse(self) -> Any:
         """Мышь — у главной страницы (координаты кадра считаются от неё)."""
-        return self._page.mouse
+        return self.page.mouse
 
     def keyboard(self) -> Any:
-        return self._page.keyboard
+        return self.page.keyboard
 
     def screenshot(self, **kwargs: Any) -> Any:
-        return self._page.screenshot(**kwargs)
+        return self.page.screenshot(**kwargs)
 
     def evaluate(self, expression: str, **kwargs: Any) -> Any:
-        return self._frame.evaluate(expression, **kwargs)
+        return self.frame.evaluate(expression, **kwargs)
 
     def frames(self) -> list[Frame]:
-        return [self._frame]
+        return [self.frame]
 
 
 class OkGame(Game):
@@ -231,6 +235,9 @@ class OkGame(Game):
         self._adapter: OkFrameAdapter | None = None
         # Игра в канале ОК живёт на od.barbars.ru, а не на barbars.ru
         self.base_url = GAME_HOST + "/"
+        self._frame_ref: Frame | None = None
+        self._jsessionid: str = ""
+        self._last_url: str = ""
 
     # ------------------------------------------------------------------ сессия
     def _session(self) -> tuple[list[dict], str]:
@@ -247,6 +254,75 @@ class OkGame(Game):
                 return cookies, ua
         cookies, ua = session_from_env(cfg.get("session_env", "OK_SESSION_B64"))
         return cookies, ua
+
+    # ------------------------------------------------------------------ кадр игры
+    def current_frame(self) -> Frame:
+        """Текущий кадр с игрой (переищется, если ОК пересоздал iframe)."""
+        frame = self._frame_ref
+        if frame is not None:
+            try:
+                if not frame.is_detached():
+                    return frame
+            except Exception:  # noqa: BLE001
+                pass
+        frame = self._find_frame()
+        if frame is None:
+            raise GameError("Кадр игры ОК потерян")
+        self._frame_ref = frame
+        return frame
+
+    def _find_frame(self, tries: int = 1, wait: int = 3) -> Frame | None:
+        """Найти кадр с игрой: сначала по хосту, потом по маркерам содержимого."""
+        assert self.ok_page is not None
+        for i in range(tries):
+            for f in self.ok_page.frames:
+                if f == self.ok_page.main_frame:
+                    continue
+                if "od.barbars.ru" in f.url:
+                    try:
+                        if f.inner_text("body", timeout=4000).strip():
+                            return f
+                    except Exception:  # noqa: BLE001
+                        continue
+            for f in self.ok_page.frames:
+                if f == self.ok_page.main_frame:
+                    continue
+                try:
+                    txt = f.inner_text("body", timeout=4000)
+                except Exception:  # noqa: BLE001
+                    continue
+                if sum(1 for m in GAME_MARKERS if m in txt) >= 3:
+                    return f
+            if i + 1 < tries:
+                time.sleep(wait)
+        return None
+
+    def current_url(self) -> str:
+        """URL текущей страницы игры (кадр мог потерять URL при пересоздании)."""
+        try:
+            url = self.current_frame().url
+        except Exception:  # noqa: BLE001
+            url = ""
+        return url or self._last_url
+
+    @property
+    def jsessionid(self) -> str:
+        """Java-сессия игры (из URL страницы, иначе — из HTML кадра)."""
+        if self._jsessionid:
+            return self._jsessionid
+        try:
+            frame = self.current_frame()
+        except Exception:  # noqa: BLE001
+            return ""
+        m = JSESSION_RE.search(frame.url)
+        if not m:
+            try:
+                m = JSESSION_RE.search(frame.content())
+            except Exception:  # noqa: BLE001
+                m = None
+        if m:
+            self._jsessionid = m.group(1)
+        return self._jsessionid
 
     # ------------------------------------------------------------------ lifecycle
     def start(self, headless: bool | None = None) -> None:
@@ -283,7 +359,8 @@ class OkGame(Game):
         if frame is None:
             self.close()
             raise GameError("Игра через ОК не загрузилась")
-        self._adapter = OkFrameAdapter(frame, self.ok_page)
+        self._frame_ref = frame
+        self._adapter = OkFrameAdapter(self)  # type: ignore[assignment]
         self.page = self._adapter  # type: ignore[assignment]
 
     def _wait_game_frame(self, tries: int = 30, wait: int = 5) -> Frame | None:
@@ -296,24 +373,10 @@ class OkGame(Game):
             print(f"[ОК] ошибка перехода: {exc}")
         for i in range(tries):
             time.sleep(wait)
-            for f in self.ok_page.frames:
-                if f == self.ok_page.main_frame:
-                    continue
-                if "od.barbars.ru" in f.url:
-                    try:
-                        if f.inner_text("body", timeout=4000).strip():
-                            return f
-                    except Exception:  # noqa: BLE001
-                        continue
-            for f in self.ok_page.frames:
-                if f == self.ok_page.main_frame:
-                    continue
-                try:
-                    txt = f.inner_text("body", timeout=4000)
-                except Exception:  # noqa: BLE001
-                    continue
-                if sum(1 for m in GAME_MARKERS if m in txt) >= 3:
-                    return f
+            frame = self._find_frame()
+            if frame is not None:
+                self._frame_ref = frame
+                return frame
             if i % 3 == 0:
                 print(f"[ОК] ждём кадр игры ({i + 1}/{tries})...")
         return None
@@ -340,7 +403,8 @@ class OkGame(Game):
         if self.ok_page is not None:
             frame = self._wait_game_frame(tries=10)
             if frame is not None:
-                self._adapter = OkFrameAdapter(frame, self.ok_page)
+                self._frame_ref = frame
+                self._adapter = OkFrameAdapter(self)  # type: ignore[assignment]
                 self.page = self._adapter  # type: ignore[assignment]
                 return self.is_authenticated()
         return False
@@ -353,14 +417,133 @@ class OkGame(Game):
                    "Сражения", "Торговля")
         return any(marker in text for marker in markers)
 
+    # ------------------------------------------------------------------ клики
+    def _click_selector(self, selector: str, timeout: int = 8000,
+                        nth: int = 0) -> bool:
+        """Клик с повтором: ОК иногда пересоздаёт игровой iframe, и клик по
+        старому кадру не срабатывает — тогда кадр ищем заново и кликаем ещё раз.
+        """
+        for _ in range(2):
+            try:
+                locator = self.p.locator(selector)
+                count = locator.count()
+                if count == 0:
+                    return False
+                target = locator.nth(min(nth, count - 1))
+                target.scroll_into_view_if_needed(timeout=3000)
+                self.human.move_mouse_to(self.p, target)
+                target.click(timeout=timeout)
+                return True
+            except Exception as exc:  # noqa: BLE001
+                head = str(exc).splitlines()[0][:140]
+                print(f"[ОК] клик не сработал: {head}")
+                self._frame_ref = None  # кадр мог отвалиться — ищем новый
+                time.sleep(1.0)
+        return False
+
+    def use_ability(self, href: str) -> bool:
+        """Применить умение боя (ссылка с abilityCombatPanel)."""
+        if not href:
+            return False
+        if not self._click_selector("a[href*='" + href + "']"):
+            return False
+        self._settle()
+        self.human.pause("fight")
+        return True
+
+    def click_attack(self) -> bool:
+        """Кликнуть по основной боевой кнопке ('Бить ...' / 'Атаковать ...')."""
+        for label in ("Бить", "Атаковать", "Жечь", "Ударить"):
+            selector = f"a:has-text('{label}'), button:has-text('{label}')"
+            if self._click_selector(selector):
+                self._settle()
+                self.human.pause("fight")
+                return True
+        return False
+
+    def click_text(self, text: str, *, exact: bool = False, nth: int = 0,
+                   tags: tuple[str, ...] = ("a", "button", "input"),
+                   timeout: int = 8000) -> bool:
+        """Кликнуть по элементу с указанным текстом (с повтором на новом кадре)."""
+        for tag in tags:
+            selectors: list[str] = []
+            if exact:
+                selectors.append(f"{tag}[value='{text}']")
+                selectors.append(f"{tag}:text-is('{text}')")
+            else:
+                selectors.append(f"{tag}:text-is('{text}')")
+                selectors.append(f"{tag}:has-text('{text}')")
+            for sel in selectors:
+                if self._click_selector(sel, timeout=timeout, nth=nth):
+                    self._settle()
+                    self.human.pause("action")
+                    return True
+        return False
+
     # ------------------------------------------------------------------ навигация
     def goto(self, path: str) -> None:
-        """Переход по странице игры с сохранением сессии jsessionid."""
+        """Переход по странице игры с сохранением сессии jsessionid.
+
+        Агент ходит по абсолютным адресам вида https://barbars.ru/game/towers —
+        в канале ОК это другой хост (od.barbars.ru) и нужна jsessionid,
+        поэтому адрес переписывается, а сессия добавляется адаптером.
+        """
         self.human.pause("page")
-        try:
-            self.p.goto(path, wait_until="domcontentloaded")
-        except Exception as exc:  # noqa: BLE001
-            print(f"[ОК] переход не удался ({path}): {exc}")
+        url = self._to_ok_host(path)
+        ok = self.goto_frame(url)
+        if not ok:
             return
         self._settle()
         self.human.maybe_scroll(self.p)
+
+    def goto_frame(self, url: str, wait_until: str = "domcontentloaded",
+                   timeout: int = 45_000, **kwargs: Any) -> bool:
+        """Переход внутри кадра игры с повтором на свежем кадре.
+
+        ОК периодически пересоздаёт игровой iframe: если переход пришёлся на
+        этот момент, Playwright ждёт до таймаута и страница не открывается.
+        Поэтому при неудаче кадр ищется заново и переход повторяется.
+        """
+        target = self._resolve_jsession(url)
+        for attempt in range(2):
+            try:
+                frame = self.current_frame()
+                frame.goto(target, wait_until=wait_until, timeout=timeout, **kwargs)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[ОК] переход не удался ({url}): {exc}")
+                self._frame_ref = None  # кадр мог отвалиться — ищем новый
+                frame = self._find_frame(tries=4, wait=3)
+                if frame is None:
+                    return False
+                self._frame_ref = frame
+                continue
+            self._last_url = target
+            m = JSESSION_RE.search(target)
+            if m:
+                self._jsessionid = m.group(1)
+            return True
+        return False
+
+    def _resolve_jsession(self, url: str) -> str:
+        """Дописать jsessionid, если его ещё нет в адресе."""
+        if "jsessionid=" in url or not url.startswith(GAME_HOST):
+            return url
+        sid = self.jsessionid
+        if not sid:
+            return url
+        head, sep, tail = url.partition("?")
+        return f"{head};jsessionid={sid}{sep}{tail}"
+
+    @staticmethod
+    def _to_ok_host(path: str) -> str:
+        """Переписать адрес игры на хост ОК.
+
+        Как и обычный Game на barbars.ru: относительные пути разрешаются
+        от корня сайта, ;jsessionid= выбрасывается (его добавит адаптер).
+        """
+        path = re.sub(r";jsessionid=[0-9A-Za-z]+", "", path)
+        if path.startswith("https://barbars.ru"):
+            return GAME_HOST + path[len("https://barbars.ru"):]
+        if path.startswith("http"):
+            return path
+        return urljoin(GAME_HOST + "/", path)

@@ -931,8 +931,14 @@ class Agent:
                     return "прервано"
             elif decision.action == "ability":
                 turns += 1
-                self.game.use_ability(decision.params.get("href", ""))
-                self.log(f"  умение: {decision.target}")
+                used = self.game.use_ability(decision.params.get("href", ""))
+                if used:
+                    self.log(f"  умение: {decision.target}")
+                else:
+                    # умение не сработало (например, ОК пересоздал кадр) —
+                    # бьём обычным ударом, чтобы бой не завис
+                    self.log("  умение не применилось — бьём обычным ударом")
+                    self.game.click_attack()
             elif decision.action == "potion":
                 turns += 1
                 self.game.click_text(decision.params.get("text", ""))

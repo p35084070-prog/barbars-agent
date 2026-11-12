@@ -2,6 +2,7 @@
 
   python run.py login      # открыть браузер и залогиниться вручную (пароль нам не нужен)
   python run.py play       # автономная игра
+  python run.py play-ok    # автономная игра через мобильную версию ОК
   python run.py once       # один цикл решений
   python run.py discover   # выгрузить страницы игры для разбора
   python run.py doctor     # проверить окружение
@@ -17,7 +18,7 @@ import time
 from pathlib import Path
 
 from barbars import pages
-from barbars.driver import Game
+from barbars.driver import Game, GameError
 from barbars.loop import Agent
 
 ROOT = Path(__file__).resolve().parent
@@ -77,6 +78,37 @@ def cmd_play(config: dict, headless: bool | None, iterations: int, duration_min:
     game.start(headless=headless)
     if not game.ensure_login(timeout_sec=int(config.get("run", {}).get("login_timeout_sec", 600))):
         print("Не удалось авторизоваться — перезапусти и войди вручную.")
+        game.close()
+        return 1
+    agent = Agent(game, config, log_dir=state_dir(config))
+    try:
+        agent.run_forever(max_iterations=iterations, duration_sec=duration_min * 60)
+    except KeyboardInterrupt:
+        agent.log("остановлено пользователем")
+    finally:
+        agent.dump_state()
+        game.close()
+    return 0
+
+
+def cmd_play_ok(config: dict, headless: bool | None, iterations: int,
+                duration_min: float = 0.0) -> int:
+    """Игра через мобильную версию Одноклассников.
+
+    Сессия ОК берётся из переменной OK_SESSION_B64 (или файла
+    ok_channel.session_file из конфига) — это несколько cookie, которые
+    на ПК готовит tools\\ok_export_cookies.py.
+    """
+    from barbars.ok_channel import OkGame
+
+    game = OkGame(config, profile_dir(config))
+    try:
+        game.start(headless=headless)
+    except GameError as exc:
+        print(f"[ОК] не удалось открыть игру: {exc}")
+        return 1
+    if not game.ensure_login(timeout_sec=int(config.get("run", {}).get("login_timeout_sec", 600))):
+        print("Не удалось войти в игру через ОК.")
         game.close()
         return 1
     agent = Agent(game, config, log_dir=state_dir(config))
@@ -178,7 +210,8 @@ def cmd_doctor(config: dict) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Агент для игры «Варвары»")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG))
-    parser.add_argument("command", choices=["login", "play", "once", "discover", "doctor"])
+    parser.add_argument("command",
+                        choices=["login", "play", "play-ok", "once", "discover", "doctor"])
     parser.add_argument("--headless", action="store_true", help="без окна браузера")
     parser.add_argument("--iterations", type=int, default=0, help="сколько циклов (0 = бесконечно)")
     parser.add_argument(
@@ -196,6 +229,8 @@ def main() -> int:
         return cmd_login(config)
     if args.command == "play":
         return cmd_play(config, headless, args.iterations, args.duration)
+    if args.command == "play-ok":
+        return cmd_play_ok(config, headless, args.iterations, args.duration)
     if args.command == "once":
         return cmd_once(config, headless)
     if args.command == "discover":

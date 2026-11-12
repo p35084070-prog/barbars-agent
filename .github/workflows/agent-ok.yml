@@ -1,0 +1,74 @@
+name: agent-ok
+
+# Игра «Варвары» через мобильную версию Одноклассников.
+#
+# Канал ОК нужен для аккаунта, привязанного к ОК (он не входит через
+# логин/пароль на barbars.ru). Сессия ОК — это несколько cookie, которые
+# лежат в секрете OK_SESSION_B64 (base64 от gzip(json)).
+#
+# Как подготовить секрет (один раз, на ПК):
+#   1) python tools\ok_phone.py      — войти в ОК руками
+#   2) python tools\ok_export_cookies.py
+#   3) содержимое state\ok-session.b64 вставить в секрет OK_SESSION_B64
+#
+# ВНИМАНИЕ: секрет — это живая сессия вашего аккаунта ОК. Не публикуйте его
+# и не коммитьте state\ok-session.b64 (он в .gitignore).
+
+on:
+  schedule:
+    - cron: '23 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Сколько минут играть'
+        default: '330'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: agent-ok
+  cancel-in-progress: false
+
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Восстановить сессию ОК
+        env:
+          OK_SESSION_B64: ${{ secrets.OK_SESSION_B64 }}
+        run: |
+          if [ -z "$OK_SESSION_B64" ]; then
+            echo "::error::не задан секрет OK_SESSION_B64"; exit 1
+          fi
+          mkdir -p state
+          printf '%s' "$OK_SESSION_B64" > state/ok-session.b64
+          echo "сессия восстановлена ($(wc -c < state/ok-session.b64) байт)"
+
+      - name: Игра
+        run: |
+          python -u run.py --config config-ok.json play-ok \
+            --headless \
+            --duration ${{ github.event.inputs.duration || '330' }}
+
+      - name: Логи
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-ok-${{ github.run_number }}
+          path: logs/ok-cloud
+          retention-days: 14
