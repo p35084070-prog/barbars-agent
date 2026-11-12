@@ -42,6 +42,8 @@ class Agent:
         self.farm_cooldown: dict[str, float] = {}
         # сколько боёв подряд прошло в каждом событии (нужно для ротации)
         self.farm_streak: dict[str, int] = {}
+        # состояние Полей сражений между проверками (кэш)
+        self.battlefields_cache: dict[str, Any] = {}
         # счётчик боёв в событиях: по нему чередуем башню, чтобы она была фоном
         self.activity_fights = 0
         # колодец удачи и мудрец — тоже кэшируем, чтобы не ходить на страницы каждый цикл
@@ -576,13 +578,19 @@ class Agent:
             return
         now = time.time()
         if (now - self.battlefields_checked_at) < float(cfg.get("check_interval_min", 5)) * 60:
+            # между проверками отдаём кэш: иначе герой ждал бы старта боя
+            # лишние 5 минут, а бой на полях идёт недолго
+            state.battlefields = self.battlefields_cache
+            state.bg_points = int(self.battlefields_cache.get("points", 0) or 0)
             return
         self.battlefields_checked_at = now
         try:
             info = self.game.battlefields_state()
         except Exception as exc:
             self.log(f"поля сражений: не удалось проверить: {exc}", "WARN")
+            state.battlefields = self.battlefields_cache
             return
+        self.battlefields_cache = info
         state.battlefields = info
         state.bg_points = int(info.get("points", 0) or 0)
         countdown = str(info.get("countdown", "") or "")
