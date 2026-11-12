@@ -30,15 +30,23 @@
   },
   "run": {
     "idle_sleep_sec": 60,
-    "idle_sleep_no_fights_sec": 900,
+    "idle_sleep_no_fights_sec": 300,
     "action_delay_sec": 1.5,
     "stop_after_fights": 0,
     "login_timeout_sec": 600,
     "login_then_play": true,
-    "cycle_max_sec": 300
+    "cycle_max_sec": 600
+  },
+  "daily_award": {
+    "enabled": true
+  },
+  "tower_farm": {
+    "enabled": true,
+    "max_level": 0,
+    "rounds": 2
   },
   "altar": {
-    "enabled": false,
+    "enabled": true,
     "resource": "iron",
     "amount": 1250,
     "keep_iron": 50000,
@@ -52,44 +60,99 @@
     "allow_shop": false,
     "allow_auction": false,
     "clan_donate": {
-      "enabled": false,
+      "enabled": true,
       "iron": true,
       "iron_amount": 50000,
       "keep_iron": 500000
     }
   },
   "market": {
-    "enabled": false,
-    "resources": ["mifril", "bottles"],
-    "reserve": {"mifril": 50, "bottles": 300},
-    "min_amount": {"mifril": 500, "bottles": 1000},
-    "min_unit_price": {"mifril": 6.0, "bottles": 2.0},
+    "enabled": true,
+    "resources": [
+      "mifril",
+      "bottles"
+    ],
+    "reserve": {
+      "mifril": 50,
+      "bottles": 300
+    },
+    "min_amount": {
+      "mifril": 500,
+      "bottles": 1000
+    },
+    "min_unit_price": {
+      "mifril": 6.0,
+      "bottles": 2.0
+    },
     "min_revenue_silver": 5000,
     "price_discount": 0.0,
     "max_lots_per_day": 3,
     "check_interval_min": 30
   },
   "exp": {
-    "enabled": false,
+    "enabled": true,
     "max_per_day": 1,
     "keep_iron": 100000,
     "min_iron": 5000,
     "check_interval_min": 60
   },
   "well": {
-    "gift_enabled": false,
+    "gift_enabled": true,
     "check_interval_min": 60,
     "book_enabled": false
   },
   "autocrack": {
-    "enabled": false,
+    "enabled": true,
     "kind": "autoCrackCommonLink"
   },
   "farm": {
-    "enabled": false,
-    "wait_sec": 120,
-    "retry_min": 30,
-    "events": []
+    "enabled": true,
+    "wait_sec": 180,
+    "retry_min": 15,
+    "max_streak": 3,
+    "tower_every": 3,
+    "events": [
+      {
+        "name": "Арена",
+        "url": "https://barbars.ru/game/arena"
+      },
+      {
+        "name": "Турниры",
+        "url": "https://barbars.ru/game/contests"
+      },
+      {
+        "name": "Выживание",
+        "url": "https://barbars.ru/game/survival"
+      },
+      {
+        "name": "Подземелья (Время)",
+        "url": "https://barbars.ru/game/dungeons"
+      },
+      {
+        "name": "Великие битвы",
+        "url": "https://barbars.ru/games/greats"
+      },
+      {
+        "name": "Замок: Зеркало боли",
+        "url": "https://barbars.ru/castle/6"
+      },
+      {
+        "name": "Замок: Колыбель жизни",
+        "url": "https://barbars.ru/castle/8"
+      },
+      {
+        "name": "Битва героев",
+        "url": "https://barbars.ru/game/battle"
+      },
+      {
+        "name": "Клановый босс: Мифический дракон",
+        "url": "https://barbars.ru/game/dragonDungeon"
+      },
+      {
+        "name": "Клановый босс: Святилище предков",
+        "url": "https://barbars.ru/game/greatBoss"
+      }
+    ]
   },
   "fight": {
     "repair_enabled": true,
@@ -97,11 +160,19 @@
     "hp_flee_threshold": 30,
     "use_potions_below_hp": 25,
     "energy_attack_threshold": 0.85,
-    "energy_wait_sec": 3,
-    "max_turns": 80,
+    "energy_wait_sec": 2,
+    "max_turns": 40,
     "prefer_heal": false
   },
-  "targets": ["dungeon", "tower", "duel", "arena", "survival", "greats", "contests"],
+  "targets": [
+    "dungeon",
+    "tower",
+    "duel",
+    "arena",
+    "survival",
+    "greats",
+    "contests"
+  ],
   "talent_priority": [
     "Лечебная поддержка",
     "Сила воли",
@@ -120,18 +191,20 @@
     "Сила баланса"
   ],
   "llm": {
-    "enabled": false,
+    "enabled": true,
     "model": "claude-sonnet-4-5",
     "api_key_env": "ANTHROPIC_API_KEY",
     "max_calls_per_hour": 60,
     "max_tokens": 700
   },
   "gear": {
-    "enabled": false,
+    "enabled": true,
     "keep_bag": 2,
     "max_equip": 8,
     "crack": true,
     "crack_limit": 15,
+    "crack_chest": true,
+    "crack_chest_limit": 15,
     "keep_mythic": true,
     "sell_store": true,
     "sell_limit": 3,
@@ -139,10 +212,80 @@
     "overflow_crack": "autoCrackUncommonLink"
   },
   "upgrade": {
-    "enabled": false,
+    "enabled": true,
     "mastery": true,
     "keep_iron": 50000,
     "keep_mifril": 0,
     "check_interval_min": 10
+  },
+  "shop": {
+    "enabled": true,
+    "min_level": 25,
+    "max_gold": 3,
+    "max_silver": 0,
+    "max_slots": 12,
+    "max_buys_per_cycle": 2,
+    "min_bonus": 10,
+    "avoid_same_name": true,
+    "sets": [
+      "",
+      "goliaf",
+      "atlant",
+      "veteran"
+    ],
+    "keep_gold": 10,
+    "keep_silver": 20
+  },
+  "auction": {
+    "enabled": true,
+    "max_per_cycle": 3,
+    "max_per_day": 15,
+    "min_level": 25,
+    "check_interval_min": 30,
+    "bid_gold": 1,
+    "bid_silver": 0,
+    "buyout_gold": 2,
+    "buyout_silver": 0
+  },
+  "trade_market": {
+    "enabled": true,
+    "max_gold": 3,
+    "max_buys_per_cycle": 1,
+    "max_per_day": 3,
+    "min_level": 25,
+    "check_interval_min": 60,
+    "require_tier": "мифический"
+  },
+  "battlefields": {
+    "enabled": true,
+    "check_interval_min": 5,
+    "max_fights_per_day": 5
+  },
+  "ability": {
+    "enabled": true,
+    "check_interval_min": 10,
+    "min_price": 100,
+    "max_price": 2000,
+    "prefer": [
+      "Защита",
+      "Обман смерти",
+      "Щит отражения",
+      "Каменный щит",
+      "Уворот",
+      "Критомания",
+      "Пробивающий удар",
+      "Заживление",
+      "Берсерк"
+    ]
+  },
+  "scrolls": {
+    "enabled": true,
+    "check_interval_min": 10,
+    "only_free": true,
+    "limit": 5
+  },
+  "mail": {
+    "enabled": true,
+    "check_interval_min": 3
   }
 }
