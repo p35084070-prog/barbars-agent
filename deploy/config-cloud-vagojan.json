@@ -42,7 +42,8 @@
     "min_party": 2,
     "can_start": false,
     "max_fights_per_day": 10,
-    "max_turns": 70
+    "max_turns": 70,
+    "lone_wait_sec": 300
   },
   "tower_farm": {
     "enabled": true,

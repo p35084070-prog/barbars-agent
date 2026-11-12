@@ -827,6 +827,10 @@ class Agent:
             return
 
         deadline = time.time() + stay_sec
+        # если отряд не собрался, долго стоять в зале бессмысленно: герой
+        # не качает опыт и не фармит ресурсы. Ждём недолго и идём работать.
+        lone_wait = int(self.config.get("raid", {}).get("lone_wait_sec", 300))
+        lone_deadline = time.time() + lone_wait
         closed_checks = 0
         self.in_long_op = True  # сторож цикла не должен рвать браузер в рейде
         try:
@@ -861,6 +865,12 @@ class Agent:
                             self.game.join_current_fight(url)
                         self._raid_fight()
                         continue
+                if ready + waiting < min_party and time.time() > lone_deadline:
+                    self.log(
+                        "рейд: отряд не собрался — выходим из зала, идём фармить",
+                    )
+                    self.game.click_text("Покинуть бой")
+                    break
                 time.sleep(check_sec)
         finally:
             self.in_long_op = False
@@ -1539,7 +1549,7 @@ class Agent:
         if self.game.cancel_clan_quest():
             self.log("задание просрочено — отменили, берём новое")
         else:
-            self.log("не удалось отменить просроченное задание", "WARN")
+            self.log("отменить не удалось (похоже, задание уже отменено)", "WARN")
 
     def _do_quest(self, decision: rules.Decision) -> None:
         if not self.game.guild_id:

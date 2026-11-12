@@ -852,14 +852,25 @@ class Game:
         return repaired
 
     def take_clan_quest(self, index: int = 0) -> bool:
+        """Взять клановое задание по порядковому номеру.
+
+        После клика проверяем страницу: задание считается взятым, если
+        появилось «Выполняет: <ник>» — клик иногда проходит, но ответ
+        приходит слишком поздно и клик выглядит неудачным.
+        """
         locator = self.p.locator("a:has-text('Взять задание'), button:has-text('Взять задание')")
         if locator.count() == 0:
             return False
         try:
             locator.nth(min(index, locator.count() - 1)).click(timeout=8000)
         except Exception:
-            return False
+            pass
         self._settle()
+        try:
+            if "Выполняет:" in self.body_text():
+                return True
+        except Exception:
+            pass
         return True
 
     def cancel_clan_quest(self) -> bool:
