@@ -183,10 +183,17 @@ python run.py discover          # выгрузить HTML/текст стран�
 ```powershell
 python tools\ok_phone.py     # один раз: войти в ОК в открывшемся окне
 python tools\ok_play.py      # запустить игру через ОК
+
+# полноценная игра агентом через ОК (тот же скрипт прокачки)
+python run.py --config config-ok.json play-ok --headless
 ```
 
-Подробности, параметры облачного запуска и список проверенных неудачных
-способов — в [`knowledge/OK-MOBILE.md`](knowledge/OK-MOBILE.md).
+В облаке это же делает задача `.github/workflows/agent-ok.yml`: по расписанию
+(раз в 6 часов) агент запускается в GitHub Actions, а сессия ОК — всего ~700
+байт — лежит в секрете `OK_SESSION_B64`. Подробности, параметры облачного
+запуска и список проверенных неудачных способов — в
+[`knowledge/OK-MOBILE.md`](knowledge/OK-MOBILE.md) и
+[`knowledge/OK-CLOUD.md`](knowledge/OK-CLOUD.md).
 
 ---
 
