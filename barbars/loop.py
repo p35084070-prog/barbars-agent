@@ -1456,6 +1456,7 @@ class Agent:
         last_energy = None
         damage = 0
         seen_logs: set[str] = set()
+        target_hp: int | None = None
 
         def done(text: str) -> str:
             """Выход из боя: запоминаем, сколько урона нанесли."""
@@ -1482,6 +1483,10 @@ class Agent:
                         damage += int(m.group(1))
             if cs.victory is not None:
                 return done("победа" if cs.victory else "поражение")
+            if force and cs.enemy_hp and cs.enemy_hp != target_hp:
+                # в шапке боевой панели — HP цели: следим за изменением
+                target_hp = cs.enemy_hp
+                self.log(f"  HP цели: {target_hp}")
             if cs.finished and not cs.attack_links:
                 self.log("  бой окончен")
                 return done("окончен")
