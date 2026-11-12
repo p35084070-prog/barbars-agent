@@ -633,20 +633,26 @@ class Game:
         for link in self.p.locator("a").all():
             try:
                 text = link.inner_text().strip()
+                href = link.get_attribute("href") or ""
             except Exception:
                 continue
             if not text:
                 continue
-            if text.startswith("Бить"):
-                flat = text.split("\n")[0].strip()
+            if "abilityCombatPanel" in href:
+                continue  # это умение, его разбираем отдельно
+            flat = text.split("\n")[0].strip()
+            if text.startswith(("Бить", "Атаковать", "Ударить", "Напасть", "Жечь")):
+                # «Жечь энергию врагам» — тоже боевое действие (осада башни),
+                # без него агент не понимает, что бой продолжается
                 cs.attack_links.append(flat)
-                cs.enemy_name = flat[len("Бить") :].strip()
+                if text.startswith("Бить"):
+                    cs.enemy_name = flat[len("Бить") :].strip()
             elif text.startswith("Лечить"):
-                cs.heal_links.append(text.split("\n")[0].strip())
+                cs.heal_links.append(flat)
             elif text.startswith("Сбежать") or text.startswith("Отступить") or text.startswith("Убежать"):
-                cs.flee_links.append(text.split("\n")[0].strip())
+                cs.flee_links.append(flat)
             elif "бутылочк" in text.lower() or "зелье" in text.lower() or "выпить" in text.lower():
-                cs.potion_links.append(text.split("\n")[0].strip())
+                cs.potion_links.append(flat)
 
         # Умения: ссылки с abilityCombatPanel в href — их видно на любой боевой странице.
         for link in self.p.locator("a[href*='abilityCombatPanel']").all():

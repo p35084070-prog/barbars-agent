@@ -1325,6 +1325,7 @@ class Agent:
         max_turns = int(self.config.get("fight", {}).get("max_turns", 80))
         last_log = ""
         stale_energy_checks = 0
+        stalls = 0
         last_energy = None
         while turns < max_turns:
             if self.deadline and time.time() >= self.deadline:
@@ -1348,6 +1349,8 @@ class Agent:
                 max_energy=base.max_energy or cs.our_energy or status.energy,
             )
             decision = self.policy.choose(cs, status, state)
+            if decision.action != "wait":
+                stalls = 0
             self.game.human.pause("fight")
             if decision.action == "attack":
                 turns += 1
@@ -1393,6 +1396,13 @@ class Agent:
                     if not self.game.click_attack():
                         return "прервано"
             else:
+                # В бою нет ни удара, ни умения (например, незнакомая вёрстка):
+                # ждать бесконечно нельзя — иначе агент встанет на этом бою.
+                stalls += 1
+                if stalls >= 8:
+                    self.log("  в бою нет доступных действий — выходим")
+                    return "нет действий"
+                self.log("  нет доступных действий в бою — ждём")
                 time.sleep(2)
         return "таймаут"
 
