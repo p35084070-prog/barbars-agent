@@ -2197,7 +2197,23 @@ class Game:
             return result
 
         entered = False
-        for label in ("Начать бой!", "Войти в замок", "Войти", "Встать в очередь"):
+        # арена и выживание: если мы уже в очереди («Очередь: 1 из 8»), бой
+        # начнётся сам — ждём, ничего не нажимая (кнопка «Новый бой» сбросила бы
+        # очередь, и мы бы потеряли место)
+        text = self.body_text()
+        if "Очередь:" in text:
+            result["stage"] = "очередь"
+            deadline = time.time() + max(10, wait_sec)
+            while time.time() < deadline:
+                if self.has_combat_button():
+                    result.update(ok=True, stage="fight")
+                    return result
+                self.reload()
+                time.sleep(6)
+            result["note"] = "бой не начался за отведённое время"
+            return result
+
+        for label in ("Начать бой!", "Новый бой", "Войти в замок", "Войти", "Встать в очередь"):
             # вход может быть платным (золото или серебро) — по правилам игрока
             # за вход не платим, поэтому такие кнопки пропускаем
             if self._click_any_text(label, avoid_gold=True, avoid_paid=True):
