@@ -974,6 +974,48 @@ class Game:
         self.goto("https://barbars.ru/user/mail")
         return self.click_href("getAllFromMessages")
 
+    def store_take_all(self, limit: int = 10) -> int:
+        """Забрать всё со своей витрины (/user/public/store) в рюкзак."""
+        taken = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/public/store")
+            html = self.p.content()
+            target = None
+            for chunk, index in self._item_blocks(html):
+                if f"items:{index}:toRackLink" in chunk:
+                    target = index
+                    break
+            if target is None:
+                break
+            if not self.click_href(f"items:{target}:toRackLink"):
+                break
+            taken += 1
+        return taken
+
+    def send_store_items_to(self, recipient_id: str, message: str = "Снаряжение") -> bool:
+        """Передать вещи с витрины другому игроку почтой.
+
+        Форма: /user/mail/send/id/<id> -> вкладка «Вещи» -> источник «Витрина»
+        -> «Выбрать все» -> кнопка «отправить».
+        """
+        self.goto(f"https://barbars.ru/user/mail/send/id/{recipient_id}")
+        if not self.click_href("sendMessageForm:mailItemLink"):
+            return False
+        # источник — витрина (а не рюкзак)
+        self.click_href("sendItemContainer:filterPublicStoreLink")
+        if not self.click_href("sendItemContainer:selectAllLink"):
+            return False
+        try:
+            self.p.fill("textarea[name='text']", message, timeout=5000)
+        except Exception:
+            pass
+        try:
+            self.p.click("input[type='submit'][value='отправить'], input[name=':submit']", timeout=5000)
+        except Exception:
+            return False
+        self._settle()
+        return True
+
     def mail_pending(self) -> bool:
         """Есть ли на почте что забирать (письма с вещами или деньгами).
 

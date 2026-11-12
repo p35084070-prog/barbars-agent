@@ -412,6 +412,7 @@ class Agent:
             self.log("магазин: подходящих товаров нет (лимит по золоту или нет денег)")
             return
         bought = 0
+        bought_items: list[dict[str, Any]] = []
         for item in picked[:max_buys]:
             gold_need = int(item.get("gold", 0))
             silver_need = int(item.get("silver", 0))
@@ -425,6 +426,7 @@ class Agent:
                 self.log(f"магазин: не удалось купить {item.get('name')}", "WARN")
                 continue
             bought += 1
+            bought_items.append(item)
             slot, _kind = pages.slot_of(str(item.get("name", "")))
             if slot and slot not in bought_slots:
                 bought_slots.append(slot)
@@ -442,6 +444,31 @@ class Agent:
             self.log("почта: купленное забрано")
         worn = self.game.equip_better_items(limit=int(self.config.get("gear", {}).get("max_equip", 8)))
         self.log(f"магазин: надето новых вещей {worn}")
+
+        # передача купленного другому герою (например keis -> firewhite)
+        share_with = str(self.config.get("shop", {}).get("share_with", "") or "")
+        if share_with and bought_items:
+            self._share_items(share_with, bought_items)
+
+    def _share_items(self, recipient_id: str, items: list[dict[str, Any]]) -> None:
+        """Передать купленные вещи другому герою почтой (через витрину)."""
+        try:
+            # витрина должна содержать только передаваемые вещи
+            self.game.store_take_all()
+            for item in items:
+                item_id = str(item.get("item_id", ""))
+                if not item_id:
+                    continue
+                if not self.game.sell_item_to_store(item_id):
+                    self.log(f"передача: не удалось выложить {item.get('name')}", "WARN")
+                    return
+            if self.game.send_store_items_to(recipient_id, "Снаряжение 25 уровня"):
+                names = ", ".join(str(i.get("name", "")) for i in items)
+                self.log(f"передача: отправлено получателю {recipient_id} — {names}")
+            else:
+                self.log("передача: отправить не удалось", "WARN")
+        except Exception as exc:
+            self.log(f"передача: ошибка — {exc}", "WARN")
 
     def _do_upgrade_mastery(self, decision: rules.Decision) -> None:
         """Повышение уровня мастерства: железо + мифрил (постоянный бонус)."""
