@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from .driver import Game, parse_amount
+from .driver import Game, normalize_ru, parse_amount
 
 
 @dataclass
@@ -77,6 +77,8 @@ def home_targets(game: Game) -> list[FightTarget]:
 
 def classify_target(title: str, href: str) -> str:
     blob = f"{title} {href}".lower()
+    if "владения" in blob or "поля сраж" in blob or "медуз" in blob:
+        return "battlefields"
     if "дуэл" in blob or "duel" in blob:
         return "duel"
     if "арен" in blob or "arena" in blob:
@@ -443,6 +445,83 @@ def parse_price_text(text: str) -> tuple[int, int]:
         if m:
             silver = parse_amount(m.group(1))
     return gold, silver
+
+
+def cyr_normalize(text: str) -> str:
+    """Привести латинские «двойники» к кириллице.
+
+    Игра маскирует часть букв: «Берсерк» приходит как «Бepcepк» (латинские
+    e, p, c, k). Чтобы сравнивать названия, приводим их к одному виду.
+    """
+    return " ".join(normalize_ru(text).split())
+
+
+def parse_battlefields(html: str, text: str = "") -> dict[str, Any]:
+    """Состояние «Полей сражений» (/game/bg) — командный бой за очки полей.
+
+    Возвращает: {"countdown", "fights_today", "points", "join", "text"}.
+    """
+    text = text or " ".join(re.sub("<[^>]+>", " ", html).split())
+    countdown = ""
+    m = re.search(r"Игра начн[её]тся через[:\s]*([\d:]+)", text, re.IGNORECASE)
+    if m:
+        countdown = m.group(1)
+    fights_today = 0
+    m = re.search(r"Сегодня бо[её]в[:\s]*(\d+)", text, re.IGNORECASE)
+    if m:
+        fights_today = int(m.group(1))
+    points = 0
+    m = re.search(r"Мои очки полей[:\s]*(\d+)", text, re.IGNORECASE)
+    if m:
+        points = int(m.group(1))
+    join: list[dict[str, str]] = []
+    for m in re.finditer(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', html, re.S):
+        label = " ".join(re.sub("<[^>]+>", " ", m.group(2)).split())
+        href = m.group(1)
+        low = (label + " " + href).lower()
+        if "refresh" in low:
+            continue
+        if any(k in low for k in ("join", "start", "fight", "battle", "attack", "вступи", "начать", "атакова")):
+            join.append({"label": label, "href": href})
+    return {
+        "countdown": countdown,
+        "fights_today": fights_today,
+        "points": points,
+        "join": join,
+        "text": text[:400],
+    }
+
+
+def parse_ability_options(html: str) -> dict[str, Any]:
+    """Опции покупки умения за очки полей (/trade/ability/buy/0/<id>).
+
+    Блок варианта: «<span>Берсерк</span>, <span>легендарный</span> ... [<a
+    ...buyBlock:N:bgWinsBuyLink...>купить</a>] цена:<span class="money">500</span>».
+    Возвращает: {"points": int, "options": [{"index", "name", "quality", "price"}]}.
+    """
+    text = " ".join(re.sub("<[^>]+>", " ", html).split())
+    points = 0
+    m = re.search(r"У тебя очков полей[:\s]*(\d+)", text, re.IGNORECASE)
+    if m:
+        points = int(m.group(1))
+    options: list[dict[str, Any]] = []
+    for chunk in html.split('<div class="hr"></div>'):
+        m = re.search(r"buyBlock:(\d+):bgWinsBuyLink", chunk)
+        if not m:
+            continue
+        name_m = re.search(r"<span>([^<]{2,40})</span>\s*,\s*<span>([^<]{2,20})</span>", chunk)
+        price_m = re.search(r"цена[:\s]*(?:<[^>]+>\s*)*<span[^>]*>([\d\s]+)</span>", chunk)
+        if not price_m:
+            price_m = re.search(r"цена[:\s]*([\d\s]+)", " ".join(re.sub("<[^>]+>", " ", chunk).split()))
+        options.append(
+            {
+                "index": int(m.group(1)),
+                "name": cyr_normalize(name_m.group(1)) if name_m else "",
+                "quality": (name_m.group(2) if name_m else ""),
+                "price": int(re.sub(r"\D", "", price_m.group(1)) or 0) if price_m else 0,
+            }
+        )
+    return {"points": points, "options": options}
 
 
 def parse_market_lots(html: str) -> list[dict[str, Any]]:

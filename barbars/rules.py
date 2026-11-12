@@ -85,6 +85,11 @@ class GameState:
     worn: list[dict[str, str]] = field(default_factory=list)
     # дубли мифических вещей (слот занят надетой) — их продаём
     duplicates: list[dict[str, Any]] = field(default_factory=list)
+    # поля сражений: состояние режима (когда бой, сколько очков) и очки полей
+    battlefields: dict[str, Any] = field(default_factory=dict)
+    bg_points: int = 0
+    # свитки и книги, которые можно активировать
+    scrolls: list[dict[str, str]] = field(default_factory=list)
     # слоты нужного героя, которые ещё не закрыты (для покупки на рынке)
     market_due: bool = False
     target_gear: list[dict[str, str]] = field(default_factory=list)
@@ -257,6 +262,12 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
         wanted = _pick_quest(state)
         return Decision("quest", target=wanted, params={"index": wanted.index}, reason="берём клановое задание")
 
+    # 5a. Поля сражений: режим открыт по расписанию, очки за него нужны для
+    #     умений, поэтому бойёмся сразу, как только он открылся.
+    battlefields = _pick_battlefields(state, config)
+    if battlefields is not None:
+        return battlefields
+
     # 6. Бой — если есть бесплатные бои и герой не на нуле.
     target = _pick_target(state, config)
     if target is not None:
@@ -305,6 +316,16 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     #     Важно раньше шага «рюкзак», чтобы присланное не ушло под разбор.
     if config.get("mail", {}).get("enabled", True) and state.mail_pending:
         return Decision("mail", target="почта", reason="на почте есть что забрать")
+
+    # 8.6. Свитки: активируем бесплатные (при премиуме цена 0) и читаем книги.
+    scrolls = _pick_scrolls(state, config)
+    if scrolls is not None:
+        return scrolls
+
+    # 8.7. Умения за очки полей — копим их на Полях сражений.
+    ability = _pick_ability(state, config)
+    if ability is not None:
+        return ability
 
     # 9. Рюкзак: надеть лучшие вещи и разобрать остальное на железо.
     #    Забитый рюкзак блокирует новый дроп — из-за этого встаёт опыт.
@@ -665,6 +686,73 @@ def _pick_trade_market(state: GameState, config: dict[str, Any]) -> Decision | N
             "покупаем на рынке аукционов "
             + (f"вещи для героя {cfg.get('for_hero')}" if cfg.get("for_hero") else "нужные вещи")
         ),
+    )
+
+
+def _pick_battlefields(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Поля сражений (/game/bg) — командный бой, за который дают очки полей.
+
+    На них покупаются боевые умения, поэтому режим важный, но он открыт
+    по расписанию: пока обратный отсчёт, ждём.
+    """
+    cfg = config.get("battlefields", {})
+    if not cfg.get("enabled"):
+        return None
+    info = state.battlefields or {}
+    if not info:
+        return None
+    countdown = str(info.get("countdown", "") or "")
+    join = info.get("join") or []
+    if countdown and countdown not in ("00:00:00", "0:00:00") and not join:
+        return None  # бой ещё не начался
+    if int(info.get("fights_today", 0) or 0) >= int(cfg.get("max_fights_per_day", 5)):
+        return None
+    return Decision(
+        "battlefields",
+        target="Поля сражений",
+        params={"url": "https://barbars.ru/game/bg"},
+        reason=(
+            "идём на Поля сражений (очки полей: "
+            f"{state.bg_points or info.get('points', 0)})"
+        ),
+    )
+
+
+def _pick_ability(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Покупка боевых умений за очки полей (/trade/ability → «За очки полей»)."""
+    cfg = config.get("ability", {})
+    if not cfg.get("enabled"):
+        return None
+    points = int(state.bg_points or 0)
+    if points <= 0:
+        return None
+    min_price = int(cfg.get("min_price", 100))
+    if points < min_price:
+        return None
+    return Decision(
+        "ability",
+        target="умения за очки полей",
+        params={
+            "prefer": list(cfg.get("prefer", [])),
+            "max_price": int(cfg.get("max_price", points)),
+            "min_price": min_price,
+        },
+        reason=f"покупаем умение за очки полей (накоплено {points})",
+    )
+
+
+def _pick_scrolls(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Активация свитков (бесплатно при премиуме) и чтение книг."""
+    cfg = config.get("scrolls", {})
+    if not cfg.get("enabled"):
+        return None
+    if not state.scrolls:
+        return None
+    return Decision(
+        "scrolls",
+        target="свитки",
+        params={"only_free": bool(cfg.get("only_free", True)), "limit": int(cfg.get("limit", 5))},
+        reason=f"активируем свитки: {len(state.scrolls)} шт.",
     )
 
 

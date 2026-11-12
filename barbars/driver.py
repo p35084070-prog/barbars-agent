@@ -23,6 +23,9 @@ BASE_URL = "https://barbars.ru/"
 # Числовые значения в игре используют суффиксы: 52k = 52000, 1.5M = 1500000
 _NUM_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([kKmMgG]?)")
 
+# Блок вещи в рюкзаке/сундуке: `item/id/2093162597"><span>Сапоги Атланта</span>`
+NAME_BLOCK_RE = re.compile(r"item/id/(\d+)\"><span>([^<]{2,60})</span>", re.S)
+
 # Игра маскирует часть букв латинскими омоглифами: «Версерк» -> «Bepcepк»,
 # «готово» -> «гoтoво». Для сравнения приводим латиницу к кириллице.
 _HOMOGLYPHS = str.maketrans(
@@ -1117,6 +1120,137 @@ class Game:
                 }
             )
         return out
+
+    def battlefields_state(self) -> dict[str, Any]:
+        """Состояние «Полей сражений» (/game/bg): когда следующий бой и счёт."""
+        from . import pages
+
+        self.goto("https://barbars.ru/game/bg")
+        return pages.parse_battlefields(self.p.content(), self.body_text())
+
+    def join_battlefields(self) -> bool:
+        """Вступить в бой на Полях сражений (если бой идёт и есть кнопка)."""
+        from . import pages
+
+        state = pages.parse_battlefields(self.p.content(), self.body_text())
+        links = state.get("join") or []
+        if not links:
+            return False
+        link = links[0]
+        href = str(link.get("href", ""))
+        if href.startswith("?"):
+            self.goto("https://barbars.ru/" + href)
+        else:
+            self.click_href(href) if "wicket:" in href else self.goto(href)
+        self._settle()
+        return True
+
+    def ability_options(self, ability_id: str) -> dict[str, Any]:
+        """Варианты покупки умения за очки полей (вкладка «За очки полей»)."""
+        from . import pages
+
+        self.goto(f"https://barbars.ru/trade/ability/buy/0/{ability_id}")
+        try:
+            tab = self.p.locator("a:has-text('За очки полей')")
+            if tab.count():
+                tab.first.click(timeout=8000)
+                self._settle()
+        except Exception:
+            pass
+        return pages.parse_ability_options(self.p.content())
+
+    def buy_ability_with_points(self, ability_id: str, index: int) -> bool:
+        """Купить умение за очки полей (кнопка buyBlock:N:bgWinsBuyLink)."""
+        self.goto(f"https://barbars.ru/trade/ability/buy/0/{ability_id}")
+        try:
+            tab = self.p.locator("a:has-text('За очки полей')")
+            if tab.count():
+                tab.first.click(timeout=8000)
+                self._settle()
+        except Exception:
+            pass
+        if not self.click_href(f"buyBlock:{index}:bgWinsBuyLink"):
+            return False
+        self._settle()
+        self.confirm_if_needed()
+        self._settle()
+        return True
+
+    def scroll_items(self) -> list[dict[str, str]]:
+        """Свитки и книги в рюкзаке и сундуке.
+
+        Основной список сундука уже содержит свитки (вкладка «Вещи»), вкладка
+        «Свитки» нужна только как запасной вариант: иногда вместо списка
+        открывается промо-страница акции.
+        """
+        out: list[dict[str, str]] = []
+        seen: set[str] = set()
+
+        def collect(html: str) -> int:
+            found = 0
+            for chunk in html.split('<div class="hr"></div>'):
+                if "Свиток" not in chunk and "Манускрипт" not in chunk:
+                    continue
+                m = NAME_BLOCK_RE.search(chunk)
+                if not m:
+                    continue
+                item_id, name = m.group(1), m.group(2).strip()
+                if item_id in seen:
+                    continue
+                seen.add(item_id)
+                out.append({"item_id": item_id, "name": name})
+                found += 1
+            return found
+
+        for url in ("https://barbars.ru/user/rack", "https://barbars.ru/user/store"):
+            self.goto(url)
+            if collect(self.p.content()):
+                continue
+            for tab_name in ("Свитки", "Книги"):
+                try:
+                    tab = self.p.locator("a").filter(
+                        has_text=re.compile(rf"^{re.escape(tab_name)}$")
+                    )
+                    if not tab.count():
+                        continue
+                    tab.first.click(timeout=8000)
+                    self._settle()
+                    collect(self.p.content())
+                except Exception:
+                    continue
+        return out
+
+    def activate_scroll(self, item_id: str, only_free: bool = True) -> tuple[bool, str]:
+        """Активировать свиток (или прочитать книгу).
+
+        Свиток активируется ссылками `scrollUse4Link` (на 4 часа) и
+        `scrollUseAllLink` (на все 24 часа). Если цена не нулевая — золото не
+        тратим (правило игрока), такой свиток пропускаем.
+        """
+        self.goto(f"https://barbars.ru/item/id/{item_id}")
+        html = self.p.content()
+        for marker, hours in (("scrollUseAllLink", "24 часа"), ("scrollUse4Link", "4 часа")):
+            m = re.search(rf'href="([^"]*{marker}[^"]*)"', html)
+            if not m:
+                continue
+            tail = html[m.end():m.end() + 400]
+            price_m = re.search(r"цена[:\s]*(?:<[^>]+>\s*)*<span[^>]*>([\d\s]+)</span>", tail)
+            price = int(re.sub(r"\D", "", price_m.group(1)) or 0) if price_m else 0
+            if only_free and price > 0:
+                return False, f"цена {price} зол. — не тратим золото"
+            if self.click_href(marker):
+                self._settle()
+                self.confirm_if_needed()
+                self._settle()
+                return True, f"активирован на {hours}"
+        # книга: «прочитать книгу»
+        if "bookOpenLink" in html:
+            if self.click_href("bookOpenLink"):
+                self._settle()
+                self.confirm_if_needed()
+                self._settle()
+                return True, "книга прочитана"
+        return False, "действие активации не найдено"
 
     def item_actions(self, item_id: str) -> list[str]:
         """Доступные действия со страницы вещи: «надеть», «на аукцион», …"""

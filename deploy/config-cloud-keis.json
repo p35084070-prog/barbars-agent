@@ -231,6 +231,33 @@
     "for_hero": "31389504",
     "send_to": "31389504"
   },
+  "battlefields": {
+    "enabled": true,
+    "check_interval_min": 5,
+    "max_fights_per_day": 5
+  },
+  "ability": {
+    "enabled": true,
+    "check_interval_min": 10,
+    "min_price": 100,
+    "max_price": 2000,
+    "prefer": [
+      "Заживление",
+      "Обман смерти",
+      "Защита",
+      "Щит отражения",
+      "Каменный щит",
+      "Уворот",
+      "Критомания",
+      "Пробивающий удар"
+    ]
+  },
+  "scrolls": {
+    "enabled": true,
+    "check_interval_min": 10,
+    "only_free": true,
+    "limit": 5
+  },
   "mail": {
     "enabled": true,
     "check_interval_min": 3

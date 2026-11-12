@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from datetime import datetime
@@ -56,6 +57,9 @@ class Agent:
         self.trade_market_checked_at: float = 0.0
         # магазин снаряжения — тоже не каждый цикл
         self.shop_checked_at: float = 0.0
+        # поля сражений и свитки — тоже с интервалом
+        self.battlefields_checked_at: float = 0.0
+        self.scrolls_checked_at: float = 0.0
         # текущий режим авторазбора (нужно, чтобы не включать его заново)
         self.autocrack_kind: str = ""
         # крайний срок работы (0 = работаем бесконечно); нужен в облаке,
@@ -226,6 +230,8 @@ class Agent:
         self._check_market(state)
         self._check_auction(state)
         self._check_trade_market(state)
+        self._check_battlefields(state)
+        self._check_scrolls(state)
         self._check_well(state)
         self._check_exp(state)
         self._check_master(state)
@@ -331,6 +337,12 @@ class Agent:
         elif decision.action == "trade_market":
             self._do_trade_market(decision, state)
             self.trade_market_checked_at = time.time()
+        elif decision.action == "battlefields":
+            self._do_battlefields(decision)
+        elif decision.action == "ability":
+            self._do_ability(decision)
+        elif decision.action == "scrolls":
+            self._do_scrolls(decision, state)
         elif decision.action == "mail":
             self._do_mail()
         elif decision.action == "wait":
@@ -552,6 +564,144 @@ class Agent:
                 f"рынок: герою {for_hero} нужны вещи — пустые слоты: "
                 f"{', '.join(missing) or 'нет'}, слабые: {', '.join(need) or 'нет'}"
             )
+
+    def _check_battlefields(self, state: rules.GameState) -> None:
+        """Поля сражений: когда бой и сколько очков полей накоплено."""
+        cfg = self.config.get("battlefields", {}) or {}
+        if not cfg.get("enabled"):
+            return
+        now = time.time()
+        if (now - self.battlefields_checked_at) < float(cfg.get("check_interval_min", 5)) * 60:
+            return
+        self.battlefields_checked_at = now
+        try:
+            info = self.game.battlefields_state()
+        except Exception as exc:
+            self.log(f"поля сражений: не удалось проверить: {exc}", "WARN")
+            return
+        state.battlefields = info
+        state.bg_points = int(info.get("points", 0) or 0)
+        countdown = str(info.get("countdown", "") or "")
+        self.log(
+            "поля сражений: "
+            + (f"бой через {countdown}" if countdown else "бой идёт")
+            + f", очков полей {state.bg_points}, боёв сегодня {info.get('fights_today', 0)}"
+        )
+
+    def _check_scrolls(self, state: rules.GameState) -> None:
+        """Ищем свитки и книги, которые можно активировать."""
+        cfg = self.config.get("scrolls", {}) or {}
+        if not cfg.get("enabled"):
+            return
+        now = time.time()
+        if (now - self.scrolls_checked_at) < float(cfg.get("check_interval_min", 10)) * 60:
+            return
+        self.scrolls_checked_at = now
+        try:
+            scrolls = self.game.scroll_items()
+        except Exception as exc:
+            self.log(f"свитки: рюкзак не прочитан: {exc}", "WARN")
+            return
+        state.scrolls = scrolls
+        if scrolls:
+            self.log(f"свитки: найдено {len(scrolls)} — {', '.join(s['name'] for s in scrolls[:4])}")
+
+    def _do_battlefields(self, decision: rules.Decision) -> None:
+        """Бой на Полях сражений — за победу дают очки полей."""
+        self.game.goto(str(decision.params.get("url", "https://barbars.ru/game/bg")))
+        if not self.game.join_battlefields():
+            info = self.game.battlefields_state()
+            countdown = str(info.get("countdown", "") or "")
+            self.log(f"поля сражений: вступить нельзя (отсчёт {countdown or '—'})", "INFO")
+            return
+        outcome = self._fight_loop()
+        self.fights_done += 1
+        self.log(f"поля сражений: бой завершён — {outcome}")
+        self.game.click_text("Покинуть бой")
+
+    def _do_ability(self, decision: rules.Decision) -> None:
+        """Покупка боевых умений за очки полей."""
+        from . import pages
+
+        params = decision.params
+        prefer = [pages.cyr_normalize(str(p)) for p in params.get("prefer", [])]
+        max_price = int(params.get("max_price", 0) or 0)
+        min_price = int(params.get("min_price", 0) or 0)
+        try:
+            self.game.goto("https://barbars.ru/trade/ability")
+            ids = sorted(set(re.findall(r"trade/ability/buy/0/(\d+)", self.game.p.content())))
+        except Exception as exc:
+            self.log(f"умения: магазин не открылся: {exc}", "WARN")
+            return
+        if not ids:
+            self.log("умения: список умений пуст")
+            return
+        bought = False
+        for ability_id in ids:
+            try:
+                data = self.game.ability_options(ability_id)
+            except Exception as exc:
+                self.log(f"умения: не удалось получить варианты: {exc}", "WARN")
+                continue
+            points = int(data.get("points", 0) or 0)
+            options = [o for o in data.get("options", []) if int(o.get("price", 0)) > 0]
+            affordable = [
+                o
+                for o in options
+                if int(o.get("price", 0)) <= points
+                and int(o.get("price", 0)) <= max_price
+                and int(o.get("price", 0)) >= min_price
+            ]
+            if not affordable:
+                continue
+            # приоритет: из списка желаемых — лучшее качество; затем самое дорогое
+            def rank(opt: dict[str, Any]) -> tuple[int, int]:
+                name = str(opt.get("name", ""))
+                wanted = 0
+                for i, want in enumerate(prefer):
+                    if want and want in name:
+                        wanted = len(prefer) - i
+                        break
+                quality = {
+                    "мифический": 5,
+                    "легендарный": 4,
+                    "эпический": 3,
+                    "редкий": 2,
+                    "необычный": 1,
+                    "обычный": 0,
+                }.get(str(opt.get("quality", "")), 0)
+                return (wanted, quality, int(opt.get("price", 0)))
+
+            best = max(affordable, key=rank)
+            if self.game.buy_ability_with_points(ability_id, int(best.get("index", 0))):
+                bought = True
+                self.log(
+                    f"умения: куплено «{best.get('name')}» ({best.get('quality')}) "
+                    f"за {best.get('price')} очков полей (было {points})"
+                )
+                break
+        if not bought:
+            self.log("умения: подходящих вариантов за очки полей нет")
+
+    def _do_scrolls(self, decision: rules.Decision, state: rules.GameState) -> None:
+        """Активируем свитки (бесплатно при премиуме) и читаем книги."""
+        params = decision.params
+        only_free = bool(params.get("only_free", True))
+        limit = int(params.get("limit", 5))
+        done = 0
+        for item in state.scrolls[:limit]:
+            item_id = str(item.get("item_id", ""))
+            name = str(item.get("name", ""))
+            if not item_id:
+                continue
+            ok, message = self.game.activate_scroll(item_id, only_free=only_free)
+            if ok:
+                done += 1
+                self.log(f"свитки: «{name}» — {message}")
+            else:
+                self.log(f"свитки: «{name}» — {message}")
+        if done:
+            self.log(f"свитки: активировано {done}")
 
     def _do_shop(self, decision: rules.Decision, state: rules.GameState) -> None:
         """Закупка снаряжения 25+ уровня в «Магазине снаряжения».
