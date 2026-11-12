@@ -422,7 +422,7 @@ def parse_shop_gear(html: str) -> list[dict[str, Any]]:
         )
         if not m:
             continue
-        level_m = re.search(r'itemBad">(\d+)</span>\s*ур', chunk)
+        level_m = re.search(r"(\d+)(?:</span>)?\s*ур\b", chunk)
         bonus_m = re.search(r"Лучше\s*\(\s*\+(\d+)\s*\)", chunk)
         tier = "?"
         for key, label in (
@@ -437,8 +437,12 @@ def parse_shop_gear(html: str) -> list[dict[str, Any]]:
                 tier = label
                 break
         gold = silver = 0
+        price_html = chunk
+        price_at = chunk.find("цена")
+        if price_at > 0:
+            price_html = chunk[price_at:price_at + 300]
         for icon, number in re.findall(
-            r"icons/(money_gold|money_silver)\.png[^>]*/>\s*<span>([\d.,]+)</span>", chunk
+            r"icons/(money_gold|money_silver)\.png[^>]*/>\s*<span>([\d.,]+)</span>", price_html
         ):
             value = parse_amount(number)
             if icon == "money_gold":
@@ -455,6 +459,8 @@ def parse_shop_gear(html: str) -> list[dict[str, Any]]:
                 "gold": gold,
                 "silver": silver,
                 "tier": tier,
+                # цена не распознана — покупать вслепую нельзя
+                "price_ok": bool(gold or silver),
             }
         )
     return out
@@ -466,13 +472,16 @@ def pick_shop_items(
     max_gold: int = 3,
     max_silver: int = 0,
     bought_slots: tuple[str, ...] | list[str] = (),
+    require_better: bool = True,
 ) -> list[dict[str, Any]]:
     """Выбрать товары магазина снаряжения к покупке.
 
     Правила:
       * золота на вещь — не больше max_gold (серебро — если max_silver задан);
       * оружие берём только того же типа, что надето (иначе герой его не наденет);
-      * на каждый слот — одна вещь, с максимальным бонусом «Лучше (+N)»;
+      * берём только вещи с бонусом «Лучше (+N)»: в магазине это сравнение с
+        надетой вещью, то есть N = 0 означает «дубль, покупать не нужно»;
+      * на каждый слот — одна вещь, с максимальным бонусом;
       * уже купленные слоты пропускаем.
     """
     weapon_kind = ""
@@ -492,6 +501,10 @@ def pick_shop_items(
             continue
         if slot in bought_slots:
             continue
+        if not item.get("price_ok", True):
+            continue  # цену не распознали — покупать вслепую нельзя
+        if require_better and int(item.get("bonus", 0)) <= 0:
+            continue  # не лучше надетого — дубль, покупать не нужно
         current = best.get(slot)
         if current is None or int(item.get("bonus", 0)) > int(current.get("bonus", 0)):
             best[slot] = item

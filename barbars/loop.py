@@ -107,8 +107,9 @@ class Agent:
             except Exception:
                 data = {}
         if data.get("date") != today:
-            # купленные слоты не сбрасываем: вещи покупаются один раз
+            # купленные слоты и вещи не сбрасываем: вещи покупаются один раз
             bought = data.get("shop_slots", []) or []
+            bought_items = data.get("shop_bought", []) or []
             data = {
                 "date": today,
                 "sold": 0,
@@ -117,6 +118,7 @@ class Agent:
                 "autocrack": False,
                 "award": False,
                 "shop_slots": bought,
+                "shop_bought": bought_items,
             }
             self._save_daily(data)
         return data
@@ -188,6 +190,7 @@ class Agent:
         self.daily = self._load_daily()
         state.sold_today = int(self.daily.get("sold", 0))
         state.shop_slots = list(self.daily.get("shop_slots", []) or [])
+        state.shop_bought = list(self.daily.get("shop_bought", []) or [])
         state.exp_buys_today = int(self.daily.get("exp", 0))
         state.well_gift_taken_today = bool(self.daily.get("gift", False))
         state.autocrack_set_today = bool(self.daily.get("autocrack", False))
@@ -289,6 +292,10 @@ class Agent:
             self._do_upgrade_mastery(decision)
         elif decision.action == "shop":
             self._do_shop(decision, state)
+        elif decision.action == "share_money":
+            self._do_share_money(decision)
+        elif decision.action == "share_gear":
+            self._do_share_gear(decision)
         elif decision.action == "mail":
             self._do_mail()
         elif decision.action == "wait":
@@ -346,10 +353,14 @@ class Agent:
                 )
                 cracked += chest_cracked
         counts = self.game.bag_counts()
+        # лишние мифические вещи (дубли по слотам) — на витрину, их не разобрать
+        sold = 0
+        if sell_store:
+            sold = self.game.sell_duplicate_items(limit=int(gear_cfg.get("sell_limit", 3)))
         # рюкзак переполнен, а надеть/сломать больше нечего — часть вещей
         # (мифические, не поместившиеся в снаряжение) продаём на витрине клана
         if sell_store and int(counts.get("bag_used", 0) or 0) >= int(counts.get("bag_total", 20) or 20):
-            sold = self.game.sell_extra_items(limit=int(gear_cfg.get("sell_limit", 3)))
+            sold += self.game.sell_extra_items(limit=int(gear_cfg.get("sell_limit", 3)))
         moved = self.game.stash_items(keep=keep)
         counts = self.game.bag_counts()
         self.log(
@@ -371,6 +382,47 @@ class Agent:
                 f"ждём {pause_min} мин, идём фармить",
                 "WARN",
             )
+
+    def _do_share_gear(self, decision: rules.Decision) -> None:
+        """Отправить купленное снаряжение другому герою (витрина -> почта)."""
+        recipient = str(decision.target or "")
+        item_ids = [str(i) for i in decision.params.get("items", []) or []]
+        if not recipient or not item_ids:
+            return
+        try:
+            in_bag = set(self.game.bag_item_ids())
+            todo = [i for i in item_ids if i in in_bag]
+            if not todo:
+                return
+            # витрина должна содержать только передаваемые вещи
+            self.game.store_take_all()
+            for item_id in todo:
+                if not self.game.sell_item_to_store(item_id):
+                    self.log("передача: не удалось выложить вещь на витрину", "WARN")
+                    return
+            if self.game.send_store_items_to(recipient, "Снаряжение 25 уровня"):
+                self.log(f"передача: отправлено получателю {recipient} — {len(todo)} шт.")
+                # отправленные вещи больше не наши
+                left = [i for i in item_ids if i not in todo]
+                self.daily = self._load_daily()
+                self.daily["shop_bought"] = left
+                self._save_daily()
+            else:
+                self.log("передача: отправить не удалось", "WARN")
+        except Exception as exc:
+            self.log(f"передача: ошибка — {exc}", "WARN")
+
+    def _do_share_money(self, decision: rules.Decision) -> None:
+        """Передать золото/серебро другому герою письмом."""
+        recipient = str(decision.target or "")
+        gold = int(decision.params.get("gold", 0))
+        silver = int(decision.params.get("silver", 0))
+        if not recipient:
+            return
+        if self.game.send_money_to(recipient, gold=gold, silver=silver):
+            self.log(f"передача: отправлено {recipient} — {gold} золота, {silver} серебра")
+        else:
+            self.log(f"передача: не удалось отправить {gold} золота / {silver} серебра", "WARN")
 
     def _do_mail(self) -> None:
         """Забрать почту (присланные вещи/деньги) и надеть присланное."""
@@ -407,7 +459,16 @@ class Agent:
         except Exception as exc:
             self.log(f"магазин: не удалось получить товары: {exc}", "WARN")
             return
-        picked = pages.pick_shop_items(items, worn, max_gold, max_silver, bought_slots)
+        picked = pages.pick_shop_items(
+            items,
+            worn,
+            max_gold,
+            max_silver,
+            bought_slots,
+            # если вещи предназначены другому герою — берём лучшее по слоту
+            # (у нас самих может быть всё уже лучше), без фильтра «дубль»
+            require_better=not bool(self.config.get("shop", {}).get("share_with")),
+        )
         if not picked:
             self.log("магазин: подходящих товаров нет (лимит по золоту или нет денег)")
             return
@@ -438,6 +499,12 @@ class Agent:
             return
         self.daily = self._load_daily()
         self.daily["shop_slots"] = bought_slots
+        bought_ids = list(self.daily.get("shop_bought", []) or [])
+        for item in bought_items:
+            item_id = str(item.get("item_id", "") or "")
+            if item_id and item_id not in bought_ids:
+                bought_ids.append(item_id)
+        self.daily["shop_bought"] = bought_ids
         self._save_daily()
         # купленное приходит письмом — забираем и надеваем
         if self.game.take_mail():

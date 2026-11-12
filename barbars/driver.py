@@ -1016,6 +1016,67 @@ class Game:
         self._settle()
         return True
 
+    def send_money_to(self, recipient_id: str, gold: int = 0, silver: int = 0) -> bool:
+        """Передать золото/серебро другому игроку почтой.
+
+        Форма: /user/mail/send/id/<id> -> вкладка «Деньги» -> суммы -> «отправить».
+        Комиссия игры — 5% от суммы (но не менее 5).
+        """
+        if gold <= 0 and silver <= 0:
+            return False
+        self.goto(f"https://barbars.ru/user/mail/send/id/{recipient_id}")
+        if not self.click_href("sendMessageForm:mailMoneyLink"):
+            return False
+        try:
+            if gold > 0:
+                self.p.fill("input[name='gold']", str(int(gold)), timeout=5000)
+            if silver > 0:
+                self.p.fill("input[name='silver']", str(int(silver)), timeout=5000)
+        except Exception:
+            return False
+        try:
+            self.p.click("input[name=':submit'][value='отправить']", timeout=5000)
+        except Exception:
+            return False
+        self._settle()
+        return True
+
+    def sell_duplicate_items(self, limit: int = 3) -> int:
+        """Выставить на витрину лишние мифические вещи (дубли по слотам).
+
+        Дубль — вещь, чей слот уже занят надетой вещью. Такие вещи не нужны
+        герою, но их нельзя разобрать (мифические), поэтому продаём.
+        """
+        from . import pages
+
+        worn = self.worn_gear()
+        busy = {w.get("slot", "") for w in worn if w.get("slot")}
+        sold = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/rack")
+            html = self.p.content()
+            target: str | None = None
+            for chunk, index in self._item_blocks(html):
+                if "bonusdarkiron" not in chunk:
+                    continue
+                if "Лучше" in chunk:
+                    continue  # лучше надетого — сначала надеваем
+                name = re.search(r"item/id/\d+\"><span>([^<]+)</span>", chunk)
+                item_id = re.search(r"item/id/(\d+)", chunk)
+                if not name or not item_id:
+                    continue
+                slot, _kind = pages.slot_of(name.group(1))
+                if not slot or slot not in busy:
+                    continue
+                target = item_id.group(1)
+                break
+            if not target:
+                break
+            if not self.sell_item_to_store(target):
+                break
+            sold += 1
+        return sold
+
     def mail_pending(self) -> bool:
         """Есть ли на почте что забирать (письма с вещами или деньгами).
 
@@ -1207,6 +1268,12 @@ class Game:
             if m:
                 blocks.append((chunk, m.group(2)))
         return blocks
+
+    def bag_item_ids(self) -> list[str]:
+        """id всех вещей, которые сейчас лежат в рюкзаке."""
+        self.goto("https://barbars.ru/user/rack")
+        html = self.p.content()
+        return list(dict.fromkeys(re.findall(r"item/id/(\d+)", html)))
 
     def bag_counts(self) -> dict[str, int]:
         """Сколько мест в рюкзаке и сундуке, и сколько занято."""

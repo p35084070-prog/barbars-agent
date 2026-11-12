@@ -74,6 +74,8 @@ class GameState:
     mastery_cost: dict[str, int] = field(default_factory=dict)
     # магазин снаряжения: слоты, которые уже куплены (по дневному счётчику)
     shop_slots: list[str] = field(default_factory=list)
+    # купленные вещи (id) — их нужно передать другому герою
+    shop_bought: list[str] = field(default_factory=list)
     # почта: есть ли что забрать
     mail_pending: bool = False
     # рюкзак и сундук: сколько занято
@@ -302,6 +304,16 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if shop is not None:
         return shop
 
+    # 9c. Передача золота/серебра другому герою (по заданию игрока).
+    share = _pick_share_money(state, config)
+    if share is not None:
+        return share
+
+    # 9d. Передача купленного снаряжения другому герою (через витрину и почту).
+    share_gear = _pick_share_gear(state, config)
+    if share_gear is not None:
+        return share_gear
+
     # 10. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
     #     Основной способ прокачки для новых героев (у них нет клана и подземелий).
     tower = _pick_tower(state, config)
@@ -411,6 +423,53 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
             "sell_store": bool(cfg.get("sell_store", True)),
         },
         reason=f"рюкзак заполнен на {used}/{total} — надеваем лучшее и разбираем остальное",
+    )
+
+
+def _pick_share_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Передать купленное снаряжение другому герою.
+
+    Вещи, купленные в магазине снаряжения, лежат в рюкзаке — их нужно
+    отправить получателю (через витрину и почту).
+    """
+    cfg = config.get("shop", {})
+    recipient = str(cfg.get("share_with", "") or "")
+    if not recipient:
+        return None
+    bought = state.shop_bought
+    if not bought:
+        return None
+    return Decision(
+        "share_gear",
+        target=recipient,
+        params={"items": list(bought)},
+        reason=f"передаём купленное снаряжение ({len(bought)} шт.) получателю {recipient}",
+    )
+
+
+def _pick_share_money(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Передать золото/серебро другому герою (письмом).
+
+    Задание игрока: золото с firewhite перекладывается на keis, который
+    закупает снаряжение и передаёт его обратно.
+    """
+    cfg = config.get("shop", {})
+    recipient = str(cfg.get("share_money_with", "") or "")
+    if not recipient:
+        return None
+    keep_gold = int(cfg.get("keep_gold", 10))
+    keep_silver = int(cfg.get("keep_silver", 20))
+    gold = int(state.gold or 0) - keep_gold
+    silver = int(state.silver or 0) - keep_silver
+    if gold <= 0 and silver <= 0:
+        return None
+    return Decision(
+        "share_money",
+        target=recipient,
+        params={"gold": max(0, gold), "silver": max(0, silver)},
+        reason=(
+            f"передаём другому герою {max(0, gold)} золота и {max(0, silver)} серебра"
+        ),
     )
 
 
