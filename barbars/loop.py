@@ -785,7 +785,7 @@ class Agent:
                     if self.game.join_current_fight():
                         self._raid_fight()
                     return
-            time.sleep(4)
+            time.sleep(8)
 
         self.log("рейд: окно вышло, ждём следующего")
 
