@@ -1653,6 +1653,16 @@ class Game:
             worn += 1
         return worn
 
+    @staticmethod
+    def _is_scroll_or_book(chunk: str) -> bool:
+        """Свитки и книги не ломаем — их активируем (бесплатно) и читаем."""
+        return (
+            "Свиток" in chunk
+            or "Манускрипт" in chunk
+            or "scrollUse" in chunk
+            or "bookOpen" in chunk
+        )
+
     def crack_items(
         self,
         limit: int = 20,
@@ -1664,13 +1674,15 @@ class Game:
         Правило игрока: ломаем всё, что не надето и не нужно, кроме мифических
         вещей (иконка `bonusdarkiron`) — их не ломаем. Пометка «Лучше» означает
         «сильнее надетого» — такую вещь сначала надевают, и ломать её нельзя.
+        Свитки и книги не ломаем никогда.
 
         Ссылка разбора `items:N:crackIronPanel:crackLink` есть в списке рюкзака
         не у всех вещей (у эпических и мифических её нет) — для них разбор
         делается со страницы вещи (`actionBlock:crackIronPanel:crackLink`).
         """
         cracked = 0
-        for _ in range(limit):
+        tried: set[str] = set()
+        for _ in range(max(1, limit)):
             self.goto("https://barbars.ru/user/rack")
             html = self.p.content()
             target: tuple[str, str] | None = None
@@ -1679,21 +1691,30 @@ class Game:
                     continue
                 if keep_mythic and "bonusdarkiron" in chunk:
                     continue  # мифические вещи не ломаем
+                if self._is_scroll_or_book(chunk):
+                    continue  # свитки и книги не разбираем
+                if f"list:{index}" in tried:
+                    continue
                 if f"items:{index}:crackIronPanel:crackLink" in chunk:
-                    target = ("list", index)
+                    target = ("list", str(index))
                     break
                 item_id = re.search(r'href="(?:\.\./)*item/id/(\d+)"', chunk)
-                if item_id:
+                if item_id and item_id.group(1) not in tried:
                     target = ("page", item_id.group(1))
                     break
             if target is None:
                 break
             if target[0] == "list":
                 ok = self.click_href(f"items:{target[1]}:crackIronPanel:crackLink")
+                key = f"list:{target[1]}"
             else:
                 ok = self._crack_item_page(target[1])
+                key = target[1]
             if not ok:
-                break
+                # вещь не разбирается (например, «личная») — не застреваем,
+                # пробуем следующую, иначе чистка рюкзака встаёт целиком
+                tried.add(key)
+                continue
             cracked += 1
         return cracked
 
@@ -1759,9 +1780,12 @@ class Game:
         и работает (проверено: эпическая вещь из сундука разобралась).
 
         Мифические вещи (`bonusdarkiron`) не ломаем; «Лучше» сначала надеваем.
+        Свитки и книги не ломаем — их активируем и читаем. Если вещь не
+        разбирается, пробуем следующую (иначе чистка сундука встаёт целиком).
         """
         cracked = 0
-        for _ in range(limit):
+        tried: set[str] = set()
+        for _ in range(max(1, limit)):
             self.goto("https://barbars.ru/user/store")
             html = self.p.content()
             target: str | None = None
@@ -1770,14 +1794,17 @@ class Game:
                     continue
                 if keep_mythic and "bonusdarkiron" in chunk:
                     continue
+                if self._is_scroll_or_book(chunk):
+                    continue  # свитки и книги не разбираем
                 item_id = re.search(r'href="(?:\.\./)*item/id/(\d+)"', chunk)
-                if item_id:
+                if item_id and item_id.group(1) not in tried:
                     target = item_id.group(1)
                     break
             if target is None:
                 break
+            tried.add(target)
             if not self._crack_item_page(target):
-                break
+                continue  # не разобралась — пробуем следующую
             cracked += 1
         return cracked
 
