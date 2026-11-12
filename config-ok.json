@@ -3,6 +3,7 @@
   "base_url": "https://od.barbars.ru/",
   "profile_dir": "profile-ok-agent",
   "state_dir": "logs/ok-cloud",
+  "daily_file": "state/ok/daily.json",
   "headless": true,
   "ok_channel": {
     "session_file": "state/ok-session.b64",

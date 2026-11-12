@@ -16,7 +16,9 @@ name: agent-ok
 
 on:
   schedule:
-    - cron: '23 */6 * * *'
+    # cron-страховка: основной цикл держит самоперезапуск (шаг «Следующий сеанс»),
+    # cron подхватывает, если цепочка оборвалась.
+    - cron: '*/20 * * * *'
   workflow_dispatch:
     inputs:
       duration:
@@ -64,6 +66,32 @@ jobs:
           python -u run.py --config config-ok.json play-ok \
             --headless \
             --duration ${{ github.event.inputs.duration || '330' }}
+
+      - name: Сохранить дневные счётчики
+        if: always()
+        run: |
+          git config user.name 'barbars-bot'
+          git config user.email 'bot@users.noreply.github.com'
+          git add state/ok
+          if git diff --cached --quiet; then
+            echo 'счётчики не изменились'
+          else
+            git commit -m 'state(ok): дневные счётчики'
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push origin HEAD:main && break
+              sleep 10
+            done
+          fi
+
+      - name: Следующий сеанс
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST \
+            "repos/${{ github.repository }}/actions/workflows/agent-ok.yml/dispatches" \
+            -f ref=main \
+            || echo 'не удалось запланировать следующий сеанс (подстрахует cron)'
 
       - name: Логи
         if: always()
