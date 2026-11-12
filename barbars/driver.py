@@ -984,6 +984,8 @@ class Game:
 
         self.goto(f"https://barbars.ru/trade/auction/shop/item/id/{item_id}")
         gold, silver = pages.parse_price_text(self.body_text())
+        if gold <= 0 and silver <= 0:
+            return False, "цену прочитать не удалось — покупать вслепую нельзя"
         if gold > max_gold:
             return False, f"цена {gold} зол. превышает лимит {max_gold} зол."
         if not self.click_href("border:buyoutLink"):
@@ -1018,6 +1020,8 @@ class Game:
 
         self.goto(f"https://barbars.ru/trade/auction/item/id/{item_id}/pt/{pt}")
         gold, silver = pages.parse_price_text(self.body_text())
+        if gold <= 0 and silver <= 0:
+            return False, "цену прочитать не удалось"
         if gold > max_gold:
             return False, f"цена {gold} зол. превышает лимит {max_gold} зол."
         if not self.click_href("border:buyoutLink"):

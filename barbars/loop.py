@@ -608,6 +608,9 @@ class Agent:
             except Exception as exc:
                 self.log(f"магазин: цену «{name}» узнать не удалось: {exc}", "WARN")
                 continue
+            if gold_need <= 0 and silver_need <= 0:
+                self.log(f"магазин: «{name}» — цену не прочитали, пропускаем")
+                continue
             if gold_need > max_gold:
                 self.log(f"магазин: «{name}» — {gold_need} зол., лимит {max_gold}: пропускаем")
                 continue
