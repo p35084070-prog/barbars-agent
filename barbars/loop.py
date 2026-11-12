@@ -50,6 +50,9 @@ class Agent:
         self.raid_last_at: float = 0.0
         # сколько урона нанесли в последнем бою (для замера по боссу)
         self.last_damage: int = 0
+        # идёт ли сейчас длинная операция (рейд) — сторож цикла её не рвёт
+        self.in_long_op: bool = False
+        self._watchdog: threading.Timer | None = None
         # счётчик боёв в событиях: по нему чередуем башню, чтобы она была фоном
         self.activity_fights = 0
         # колодец удачи и мудрец — тоже кэшируем, чтобы не ходить на страницы каждый цикл
@@ -168,19 +171,32 @@ class Agent:
     # ------------------------------------------------------------------ цикл
 
     def run_once(self) -> rules.Decision:
-        watchdog = threading.Timer(
-            float(self.config.get("run", {}).get("cycle_max_sec", 300)),
-            self._abort_cycle,
-        )
-        watchdog.daemon = True
-        watchdog.start()
+        limit = float(self.config.get("run", {}).get("cycle_max_sec", 300))
+        self._watchdog = threading.Timer(limit, self._abort_cycle)
+        self._watchdog.daemon = True
+        self._watchdog.start()
         try:
             return self._run_once_inner()
         finally:
-            watchdog.cancel()
+            if self._watchdog:
+                self._watchdog.cancel()
+            self._watchdog = None
 
     def _abort_cycle(self) -> None:
-        """Сторож: цикл завис — закрываем браузер, агент его перезапустит."""
+        """Сторож: цикл завис — закрываем браузер, агент его перезапустит.
+
+        Во время длинных операций (рейд в зале босса) убивать браузер нельзя:
+        цикл рейда штатно длиннее лимита цикла, а закрытие браузера из
+        отдельного потока рвёт соединение Playwright. В таком случае просто
+        перевзводим сторож и ждём дальше.
+        """
+        if self.in_long_op:
+            self.log("цикл идёт дольше лимита (длинная операция) — продолжаем", "WARN")
+            limit = float(self.config.get("run", {}).get("cycle_max_sec", 300))
+            self._watchdog = threading.Timer(limit, self._abort_cycle)
+            self._watchdog.daemon = True
+            self._watchdog.start()
+            return
         self.log("цикл завис дольше лимита — перезапускаю браузер", "WARN")
         try:
             self.game.close()
@@ -763,38 +779,42 @@ class Agent:
 
         deadline = time.time() + stay_sec
         closed_checks = 0
-        while time.time() < deadline:
-            info = self.game.raid_room(url)
-            if info.get("in_fight"):
-                # во время попытки зал отдаёт участнику боевую панель
-                self.log("рейд: мы в бою с боссом")
-                self._raid_fight()
-                # после боя ждём отката и пробуем снова — цикл «откат → убили»
-                continue
-            if info.get("closed"):
-                # идёт попытка (или откат): зал нам боевую панель не отдал
-                closed_checks += 1
-                if closed_checks % 4 == 1 and self.game.join_current_fight(url):
-                    self.log("рейд: вошли в общий бой")
+        self.in_long_op = True  # сторож цикла не должен рвать браузер в рейде
+        try:
+            while time.time() < deadline:
+                info = self.game.raid_room(url)
+                if info.get("in_fight"):
+                    # во время попытки зал отдаёт участнику боевую панель
+                    self.log("рейд: мы в бою с боссом")
                     self._raid_fight()
+                    # после боя ждём отката и пробуем снова — цикл «откат → убили»
                     continue
+                if info.get("closed"):
+                    # идёт попытка (или откат): зал нам боевую панель не отдал
+                    closed_checks += 1
+                    if closed_checks % 4 == 1 and self.game.join_current_fight(url):
+                        self.log("рейд: вошли в общий бой")
+                        self._raid_fight()
+                        continue
+                    time.sleep(check_sec)
+                    continue
+                closed_checks = 0
+                ready = len(info.get("ready") or [])
+                waiting = len(info.get("waiting") or [])
+                self.log(f"рейд: в зале {ready + waiting} (готовых {ready})")
+                # держим свою готовность: она сбрасывается, когда кто-то заходит
+                self.game.raid_ready()
+                if can_start and ready >= min_party and info.get("can_start"):
+                    if self.game.raid_start():
+                        self.log("рейд: начали общий бой с боссом")
+                        time.sleep(2)
+                        if "Покинуть бой" not in self.game.body_text():
+                            self.game.join_current_fight(url)
+                        self._raid_fight()
+                        continue
                 time.sleep(check_sec)
-                continue
-            closed_checks = 0
-            ready = len(info.get("ready") or [])
-            waiting = len(info.get("waiting") or [])
-            self.log(f"рейд: в зале {ready + waiting} (готовых {ready})")
-            # держим свою готовность: она сбрасывается, когда кто-то заходит
-            self.game.raid_ready()
-            if can_start and ready >= min_party and info.get("can_start"):
-                if self.game.raid_start():
-                    self.log("рейд: начали общий бой с боссом")
-                    time.sleep(2)
-                    if "Покинуть бой" not in self.game.body_text():
-                        self.game.join_current_fight(url)
-                    self._raid_fight()
-                    continue
-            time.sleep(check_sec)
+        finally:
+            self.in_long_op = False
         self.log("рейд: окно вышло, ждём следующего")
 
     def _raid_fight(self) -> None:

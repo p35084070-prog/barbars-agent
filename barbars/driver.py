@@ -170,12 +170,24 @@ class Game:
         self.page = self._context.pages[0] if self._context.pages else self._context.new_page()
 
     def close(self) -> None:
+        """Закрыть браузер. Всегда обнуляем состояние.
+
+        Если оборвалось соединение, `context.close()`/`playwright.stop()` падают —
+        из-за этого раньше `self.page` оставался старым объектом, и перезапуск
+        браузера не стартовал (`start()` выходит, если страница уже есть).
+        """
         try:
             if self._context:
-                self._context.close()
-        finally:
+                try:
+                    self._context.close()
+                except Exception:
+                    pass
             if self._playwright:
-                self._playwright.stop()
+                try:
+                    self._playwright.stop()
+                except Exception:
+                    pass
+        finally:
             self._context = None
             self._playwright = None
             self.page = None
@@ -434,9 +446,19 @@ class Game:
         return False
 
     def browser_alive(self) -> bool:
-        """Жив ли ещё браузер (окно могли закрыть)."""
+        """Жив ли ещё браузер (окно могли закрыть, соединение могло умереть).
+
+        `is_closed()` не годится: если умер сам процесс браузера, страница может
+        считаться «не закрытой», и агент продолжит работать с мёртвым соединением
+        (Playwright будет сыпать «Playwright connection closed»). Поэтому
+        дополнительно делаем дешёвую живую проверку — title() обращается к
+        соединению и падает, если оно мертво.
+        """
         try:
-            return self.page is not None and not self.page.is_closed()
+            if self.page is None or self.page.is_closed():
+                return False
+            self.page.title()
+            return True
         except Exception:
             return False
 

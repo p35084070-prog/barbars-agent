@@ -57,6 +57,8 @@ def patch_actions(src: str, dst: str, profile: str, account: str, daily: str) ->
     run["idle_sleep_no_fights_sec"] = 300
     # разбор рюкзака идёт по одной вещи (с перезагрузкой страницы) — цикл длиннее
     run["cycle_max_sec"] = 600
+    # окно рейда в зале босса — 13 минут, сторож цикла не должен рвать браузер
+    run["cycle_max_sec"] = max(600, int(cfg.get("raid", {}).get("stay_sec", 0)) + 300)
     fight = cfg.setdefault("fight", {})
     fight["max_turns"] = 40
     fight["energy_wait_sec"] = 2

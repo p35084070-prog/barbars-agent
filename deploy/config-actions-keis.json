@@ -27,7 +27,7 @@
     "stop_after_fights": 0,
     "login_timeout_sec": 600,
     "login_then_play": true,
-    "cycle_max_sec": 600
+    "cycle_max_sec": 1080
   },
   "raid": {
     "enabled": true,
