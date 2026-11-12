@@ -50,12 +50,29 @@ jobs:
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
 
+      - name: Вход в ОК по логину и паролю
+        env:
+          OK_LOGIN: ${{ secrets.OK_LOGIN }}
+          OK_PASSWORD: ${{ secrets.OK_PASSWORD }}
+        run: |
+          if [ -z "$OK_LOGIN" ] || [ -z "$OK_PASSWORD" ]; then
+            echo 'секретов OK_LOGIN/OK_PASSWORD нет — берём сессию из OK_SESSION_B64'
+            exit 0
+          fi
+          mkdir -p state logs
+          python -u tools/ok_auto_login.py --out state --timeout 120
+          echo "::add-mask::$(printf '%s' "$OK_PASSWORD" | head -c 2)"
+
       - name: Восстановить сессию ОК
         env:
           OK_SESSION_B64: ${{ secrets.OK_SESSION_B64 }}
         run: |
+          if [ -s state/ok-session.b64 ]; then
+            echo "сессия получена автовходом ($(wc -c < state/ok-session.b64) байт)"
+            exit 0
+          fi
           if [ -z "$OK_SESSION_B64" ]; then
-            echo "::error::не задан секрет OK_SESSION_B64"; exit 1
+            echo "::error::нет ни автовхода, ни секрета OK_SESSION_B64"; exit 1
           fi
           mkdir -p state
           printf '%s' "$OK_SESSION_B64" > state/ok-session.b64
