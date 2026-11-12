@@ -72,7 +72,8 @@ jobs:
         run: |
           git config user.name 'barbars-bot'
           git config user.email 'bot@users.noreply.github.com'
-          git add state/ok
+          mkdir -p state/ok
+          git add -A state/ok || true
           if git diff --cached --quiet; then
             echo 'счётчики не изменились'
           else
@@ -82,6 +83,18 @@ jobs:
               sleep 10
             done
           fi
+
+      - name: Сессия ОК протухла — нужна помощь
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE='Сессия ОК протухла: обновите секрет OK_SESSION_B64'
+          BODY='Агент не смог открыть игру через ОК (сессия из секрета недействительна). Обновите секрет: на ПК `python tools\\ok_phone.py` → `python tools\\ok_export_cookies.py` → `gh secret set OK_SESSION_B64 --repo p35084070-prog/barbars-agent --body (Get-Content state\\ok-session.b64 -Raw).Trim()`.'
+          gh issue create --repo "${{ github.repository }}" \
+            --title "$TITLE" --body "$BODY" \
+            || echo 'не удалось создать issue'
+          echo "::error::$TITLE"
 
       - name: Следующий сеанс
         if: success()
