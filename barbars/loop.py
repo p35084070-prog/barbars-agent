@@ -99,6 +99,9 @@ class Agent:
         # повторять тот же шаг бессмысленно — он блокирует фарм. Ждём полчаса.
         self.gear_blocked_until: float = 0.0
         self.gear_blocked_sig: tuple[int, int] = (0, 0)
+        # свитки: если все найденные свитки оказались платными (золото не тратим),
+        # не перебираем их каждый цикл — блокируем шаг на час
+        self.scrolls_blocked_until: float = 0.0
         self.daily = self._load_daily()
 
     # ------------------------------------------------------------------ логи
@@ -309,12 +312,15 @@ class Agent:
         self._check_battlefields(state)
         self._check_raid(state)
         self._check_scrolls(state)
+        if self.scrolls_blocked_until > time.time():
+            state.scrolls = []
         self._check_well(state)
         self._check_exp(state)
         self._check_master(state)
         self._check_mail(state)
         self._check_tire(state)
         self._maybe_daily_award()
+        self._log_xp_progress(state)
         self.log("состояние: " + state.summary())
 
         decision = rules.decide(state, self._gated_config(now))
@@ -431,6 +437,22 @@ class Agent:
             time.sleep(2)
 
     # ------------------------------------------------------------------ башня
+
+    def _log_xp_progress(self, state: rules.GameState) -> None:
+        """Точный индикатор опыта: прогресс активного задания.
+
+        На странице героя опыт округлён до 0.01G (53.12G), поэтому рост
+        не виден. Прогресс задания «Заработай N опыта» считается точно —
+        по нему видно, что герой реально качает опыт.
+        """
+        cur = state.quest_progress
+        total = state.quest_progress_total
+        if cur is None or total is None:
+            return
+        prev = getattr(self, "last_quest_progress", None)
+        self.last_quest_progress = cur
+        delta = "" if prev is None else f" (+{cur - prev})"
+        self.log(f"опыт (по заданию): {cur} из {total}{delta}")
 
     def _maybe_daily_award(self) -> None:
         """Ежедневная награда на главной: у новых героев даёт бесплатный бой."""
@@ -897,7 +919,10 @@ class Agent:
         params = decision.params
         only_free = bool(params.get("only_free", True))
         limit = int(params.get("limit", 5))
+        cfg = self.config.get("scrolls", {}) or {}
+        block_min = int(cfg.get("paid_block_min", 60))
         done = 0
+        paid = 0
         for item in state.scrolls[:limit]:
             item_id = str(item.get("item_id", ""))
             name = str(item.get("name", ""))
@@ -909,8 +934,17 @@ class Agent:
                 self.log(f"свитки: «{name}» — {message}")
             else:
                 self.log(f"свитки: «{name}» — {message}")
+                if "золот" in message or "зол." in message:
+                    paid += 1
         if done:
             self.log(f"свитки: активировано {done}")
+        if done == 0 and paid:
+            # все свитки платные — золото не тратим, значит повторять бессмысленно
+            self.scrolls_blocked_until = time.time() + block_min * 60
+            self.log(
+                f"свитки: все платные (золото не тратим) — не проверяем ещё {block_min} мин",
+                "WARN",
+            )
 
     def _do_shop(self, decision: rules.Decision, state: rules.GameState) -> None:
         """Закупка снаряжения 25+ уровня в «Магазине снаряжения».

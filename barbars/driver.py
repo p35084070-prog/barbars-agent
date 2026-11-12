@@ -810,13 +810,14 @@ class Game:
         return cs
 
     def fight_limits(self) -> dict[str, int]:
-        """Сколько боёв осталось: {'dungeon': n, 'duel': m}."""
+        """Сколько бесплатных боёв осталось: {'dungeon': n, 'duel': m}.
+
+        Лимиты видны на главной ссылками вида «Подземелья осталось 1 бой».
+        ВНИМАНИЕ: на `/fightmore` есть «Открыть всё за 50» — это платная
+        покупка боёв (серебро/золото), её бесплатные лимиты НЕ считаем.
+        """
         limits: dict[str, int] = {}
         text = self.body_text()
-        m = re.search(r"провести\s*(\d+)\s*бо(?:я|и|ев)\s*в подземельях\s*и\s*(\d+)\s*бо(?:я|и|ев)\s*в дуэлях", text, re.IGNORECASE)
-        if m:
-            limits["dungeon"] = int(m.group(1))
-            limits["duel"] = int(m.group(2))
         for name, count in re.findall(r"([^\n]*?)\s+осталось\s*(\d+)\s*бо", text):
             key = name.strip().lower()
             if "дуэл" in key:
@@ -826,6 +827,22 @@ class Game:
             else:
                 limits.setdefault(key, int(count))
         return limits
+
+    def fight_timers(self) -> dict[str, int]:
+        """Через сколько минут откроются бесплатные подземелья и дуэли.
+
+        На главной: «Подземелья откроются через 13мин. 19сек.». Если
+        подземелья уже открыты (таймера нет) — возвращаем 0.
+        """
+        out: dict[str, int] = {}
+        text = " ".join(self.body_text().split())
+        for key, pat in (
+            ("dungeon", r"Подземелья откроются через\s*(\d+)\s*мин"),
+            ("duel", r"Дуэли откроются через\s*(\d+)\s*мин"),
+        ):
+            m = re.search(pat, text, re.IGNORECASE)
+            out[key] = int(m.group(1)) if m else 0
+        return out
 
     # ------------------------------------------------------------------ actions
 

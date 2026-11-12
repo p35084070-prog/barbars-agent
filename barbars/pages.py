@@ -189,6 +189,19 @@ def quest_expired(game: Game) -> bool:
     return "Время истекло" in text
 
 
+def quest_progress(game: Game) -> tuple[int | None, int | None]:
+    """Прогресс активного задания: ('Прогресс: 29.2K из 100.0M').
+
+    Это единственный ТОЧНЫЙ счётчик опыта: на странице героя значение
+    округлено до 0.01G, поэтому рост опыта там не виден.
+    """
+    text = " ".join(game.body_text().split())
+    m = re.search(r"Прогресс:\s*([\d.,]+[KkMmG]?)\s*из\s*([\d.,]+[KkMmG]?)", text, re.IGNORECASE)
+    if not m:
+        return None, None
+    return parse_amount(m.group(1)), parse_amount(m.group(2))
+
+
 def talents(game: Game) -> list[Talent]:
     """Список талантов на /user/stances."""
     out: list[Talent] = []

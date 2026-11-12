@@ -54,6 +54,13 @@ class GameState:
     targets: list[pages.FightTarget] = field(default_factory=list)
     quests: list[pages.ClanQuest] = field(default_factory=list)
     active_quest: str = ""
+    # прогресс активного задания (единственный точный счётчик опыта:
+    # на странице героя опыт округлён до 0.01G, поэтому рост не виден)
+    quest_progress: int | None = None
+    quest_progress_total: int | None = None
+    # через сколько минут откроются бесплатные подземелья и дуэли
+    dungeon_in_min: int = 0
+    duel_in_min: int = 0
     # активное задание просрочено («Время истекло») — его надо отменить
     quest_expired: bool = False
     # торговля
@@ -136,6 +143,10 @@ def collect_state(game: Game, config: dict[str, Any]) -> GameState:
     st = game.status()
     state.hp, state.energy = st.hp, st.energy
     state.targets = pages.home_targets(game)
+    # таймер до бесплатных подземелий/дуэлей («Подземелья откроются через 13мин»)
+    timers = game.fight_timers()
+    state.dungeon_in_min = int(timers.get("dungeon", 0))
+    state.duel_in_min = int(timers.get("duel", 0))
     for t in state.targets:
         if t.kind in {"dungeon", "tower"} and t.fights_left is not None:
             state.free_dungeon = max(state.free_dungeon, t.fights_left)
@@ -196,6 +207,7 @@ def collect_state(game: Game, config: dict[str, Any]) -> GameState:
         state.quests = pages.clan_quests(game)
         # просроченное задание надо отменить, иначе новое не взять
         state.quest_expired = pages.quest_expired(game)
+        state.quest_progress, state.quest_progress_total = pages.quest_progress(game)
     return state
 
 
