@@ -1149,6 +1149,21 @@ class Game:
             )
         return out
 
+    def hero_fatigue(self) -> int:
+        """Усталость героя в процентах: 0 — нет, -30 — минус треть добычи.
+
+        Страница героя `/user`: «усталость: -30%». По справке (/user/tire)
+        усталость снижает клановый опыт, а также опыт и участие, получаемые
+        в Башнях. Снимается за 5 золота (золото не тратим) или сама, если
+        герой часов 9-10 не заходит в Башни.
+        """
+        from . import pages
+
+        self.goto("https://barbars.ru/user")
+        text = pages.cyr_normalize(self.body_text())
+        m = re.search(r"усталость\s*:\s*(-?\d+)\s*%", text)
+        return int(m.group(1)) if m else 0
+
     def battlefields_state(self) -> dict[str, Any]:
         """Состояние «Полей сражений» (/game/bg): когда следующий бой и счёт."""
         from . import pages

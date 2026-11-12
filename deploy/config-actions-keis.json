@@ -44,7 +44,12 @@
   "tower_farm": {
     "enabled": true,
     "max_level": 0,
-    "rounds": 2
+    "rounds": 2,
+    "fatigue_skip": -15
+  },
+  "tire": {
+    "enabled": true,
+    "check_interval_min": 30
   },
   "altar": {
     "enabled": true,

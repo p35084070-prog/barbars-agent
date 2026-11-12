@@ -58,6 +58,9 @@ class Agent:
         # колодец удачи и мудрец — тоже кэшируем, чтобы не ходить на страницы каждый цикл
         self.well_cache: dict[str, Any] = {}
         self.well_checked_at: float = 0.0
+        # усталость героя (процент штрафа) — тоже кэш
+        self.tire_cache: int = 0
+        self.tire_checked_at: float = 0.0
         self.exp_cache: list[dict[str, Any]] = []
         self.exp_checked_at: float = 0.0
         # прокачка параметров героя: варианты улучшения (/user/master) и кэш
@@ -267,6 +270,7 @@ class Agent:
         self._check_exp(state)
         self._check_master(state)
         self._check_mail(state)
+        self._check_tire(state)
         self._maybe_daily_award()
         self.log("состояние: " + state.summary())
 
@@ -1230,6 +1234,31 @@ class Agent:
         state.mail_pending = self.mail_pending
         if self.mail_pending:
             self.log("почта: есть что забрать")
+
+    def _check_tire(self, state: rules.GameState) -> None:
+        """Раз в полчаса читаем усталость героя (/user).
+
+        Усталость срезает клановый опыт, а также опыт и участие из башен.
+        Снимать её за золото не будем (золото не тратим) — вместо этого, когда
+        усталость большая, агент не ходит в башни и ждёт, пока спадёт.
+        """
+        cfg = self.config.get("tire", {}) or {}
+        if not cfg.get("enabled", True):
+            return
+        interval = float(cfg.get("check_interval_min", 30)) * 60
+        now = time.time()
+        if self.tire_checked_at and now - self.tire_checked_at < interval:
+            state.tire = self.tire_cache
+            return
+        try:
+            self.tire_cache = self.game.hero_fatigue()
+        except Exception as exc:
+            self.log(f"усталость: не удалось проверить: {exc}", "WARN")
+            return
+        self.tire_checked_at = now
+        state.tire = self.tire_cache
+        if self.tire_cache:
+            self.log(f"усталость: {self.tire_cache}% (снижает опыт и участие из башен)")
 
     def _check_master(self, state: rules.GameState) -> None:
         """Раз в 10 минут читаем варианты прокачки параметров героя (/user/master).

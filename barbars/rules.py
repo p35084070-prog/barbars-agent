@@ -68,6 +68,8 @@ class GameState:
     # авторазбор
     autocrack_set_today: bool = False
     autocrack_kind: str = ""
+    # усталость героя: 0 — нет, -30 — минус треть добычи в башнях
+    tire: int = 0
     # рюкзак: шаг «рюкзак» не дал эффекта (сундук полон, надеть нечего)
     gear_blocked: bool = False
     # прокачка: варианты улучшения параметров героя (железо) и мастерства
@@ -812,12 +814,20 @@ def _pick_tower(state: GameState, config: dict[str, Any]) -> Decision | None:
 
     Включается флагом `tower_farm.enabled`. Опционально `tower_farm.max_level`:
     выше этого уровня башня больше не фармится (0 — без ограничения).
+
+    `tower_farm.fatigue_skip`: усталость срезает клановый опыт, а также опыт и
+    участие из башен (у нас firewhite на −30%). Если усталость ниже порога —
+    в башню не идём: ждём, пока спадёт (около 9-10 часов без башен), а герой
+    качает опыт в остальных режимах.
     """
     cfg = config.get("tower_farm", {})
     if not cfg.get("enabled"):
         return None
     max_level = int(cfg.get("max_level", 0) or 0)
     if max_level and (state.level or 0) > max_level:
+        return None
+    skip = int(cfg.get("fatigue_skip", 0) or 0)
+    if skip and (state.tire or 0) <= skip:
         return None
     return Decision(
         "tower",
