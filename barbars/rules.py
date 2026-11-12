@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -88,6 +89,11 @@ class GameState:
     # поля сражений: состояние режима (когда бой, сколько очков) и очки полей
     battlefields: dict[str, Any] = field(default_factory=dict)
     bg_points: int = 0
+    # зал кланового босса: HP босса, кто в зале, открыт ли вход
+    raid: dict[str, Any] = field(default_factory=dict)
+    # когда последний раз ходили в рейд и сколько боссов убили сегодня
+    raid_last_at: float = 0.0
+    raid_today: int = 0
     # свитки и книги, которые можно активировать
     scrolls: list[dict[str, str]] = field(default_factory=list)
     # слоты нужного героя, которые ещё не закрыты (для покупки на рынке)
@@ -267,6 +273,12 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     battlefields = _pick_battlefields(state, config)
     if battlefields is not None:
         return battlefields
+
+    # 5b. Рейд на кланового босса (мифический дракон): общий бой на 10 героев,
+    #     поэтому собираемся вместе и бьём, когда пещера открыта.
+    raid = _pick_raid(state, config)
+    if raid is not None:
+        return raid
 
     # 6. Бой — если есть бесплатные бои и герой не на нуле.
     target = _pick_target(state, config)
@@ -718,6 +730,44 @@ def _pick_battlefields(state: GameState, config: dict[str, Any]) -> Decision | N
     )
 
 
+def _pick_raid(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Рейд на кланового босса (Мифический дракон).
+
+    Бой общий: в зале может стоять до 10 героев, дракон один на всех, поэтому
+    важно собраться вместе. Пока вход закрыт (бой идёт или откат) — ждём.
+    В зал заходим не каждый цикл, а раз в `interval_min`, иначе рейд съест
+    всё время и герой не будет качаться.
+    """
+    cfg = config.get("raid", {}) or {}
+    if not cfg.get("enabled"):
+        return None
+    info = state.raid or {}
+    if not info:
+        return None
+    interval = int(cfg.get("repeat_min", 30)) * 60
+    if state.raid_last_at and (time.time() - state.raid_last_at) < interval:
+        return None
+    if int(state.raid_today or 0) >= int(cfg.get("max_fights_per_day", 10)):
+        return None
+    url = str(cfg.get("url", "https://barbars.ru/game/dragonDungeon"))
+    ready = len(info.get("ready") or [])
+    waiting = len(info.get("waiting") or [])
+    return Decision(
+        "raid",
+        target=str(cfg.get("name", "Мифический дракон")),
+        params={
+            "url": url,
+            "min_party": int(cfg.get("min_party", 2)),
+            "stay_sec": int(cfg.get("stay_sec", 600)),
+            "can_start": bool(cfg.get("can_start", True)),
+        },
+        reason=(
+            f"рейд на босса: HP {info.get('hp', 100)}%, в зале {ready + waiting} "
+            f"(готовых {ready}), ждём отряд"
+        ),
+    )
+
+
 def _pick_ability(state: GameState, config: dict[str, Any]) -> Decision | None:
     """Покупка боевых умений за очки полей (/trade/ability → «За очки полей»)."""
     cfg = config.get("ability", {})
@@ -954,6 +1004,8 @@ class CombatPolicy:
 
         if cs.attack_links:
             return Decision("attack", reason="обычный удар")
-        if cs.heal_links and self.prefer_heal:
+        if cs.heal_links:
+            # В клановых боях и в осаде башни у медика нет удара — лечение
+            # единственное действие, иначе бой простаивает.
             return Decision("heal", params={"text": cs.heal_links[0]}, reason="лечим союзника")
         return Decision("wait", reason="нет доступных действий в бою")

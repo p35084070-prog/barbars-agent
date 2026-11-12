@@ -456,6 +456,69 @@ def cyr_normalize(text: str) -> str:
     return " ".join(normalize_ru(text).split())
 
 
+def parse_raid_room(html: str, text: str = "") -> dict[str, Any]:
+    """Зал кланового босса (/game/dragonDungeon и подобные).
+
+    Возвращает: {"closed", "reopen_in", "hp", "warriors", "healers", "ready",
+    "waiting", "limit", "in_fight", "can_start"}.
+    """
+    text = text or " ".join(re.sub("<[^>]+>", " ", html).split())
+    out: dict[str, Any] = {
+        "closed": False,
+        "reopen_in": "",
+        "hp": 0,
+        "warriors": 0,
+        "healers": 0,
+        "ready": [],
+        "waiting": [],
+        "limit": 0,
+        "in_fight": False,
+        "can_start": "startCombatLink" in html,
+    }
+    m = re.search(r"Откроется через[:\s]*([\d:]+)", text)
+    if m:
+        out["reopen_in"] = m.group(1)
+    out["closed"] = ("Вход закрыт" in text) or ("Пустая пещера" in text)
+
+    # иконки-параметры: HP босса (%), воины, лекари, часы
+    for m in re.finditer(
+        r'<img[^>]+src="/images/icons/([\w]+)\.png"[^>]*>\s*<span[^>]*>([^<]*)</span>', html
+    ):
+        icon, value = m.group(1), m.group(2).strip()
+        if value.endswith("%"):
+            try:
+                out["hp"] = int(value[:-1] or 0)
+            except ValueError:
+                pass
+        elif "warrior" in icon:
+            out["warriors"] = int(value or 0) if value.isdigit() else 0
+        elif "healer" in icon:
+            out["healers"] = int(value or 0) if value.isdigit() else 0
+
+    # кто в зале и кто готов
+    idx = html.find("Кто здесь")
+    if idx >= 0:
+        head = html[idx:idx + 120]
+        m = re.search(r"Кто здесь\s*\[(\d+)\s*из\s*(\d+)\]", head)
+        if m:
+            out["limit"] = int(m.group(2))
+        block = html[idx:idx + 4000]
+        for chunk in block.split("<div>")[1:]:
+            hero = re.search(r'user/id/(\d+)"><span>([^<]+)</span>', chunk)
+            if not hero:
+                continue
+            entry = {"id": hero.group(1), "name": hero.group(2)}
+            (out["ready"] if "check_green" in chunk else out["waiting"]).append(entry)
+
+    out["in_fight"] = (
+        "Ты начал бой" in text
+        or "Бить дракона" in text
+        or "Лечить союзников" in text
+        or "Покинуть бой" in text
+    )
+    return out
+
+
 def parse_battlefields(html: str, text: str = "") -> dict[str, Any]:
     """Состояние «Полей сражений» (/game/bg) — командный бой за очки полей.
 

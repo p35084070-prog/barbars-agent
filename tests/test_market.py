@@ -100,6 +100,9 @@ class TestAutocrack(unittest.TestCase):
 class TestSaleRule(unittest.TestCase):
     def setUp(self) -> None:
         self.config = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+        # проверяем сами правила продажи, а не текущие настройки героя:
+        # рынок у конкретного героя может быть выключен
+        self.config.setdefault("market", {})["enabled"] = True
 
     def _state(self, **kwargs) -> rules.GameState:
         state = rules.GameState()
@@ -339,6 +342,49 @@ class TestAlwaysActive(unittest.TestCase):
         state.farm_skip = [e["name"] for e in cfg["farm"]["events"]]
         decision = rules.decide(state, cfg)
         self.assertEqual(decision.action, "tower")
+
+
+class TestRaidRoom(unittest.TestCase):
+    """Разбор зала кланового босса: HP, состав, кто готов, открыт ли вход."""
+
+    ROOM = """
+    <div>
+    <img src="/images/icons/dragon_mif.png" alt=""><span>100%</span>
+    <img src="/images/icons/blue_warrior.png" alt=""><span>2</span>
+    <img src="/images/icons/blue_healer.png" alt=""><span>1</span>
+    <img class="internalIcon" alt="" border="0" src="/images/icons/clock.png"> <span class="">00:00</span>
+    </div>
+    <a href="../?wicket:interface=:3:startCombatLink::ILinkListener::">Начать бой!</a>
+    <h2>Кто здесь [3 из 10]</h2>
+    <div><img src="/images/icons/check_green.png">
+      <span><img src="/images/icons/blue_warrior.png" alt="/"> <a href="../user/id/1"><span>воин</span></a></span></div>
+    <div><img src="/images/icons/check_gray.png">
+      <span><img src="/images/icons/blue_healer.png" alt="+"> <a href="../user/id/2"><span>лекарь</span></a></span></div>
+    <div><img src="/images/icons/check_gray.png">
+      <span><img src="/images/icons/blue_warrior.png" alt="/"> <a href="../user/id/3"><span>второй</span></a></span></div>
+    """
+
+    CLOSED = """
+    <div class="cntr"><h1 class="">Вход закрыт</h1></div>
+    <div class="major"><span>Вход закрыт. Откроется через 00:04:58 (4 минуты)</span></div>
+    """
+
+    def test_open_room(self) -> None:
+        info = pages.parse_raid_room(self.ROOM)
+        self.assertFalse(info["closed"])
+        self.assertEqual(info["hp"], 100)
+        self.assertEqual(info["warriors"], 2)
+        self.assertEqual(info["healers"], 1)
+        self.assertEqual(info["limit"], 10)
+        self.assertTrue(info["can_start"])
+        self.assertEqual([h["name"] for h in info["ready"]], ["воин"])
+        self.assertEqual([h["name"] for h in info["waiting"]], ["лекарь", "второй"])
+
+    def test_closed_room(self) -> None:
+        info = pages.parse_raid_room(self.CLOSED)
+        self.assertTrue(info["closed"])
+        self.assertEqual(info["reopen_in"], "00:04:58")
+        self.assertFalse(info["can_start"])
 
 
 if __name__ == "__main__":

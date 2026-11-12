@@ -1151,6 +1151,54 @@ class Game:
         self._settle()
         return True
 
+    def join_current_fight(self) -> bool:
+        """Если идёт бой, в котором мы участвуем, — вернуться в него.
+
+        Пока герой в бою, на странице пещер есть ссылка «Вернуться в бой»
+        (`returnToGamePanel:currentGameLink`) — по ней открывается боевая панель.
+        """
+        self.goto("https://barbars.ru/game/dungeons")
+        if "Вернуться в бой" not in self.body_text():
+            return False
+        if not self.click_text("Вернуться в бой"):
+            return False
+        self._settle()
+        return "Покинуть бой" in self.body_text()
+
+    def raid_room(self, url: str) -> dict[str, Any]:
+        """Состояние зала кланового босса (/game/dragonDungeon и подобные)."""
+        from . import pages
+
+        self.goto(url)
+        return pages.parse_raid_room(self.p.content(), self.body_text())
+
+    def raid_ready(self) -> bool:
+        """Отметить готовность к бою — «Я готов!».
+
+        Кнопка переключается: после нажатия там «Я не готов!». Поэтому кликаем
+        только если написано именно «Я готов!», иначе снимем свою готовность.
+        """
+        for link in self.p.locator("a").all():
+            try:
+                text = " ".join((link.inner_text() or "").split())
+            except Exception:
+                continue
+            if text != "Я готов!":
+                continue
+            href = link.get_attribute("href") or ""
+            if "readyLink" not in href and not self.click_href("readyPanel:readyLink"):
+                continue
+            self._settle()
+            return True
+        return False
+
+    def raid_start(self) -> bool:
+        """Начать бой с боссом — «Начать бой!» (зал закроется для остальных)."""
+        if self.click_href("startCombatLink"):
+            self._settle()
+            return True
+        return False
+
     def ability_options(self, ability_id: str) -> dict[str, Any]:
         """Варианты покупки умения за очки полей (вкладка «За очки полей»)."""
         from . import pages

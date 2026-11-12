@@ -32,6 +32,17 @@
   "daily_award": {
     "enabled": true
   },
+  "raid": {
+    "enabled": true,
+    "name": "Мифический дракон",
+    "url": "https://barbars.ru/game/dragonDungeon",
+    "check_interval_min": 5,
+    "repeat_min": 30,
+    "stay_sec": 600,
+    "min_party": 2,
+    "can_start": false,
+    "max_fights_per_day": 10
+  },
   "tower_farm": {
     "enabled": true,
     "max_level": 0,

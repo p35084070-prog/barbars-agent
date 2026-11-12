@@ -44,6 +44,10 @@ class Agent:
         self.farm_streak: dict[str, int] = {}
         # состояние Полей сражений между проверками (кэш)
         self.battlefields_cache: dict[str, Any] = {}
+        # зал кланового босса: кэш состояния и время последней проверки
+        self.raid_cache: dict[str, Any] = {}
+        self.raid_checked_at: float = 0.0
+        self.raid_last_at: float = 0.0
         # счётчик боёв в событиях: по нему чередуем башню, чтобы она была фоном
         self.activity_fights = 0
         # колодец удачи и мудрец — тоже кэшируем, чтобы не ходить на страницы каждый цикл
@@ -230,6 +234,8 @@ class Agent:
         state.exp_buys_today = int(self.daily.get("exp", 0))
         state.well_gift_taken_today = bool(self.daily.get("gift", False))
         state.autocrack_set_today = bool(self.daily.get("autocrack", False))
+        state.raid_last_at = float(self.daily.get("raid_last_at", 0.0) or 0.0)
+        state.raid_today = int(self.daily.get("raid", 0) or 0)
         now = time.time()
         state.farm_skip = [name for name, ts in self.farm_cooldown.items() if ts > now]
         self._check_altar(state)
@@ -237,6 +243,7 @@ class Agent:
         self._check_auction(state)
         self._check_trade_market(state)
         self._check_battlefields(state)
+        self._check_raid(state)
         self._check_scrolls(state)
         self._check_well(state)
         self._check_exp(state)
@@ -345,6 +352,8 @@ class Agent:
             self.trade_market_checked_at = time.time()
         elif decision.action == "battlefields":
             self._do_battlefields(decision)
+        elif decision.action == "raid":
+            self._do_raid(decision, state)
         elif decision.action == "ability":
             self._do_ability(decision)
         elif decision.action == "scrolls":
@@ -694,6 +703,99 @@ class Agent:
                 break
         if not bought:
             self.log("умения: подходящих вариантов за очки полей нет")
+
+    def _check_raid(self, state: rules.GameState) -> None:
+        """Зал кланового босса: открыт ли вход, сколько HP у босса, кто в зале."""
+        cfg = self.config.get("raid", {}) or {}
+        if not cfg.get("enabled"):
+            return
+        now = time.time()
+        if (now - self.raid_checked_at) < float(cfg.get("check_interval_min", 5)) * 60:
+            state.raid = self.raid_cache
+            return
+        self.raid_checked_at = now
+        try:
+            info = self.game.raid_room(str(cfg.get("url", "https://barbars.ru/game/dragonDungeon")))
+        except Exception as exc:
+            self.log(f"рейд: не удалось проверить зал: {exc}", "WARN")
+            state.raid = self.raid_cache
+            return
+        self.raid_cache = info
+        state.raid = info
+        ready = len(info.get("ready") or [])
+        waiting = len(info.get("waiting") or [])
+        self.log(
+            "рейд: "
+            + (
+                f"вход закрыт, откроется через {info.get('reopen_in')}"
+                if info.get("closed")
+                else f"пещера открыта, HP босса {info.get('hp')}"
+            )
+            + f", в зале {ready + waiting} (готовых {ready})"
+        )
+
+    def _do_raid(self, decision: rules.Decision, state: rules.GameState) -> None:
+        """Рейд на кланового босса: собраться в зале, начать общий бой, бить.
+
+        Механика игры: зал общий на 10 героев. Кто нажал «Начать бой!» — тот
+        стартовал попытку, но в бой попадают все, кто стоял в зале готовым.
+        Окно попытки короткое: кто не успел войти в боевую панель
+        («Вернуться в бой» на странице пещер) — остаётся ждать следующего.
+        """
+        url = str(decision.params.get("url", "https://barbars.ru/game/dragonDungeon"))
+        min_party = int(decision.params.get("min_party", 2))
+        stay_sec = int(decision.params.get("stay_sec", 600))
+        can_start = bool(decision.params.get("can_start", True))
+        # заходим в зал не каждый цикл, а раз в repeat_min
+        self.raid_last_at = time.time()
+        self.daily["raid_last_at"] = self.raid_last_at
+        self._save_daily()
+
+        # уже в бою — просто бьём
+        if "Покинуть бой" in self.game.body_text():
+            self._raid_fight()
+            return
+
+        deadline = time.time() + stay_sec
+        closed_since = 0.0
+        while time.time() < deadline:
+            info = self.game.raid_room(url)
+            if info.get("closed"):
+                # идёт попытка — успеваем войти в боевую панель
+                if self.game.join_current_fight():
+                    self.log("рейд: вошли в общий бой")
+                    self._raid_fight()
+                    return
+                if not closed_since:
+                    closed_since = time.time()
+                # окно попытки короткое: первую минуту смотрим часто, потом реже
+                time.sleep(3 if (time.time() - closed_since) < 60 else 15)
+                continue
+            closed_since = 0.0
+
+            ready = len(info.get("ready") or [])
+            waiting = len(info.get("waiting") or [])
+            self.log(f"рейд: в зале {ready + waiting} (готовых {ready})")
+            # держим свою готовность: она сбрасывается, когда кто-то заходит
+            self.game.raid_ready()
+            if can_start and ready >= min_party and info.get("can_start"):
+                if self.game.raid_start():
+                    self.log("рейд: начали общий бой с боссом")
+                    time.sleep(2)
+                    if self.game.join_current_fight():
+                        self._raid_fight()
+                    return
+            time.sleep(4)
+
+        self.log("рейд: окно вышло, ждём следующего")
+
+    def _raid_fight(self) -> None:
+        """Бой с боссом: воин бьёт, медик лечит."""
+        outcome = self._fight_loop()
+        self.fights_done += 1
+        self._bump("raid")
+        self.log(f"рейд: бой с боссом завершён — {outcome}")
+        self.game.click_text("Покинуть бой")
 
     def _do_scrolls(self, decision: rules.Decision, state: rules.GameState) -> None:
         """Активируем свитки (бесплатно при премиуме) и читаем книги."""
