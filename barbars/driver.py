@@ -789,16 +789,26 @@ class Game:
     # ------------------------------------------------------------------ actions
 
     def repair_all(self) -> bool:
-        """'Починить все вещи за N' — починка всего снаряжения железом."""
-        locator = self.p.locator("a:has-text('Починить все'), button:has-text('Починить все')")
-        if locator.count() == 0:
-            return False
-        try:
-            locator.first.click(timeout=8000)
-        except Exception:
-            return False
-        self._settle()
-        return True
+        """Починить снаряжение железом.
+
+        На странице бывает и «Починить все вещи за N», и отдельные ссылки
+        «Починить <вещь> за N» — если вещь сломана, кнопки «Починить все»
+        может не быть вовсе. Поэтому чиним по очереди все найденные ссылки.
+        """
+        repaired = False
+        for _ in range(12):
+            locator = self.p.locator(
+                "a:has-text('Починить'), button:has-text('Починить')")
+            if locator.count() == 0:
+                break
+            try:
+                locator.first.scroll_into_view_if_needed(timeout=3000)
+                locator.first.click(timeout=8000)
+            except Exception:
+                break
+            self._settle()
+            repaired = True
+        return repaired
 
     def take_clan_quest(self, index: int = 0) -> bool:
         locator = self.p.locator("a:has-text('Взять задание'), button:has-text('Взять задание')")

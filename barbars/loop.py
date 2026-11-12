@@ -86,6 +86,9 @@ class Agent:
         # если очко таланта не потратилось (кнопки нет) — не пытаемся заново
         # каждый цикл, иначе агент не доходит до фарма
         self.talent_blocked_until: float = 0.0
+        # починка: если кнопки «Починить» нет, не пытаемся каждый цикл —
+        # иначе агент не доходит до рейда, прокачки и фарма
+        self.repair_skip_until: float = 0.0
         # аналогично для клановых заданий: если «Взять задание» недоступно
         # (задание занято другим игроком), возвращаемся к нему позже
         self.quest_blocked_until: float = 0.0
@@ -232,6 +235,8 @@ class Agent:
         self.last_state = state
         if self.talent_blocked_until > time.time():
             state.talent_points = 0
+        if self.repair_skip_until > time.time():
+            state.needs_repair = False
         state.autocrack_kind = self.autocrack_kind
         if self.quest_blocked_until > time.time():
             state.quests = []
@@ -1400,7 +1405,10 @@ class Agent:
         if self.game.repair_all():
             self.log("снаряжение починено")
         else:
-            self.log("починка не потребовалась (нет кнопки)")
+            # Кнопки починки нет (или вещи целые) — иначе агент будет
+            # бесконечно выбирать ремонт и не дойдёт ни до рейда, ни до фарма.
+            self.repair_skip_until = time.time() + 900
+            self.log("починка не потребовалась (нет кнопки) — идём дальше", "WARN")
 
     def _check_altar(self, state: rules.GameState) -> None:
         """Раз в check_interval_min смотрим алтарь: бонус и когда он протухнет."""

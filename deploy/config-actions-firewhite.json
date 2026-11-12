@@ -219,7 +219,7 @@
     "mastery": true,
     "keep_iron": 5000,
     "keep_mifril": 0,
-    "check_interval_min": 10
+    "check_interval_min": 5
   },
   "shop": {
     "enabled": false,
