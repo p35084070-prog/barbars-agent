@@ -80,6 +80,18 @@ class GameState:
     mail_pending: bool = False
     # рюкзак и сундук: сколько занято
     bag: dict[str, int] = field(default_factory=dict)
+    # содержимое рюкзака (для продажи дублей) и надетое снаряжение
+    bag_items: list[dict[str, Any]] = field(default_factory=list)
+    worn: list[dict[str, str]] = field(default_factory=list)
+    # дубли мифических вещей (слот занят надетой) — их продаём
+    duplicates: list[dict[str, Any]] = field(default_factory=list)
+    # слоты нужного героя, которые ещё не закрыты (для покупки на рынке)
+    market_due: bool = False
+    target_gear: list[dict[str, str]] = field(default_factory=list)
+    # аукцион вещей: сколько лотов выставили сегодня
+    auction_today: int = 0
+    # рынок аукционов: сколько лотов купили сегодня
+    market_today: int = 0
     # фарм-события: какие из них сейчас не запускаются (кулдаун)
     farm_skip: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
@@ -123,6 +135,14 @@ def collect_state(game: Game, config: dict[str, Any]) -> GameState:
             state.bag = game.bag_counts()
         except Exception:
             state.bag = {}
+
+    # 1c. Содержимое рюкзака и надетое — нужно для продажи дублей и закупки.
+    if config.get("auction", {}).get("enabled") or config.get("shop", {}).get("enabled"):
+        try:
+            state.worn = game.worn_gear()
+            state.bag_items = game.bag_items()
+        except Exception:
+            state.worn, state.bag_items = [], []
 
     # 2. Страница героя: статы, опыт, ресурсы, таланты, id героя и клана.
     game.goto("https://barbars.ru/user")
@@ -314,6 +334,16 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if share_gear is not None:
         return share_gear
 
+    # 9e. Дубли мифических вещей — на аукцион (или отправить тому, кто торгует).
+    auction = _pick_auction(state, config)
+    if auction is not None:
+        return auction
+
+    # 9f. Рынок аукционов вещей: дешёвые мифические вещи нужного уровня.
+    market = _pick_trade_market(state, config)
+    if market is not None:
+        return market
+
     # 10. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
     #     Основной способ прокачки для новых героев (у них нет клана и подземелий).
     tower = _pick_tower(state, config)
@@ -486,8 +516,6 @@ def _pick_shop(state: GameState, config: dict[str, Any]) -> Decision | None:
     if int(state.level or 0) < min_level:
         return None
     slots = int(cfg.get("max_slots", 12))
-    if len(state.shop_slots) >= slots:
-        return None
     if int(state.gold or 0) <= 0 and int(state.silver or 0) <= 0:
         return None
     return Decision(
@@ -498,6 +526,8 @@ def _pick_shop(state: GameState, config: dict[str, Any]) -> Decision | None:
             "max_silver": int(cfg.get("max_silver", 0)),
             "sets": list(cfg.get("sets", ["", "goliaf", "atlant", "veteran"])),
             "max_buys": int(cfg.get("max_buys_per_cycle", 2)),
+            "min_bonus": int(cfg.get("min_bonus", 10)),
+            "avoid_same_name": bool(cfg.get("avoid_same_name", True)),
         },
         reason=(
             f"покупаем снаряжение {min_level} уровня (куплено слотов: "
@@ -564,6 +594,76 @@ def _pick_upgrade(state: GameState, config: dict[str, Any]) -> Decision | None:
         reason=(
             f"качаем параметр {best.get('param')} "
             f"(+{best.get('gain', 1)}) за {best.get('cost')} железа"
+        ),
+    )
+
+
+def _pick_auction(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Дубли мифических вещей — на «Аукцион вещей».
+
+    Дубль — вещь, слот которой уже занят надетой. Такие вещи не нужны герою,
+    но их нельзя разобрать (мифические), поэтому продаём их лотом.
+    Если в конфиге задан `auction.send_to`, вещи не выставляются, а отправляются
+    тому герою, у которого доступ к аукциону (у новичка его нет).
+    """
+    cfg = config.get("auction", {})
+    if not cfg.get("enabled"):
+        return None
+    max_per_day = int(cfg.get("max_per_day", 10))
+    if int(state.auction_today or 0) >= max_per_day:
+        return None
+    if not state.duplicates:
+        return None
+    max_per_cycle = int(cfg.get("max_per_cycle", 2))
+    send_to = str(cfg.get("send_to", "") or "")
+    return Decision(
+        "auction",
+        target="аукцион вещей",
+        params={
+            "max_per_cycle": max_per_cycle,
+            "bid_gold": int(cfg.get("bid_gold", 1)),
+            "bid_silver": int(cfg.get("bid_silver", 0)),
+            "buyout_gold": int(cfg.get("buyout_gold", 2)),
+            "buyout_silver": int(cfg.get("buyout_silver", 0)),
+            "send_to": send_to,
+            "min_level": int(cfg.get("min_level", 25)),
+        },
+        reason=(
+            "дубли мифических вещей — "
+            + (f"отправляем герою {send_to}" if send_to else "выставляем на аукцион")
+        ),
+    )
+
+
+def _pick_trade_market(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Рынок аукционов вещей (/trade/auction): покупаем нужному герою.
+
+    На рынке 25-уровневые мифические вещи иногда стоят серебра, а не золота,
+    поэтому берём их там и передаём нужному герою.
+    """
+    cfg = config.get("trade_market", {})
+    if not cfg.get("enabled"):
+        return None
+    if int(state.market_today or 0) >= int(cfg.get("max_per_day", 3)):
+        return None
+    if not state.market_due:
+        return None
+    if not (state.gold or 0) and not (state.silver or 0):
+        return None
+    return Decision(
+        "trade_market",
+        target="аукцион вещей",
+        params={
+            "max_gold": int(cfg.get("max_gold", 3)),
+            "max_buys": int(cfg.get("max_buys_per_cycle", 1)),
+            "min_level": int(cfg.get("min_level", 25)),
+            "require_tier": str(cfg.get("require_tier", "мифический")),
+            "for_hero": str(cfg.get("for_hero", "") or ""),
+            "send_to": str(cfg.get("send_to", "") or ""),
+        },
+        reason=(
+            "покупаем на рынке аукционов "
+            + (f"вещи для героя {cfg.get('for_hero')}" if cfg.get("for_hero") else "нужные вещи")
         ),
     )
 

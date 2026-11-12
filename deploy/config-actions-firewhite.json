@@ -209,12 +209,29 @@
     "max_silver": 0,
     "max_slots": 12,
     "max_buys_per_cycle": 2,
+    "min_bonus": 10,
+    "avoid_same_name": true,
     "sets": [
       "",
       "goliaf",
       "atlant",
       "veteran"
-    ]
+    ],
+    "share_money_with": "905853",
+    "keep_gold": 10,
+    "keep_silver": 20
+  },
+  "auction": {
+    "enabled": true,
+    "send_to": "905853",
+    "max_per_cycle": 2,
+    "max_per_day": 10,
+    "min_level": 25,
+    "check_interval_min": 30,
+    "bid_gold": 1,
+    "bid_silver": 0,
+    "buyout_gold": 2,
+    "buyout_silver": 0
   },
   "mail": {
     "enabled": true,

@@ -51,6 +51,11 @@ class Agent:
         # почта: есть ли что забрать (проверяем не каждый цикл)
         self.mail_checked_at: float = 0.0
         self.mail_pending: bool = False
+        # аукцион вещей и рынок лотов — тоже раз в несколько минут
+        self.auction_checked_at: float = 0.0
+        self.trade_market_checked_at: float = 0.0
+        # магазин снаряжения — тоже не каждый цикл
+        self.shop_checked_at: float = 0.0
         # текущий режим авторазбора (нужно, чтобы не включать его заново)
         self.autocrack_kind: str = ""
         # крайний срок работы (0 = работаем бесконечно); нужен в облаке,
@@ -117,6 +122,10 @@ class Agent:
                 "gift": False,
                 "autocrack": False,
                 "award": False,
+                "auction": 0,
+                "market": 0,
+                "market_bought": [],
+                "shop_buy_ids": [],
                 "shop_slots": bought,
                 "shop_bought": bought_items,
             }
@@ -162,6 +171,20 @@ class Agent:
         except Exception:
             pass
 
+    def _gated_config(self, now: float) -> dict[str, Any]:
+        """Конфиг для текущего цикла: магазин снаряжения смотрим не каждый раз.
+
+        Иначе агент тратит по несколько заходов на страницы магазина в каждом
+        цикле, а там всё равно ничего нового не появилось.
+        """
+        cfg = dict(self.config)
+        shop_cfg = dict(cfg.get("shop", {}) or {})
+        interval = float(shop_cfg.get("check_interval_min", 30)) * 60
+        if (now - self.shop_checked_at) < interval:
+            shop_cfg["enabled"] = False
+        cfg["shop"] = shop_cfg
+        return cfg
+
     def _run_once_inner(self) -> rules.Decision:
         if not self.game.browser_alive():
             self.log("браузер закрыт — перезапускаю и вхожу заново", "WARN")
@@ -169,6 +192,7 @@ class Agent:
                 self.log("не удалось восстановить браузер", "ERROR")
                 time.sleep(30)
                 return rules.Decision("wait", reason="браузер недоступен")
+        now = time.time()
         state = rules.collect_state(self.game, self.config)
         self.last_state = state
         if self.talent_blocked_until > time.time():
@@ -191,6 +215,8 @@ class Agent:
         state.sold_today = int(self.daily.get("sold", 0))
         state.shop_slots = list(self.daily.get("shop_slots", []) or [])
         state.shop_bought = list(self.daily.get("shop_bought", []) or [])
+        state.auction_today = int(self.daily.get("auction", 0) or 0)
+        state.market_today = int(self.daily.get("market", 0) or 0)
         state.exp_buys_today = int(self.daily.get("exp", 0))
         state.well_gift_taken_today = bool(self.daily.get("gift", False))
         state.autocrack_set_today = bool(self.daily.get("autocrack", False))
@@ -198,6 +224,8 @@ class Agent:
         state.farm_skip = [name for name, ts in self.farm_cooldown.items() if ts > now]
         self._check_altar(state)
         self._check_market(state)
+        self._check_auction(state)
+        self._check_trade_market(state)
         self._check_well(state)
         self._check_exp(state)
         self._check_master(state)
@@ -205,7 +233,7 @@ class Agent:
         self._maybe_daily_award()
         self.log("состояние: " + state.summary())
 
-        decision = rules.decide(state, self.config)
+        decision = rules.decide(state, self._gated_config(now))
 
         # LLM-советник: подключаем только там, где решение неоднозначно.
         if decision.action == "fight":
@@ -292,10 +320,17 @@ class Agent:
             self._do_upgrade_mastery(decision)
         elif decision.action == "shop":
             self._do_shop(decision, state)
+            self.shop_checked_at = time.time()
         elif decision.action == "share_money":
             self._do_share_money(decision)
         elif decision.action == "share_gear":
             self._do_share_gear(decision)
+        elif decision.action == "auction":
+            self._do_auction(decision, state)
+            self.auction_checked_at = time.time()
+        elif decision.action == "trade_market":
+            self._do_trade_market(decision, state)
+            self.trade_market_checked_at = time.time()
         elif decision.action == "mail":
             self._do_mail()
         elif decision.action == "wait":
@@ -436,13 +471,95 @@ class Agent:
         if worn:
             self.log(f"почта: надето присланных вещей {worn}")
 
+    def _check_auction(self, state: rules.GameState) -> None:
+        """Ищем дубли мифических вещей — их можно продать лотом.
+
+        Дубль — вещь, слот которой уже занят надетой. Такие вещи не нужны
+        герою, а разобрать их нельзя (мифические), поэтому продаём.
+        """
+        from . import pages
+
+        cfg = self.config.get("auction", {}) or {}
+        if not cfg.get("enabled"):
+            return
+        now = time.time()
+        if (now - self.auction_checked_at) < float(cfg.get("check_interval_min", 30)) * 60:
+            return
+        self.auction_checked_at = now
+        try:
+            bag = self.game.bag_items()
+            worn = self.game.worn_gear()
+        except Exception as exc:
+            self.log(f"аукцион: рюкзак не прочитан: {exc}", "WARN")
+            return
+        busy: dict[str, str] = {}
+        for w in worn:
+            slot, _kind = pages.slot_of(w.get("name", ""))
+            if slot:
+                busy[slot] = w.get("name", "")
+        duplicates: list[dict[str, Any]] = []
+        for item in bag:
+            name = str(item.get("name", "") or "")
+            if not name or item.get("personal") or not item.get("mythic"):
+                continue
+            slot, _kind = pages.slot_of(name)
+            if not slot or slot not in busy:
+                continue
+            duplicates.append(item)
+        state.duplicates = duplicates
+        if duplicates:
+            names = ", ".join(str(d.get("name", "")) for d in duplicates[:4])
+            self.log(f"аукцион: дублей в рюкзаке — {len(duplicates)} ({names})")
+
+    def _check_trade_market(self, state: rules.GameState) -> None:
+        """Проверяем, нужны ли нужному герою вещи с рынка аукционов."""
+        from . import pages
+
+        cfg = self.config.get("trade_market", {}) or {}
+        if not cfg.get("enabled"):
+            return
+        now = time.time()
+        if (now - self.trade_market_checked_at) < float(cfg.get("check_interval_min", 60)) * 60:
+            return
+        self.trade_market_checked_at = now
+        for_hero = str(cfg.get("for_hero", "") or "")
+        if not for_hero:
+            return
+        min_level = int(cfg.get("min_level", 25))
+        try:
+            gear = self.game.other_hero_gear(for_hero)
+        except Exception as exc:
+            self.log(f"рынок: снаряжение героя {for_hero} не прочитано: {exc}", "WARN")
+            return
+        state.target_gear = gear
+        worn_slots: dict[str, int] = {}
+        for w in gear:
+            slot, _kind = pages.slot_of(w.get("name", ""))
+            if slot:
+                worn_slots[slot] = int(w.get("level", 0) or 0)
+        need = [s for s, lvl in worn_slots.items() if lvl < min_level]
+        missing = [
+            s
+            for s in (
+                "шлем", "амулет", "наплечники", "накидка", "броня", "пояс",
+                "штаны", "браслеты", "перчатки", "кольцо", "оружие", "обувь",
+            )
+            if s not in worn_slots
+        ]
+        state.market_due = bool(need or missing)
+        if state.market_due:
+            self.log(
+                f"рынок: герою {for_hero} нужны вещи — пустые слоты: "
+                f"{', '.join(missing) or 'нет'}, слабые: {', '.join(need) or 'нет'}"
+            )
+
     def _do_shop(self, decision: rules.Decision, state: rules.GameState) -> None:
         """Закупка снаряжения 25+ уровня в «Магазине снаряжения».
 
         Алгоритм по требованию игрока: выбираем вещи с максимальными
         характеристиками («Лучше (+N)») по каждому слоту, не дороже лимита
-        по золоту; купленное приходит на почту — забираем, надеваем,
-        а снятое разбирается обычным шагом «рюкзак».
+        по золоту; цену проверяем на странице товара (покупать вслепую нельзя);
+        купленное приходит на почту — забираем и надеваем.
         """
         from . import pages
 
@@ -450,7 +567,11 @@ class Agent:
         max_silver = int(decision.params.get("max_silver", 0))
         sets = list(decision.params.get("sets", ["", "goliaf", "atlant", "veteran"]))
         max_buys = int(decision.params.get("max_buys", 2))
+        min_bonus = int(decision.params.get("min_bonus", 10))
+        avoid_same_name = bool(decision.params.get("avoid_same_name", True))
+        min_level = int(self.config.get("shop", {}).get("min_level", 25))
         bought_slots = list(self.daily.get("shop_slots", []) or [])
+        bought_today = set(self.daily.get("shop_buy_ids", []) or [])
         try:
             items: list[dict[str, Any]] = []
             for set_name in sets:
@@ -468,37 +589,57 @@ class Agent:
             # если вещи предназначены другому герою — берём лучшее по слоту
             # (у нас самих может быть всё уже лучше), без фильтра «дубль»
             require_better=not bool(self.config.get("shop", {}).get("share_with")),
+            min_bonus=min_bonus,
+            avoid_same_name=avoid_same_name,
+            min_level=min_level,
         )
+        picked = [i for i in picked if str(i.get("item_id", "")) not in bought_today]
         if not picked:
             self.log("магазин: подходящих товаров нет (лимит по золоту или нет денег)")
             return
         bought = 0
         bought_items: list[dict[str, Any]] = []
         for item in picked[:max_buys]:
-            gold_need = int(item.get("gold", 0))
-            silver_need = int(item.get("silver", 0))
-            if gold_need > int(state.gold or 0) or silver_need > int(state.silver or 0):
+            item_id = str(item.get("item_id", "") or "")
+            name = str(item.get("name", ""))
+            # цену смотрим на странице товара: там написано «Купить за …»
+            try:
+                gold_need, silver_need = self.game.shop_item_price(item_id)
+            except Exception as exc:
+                self.log(f"магазин: цену «{name}» узнать не удалось: {exc}", "WARN")
+                continue
+            if gold_need > max_gold:
+                self.log(f"магазин: «{name}» — {gold_need} зол., лимит {max_gold}: пропускаем")
+                continue
+            if gold_need * 100 + silver_need > max_gold * 100:
                 self.log(
-                    f"магазин: «{item.get('name')}» не по карману "
-                    f"(нужно {gold_need} золота / {silver_need} серебра)"
+                    f"магазин: «{name}» — {gold_need} зол. {silver_need} сер. "
+                    f"(>{max_gold} зол. по лимиту): пропускаем"
                 )
                 continue
-            if not self.game.buy_shop_item(str(item.get("href", ""))):
-                self.log(f"магазин: не удалось купить {item.get('name')}", "WARN")
+            if max_silver and silver_need > max_silver:
+                continue
+            have = int(state.gold or 0) * 100 + int(state.silver or 0)
+            need = gold_need * 100 + silver_need
+            if need + 100 > have:
+                self.log(f"магазин: «{name}» не по карману (нужно {need} сер.)")
+                continue
+            ok, message = self.game.buy_shop_item_capped(item_id, max_gold)
+            if not ok:
+                self.log(f"магазин: «{name}» не куплена — {message}", "WARN")
                 continue
             bought += 1
             bought_items.append(item)
-            slot, _kind = pages.slot_of(str(item.get("name", "")))
+            bought_today.add(item_id)
+            slot, _kind = pages.slot_of(name)
             if slot and slot not in bought_slots:
                 bought_slots.append(slot)
-            self.log(
-                f"магазин: куплена «{item.get('name')}» ({item.get('level')} ур, "
-                f"+{item.get('bonus')}) за {gold_need} золота / {silver_need} серебра"
-            )
+            self.log(f"магазин: куплена «{name}» ({item.get('level')} ур, +{item.get('bonus')}) — {message}")
         if not bought:
             return
         self.daily = self._load_daily()
         self.daily["shop_slots"] = bought_slots
+        self.daily["shop_buy_ids"] = sorted(bought_today)
         bought_ids = list(self.daily.get("shop_bought", []) or [])
         for item in bought_items:
             item_id = str(item.get("item_id", "") or "")
@@ -516,6 +657,114 @@ class Agent:
         share_with = str(self.config.get("shop", {}).get("share_with", "") or "")
         if share_with and bought_items:
             self._share_items(share_with, bought_items)
+
+    def _do_auction(self, decision: rules.Decision, state: rules.GameState) -> None:
+        """Дубли мифических вещей — на «Аукцион вещей» (или отправить тому,
+        у кого аукцион доступен).
+
+        Дубль — вещь, слот которой уже занят надетой. Мифические вещи не
+        ломаем, поэтому лишние продаём лотом: начальная цена и цена выкупа.
+        """
+        params = decision.params
+        max_per_cycle = int(params.get("max_per_cycle", 2))
+        send_to = str(params.get("send_to", "") or "")
+        bid_gold = int(params.get("bid_gold", 1))
+        bid_silver = int(params.get("bid_silver", 0))
+        buyout_gold = int(params.get("buyout_gold", 2))
+        buyout_silver = int(params.get("buyout_silver", 0))
+        done = 0
+        for item in state.duplicates[:max_per_cycle]:
+            name = str(item.get("name", "") or "")
+            item_id = str(item.get("item_id", "") or "")
+            if not name or not item_id:
+                continue
+            if send_to:
+                if self.game.send_bag_item_to(send_to, item_id, f"{name} (дубль, на аукцион)"):
+                    self.log(f"аукцион: «{name}» отправлена герою {send_to} на аукцион")
+                    done += 1
+                    self._bump("auction")
+                else:
+                    self.log(f"аукцион: «{name}» отправить не удалось", "WARN")
+                continue
+            ok, message = self.game.put_on_auction(
+                item_id, bid_gold, bid_silver, buyout_gold, buyout_silver
+            )
+            if ok:
+                self.log(f"аукцион: «{name}» выставлена — {message}")
+                done += 1
+                self._bump("auction")
+            else:
+                self.log(f"аукцион: «{name}» — {message}", "WARN")
+
+    def _do_trade_market(self, decision: rules.Decision, state: rules.GameState) -> None:
+        """Рынок аукционов вещей (/trade/auction): покупаем нужному герою.
+
+        Лоты 25+ уровня мифического качества, не дороже лимита по золоту;
+        если у нужного героя слот уже закрыт — берём другой лот (дубли не
+        покупаем). Купленное уходит получателю почтой.
+        """
+        from . import pages
+
+        params = decision.params
+        max_gold = int(params.get("max_gold", 3))
+        max_buys = int(params.get("max_buys", 1))
+        min_level = int(params.get("min_level", 25))
+        require_tier = str(params.get("require_tier", "мифический"))
+        send_to = str(params.get("send_to", "") or "")
+        try:
+            lots = self.game.market_lots()
+        except Exception as exc:
+            self.log(f"рынок: не удалось получить лоты: {exc}", "WARN")
+            return
+        if not lots:
+            self.log("рынок: лотов нет")
+            return
+        bought_today = set(self.daily.get("market_bought", []) or [])
+        busy: dict[str, int] = {}
+        for w in state.target_gear:
+            slot, _kind = pages.slot_of(w.get("name", ""))
+            if slot:
+                busy[slot] = int(w.get("level", 0) or 0)
+        bought = 0
+        for lot in lots:
+            if bought >= max_buys:
+                break
+            name = str(lot.get("name", "") or "")
+            item_id = str(lot.get("item_id", "") or "")
+            if not name or not item_id:
+                continue
+            if name in bought_today:
+                continue
+            if int(lot.get("level", 0)) < min_level:
+                continue
+            tier = str(lot.get("tier", ""))
+            if require_tier and tier not in ("?", "") and tier != require_tier:
+                continue
+            slot, _kind = pages.slot_of(name)
+            if slot and busy.get(slot, 0) >= int(lot.get("level", 0)):
+                continue  # у героя слот уже закрыт — дубль не покупаем
+            price = int(lot.get("price_silver", 0))
+            if price > max_gold * 100:
+                continue
+            ok, message = self.game.buy_market_lot(item_id, int(lot.get("pt", 0)), max_gold)
+            if not ok:
+                self.log(f"рынок: «{name}» не куплена — {message}", "WARN")
+                continue
+            bought += 1
+            bought_today.add(name)
+            self._bump("market")
+            self.log(f"рынок: куплена «{name}» ({lot.get('level')} ур, {tier or '?'}) — {message}")
+            if send_to:
+                if self.game.take_mail():
+                    self.log("рынок: покупка забрана с почты")
+                if self.game.send_bag_item_to(send_to, item_id, f"{name} (куплено на аукционе)"):
+                    self.log(f"рынок: «{name}» отправлена герою {send_to}")
+                else:
+                    self.log(f"рынок: «{name}» отправить не удалось", "WARN")
+        if bought:
+            self.daily = self._load_daily()
+            self.daily["market_bought"] = sorted(bought_today)
+            self._save_daily()
 
     def _share_items(self, recipient_id: str, items: list[dict[str, Any]]) -> None:
         """Передать купленные вещи другому герою почтой (через витрину)."""

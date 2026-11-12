@@ -193,12 +193,14 @@
     "check_interval_min": 10
   },
   "shop": {
-    "enabled": true,
+    "enabled": false,
     "min_level": 25,
     "max_gold": 3,
     "max_silver": 0,
     "max_slots": 12,
     "max_buys_per_cycle": 2,
+    "min_bonus": 10,
+    "avoid_same_name": true,
     "sets": [
       "",
       "goliaf",
@@ -206,6 +208,28 @@
       "veteran"
     ],
     "share_with": "31389504"
+  },
+  "auction": {
+    "enabled": true,
+    "max_per_cycle": 3,
+    "max_per_day": 15,
+    "min_level": 25,
+    "check_interval_min": 30,
+    "bid_gold": 1,
+    "bid_silver": 0,
+    "buyout_gold": 2,
+    "buyout_silver": 0
+  },
+  "trade_market": {
+    "enabled": true,
+    "max_gold": 3,
+    "max_buys_per_cycle": 1,
+    "max_per_day": 3,
+    "min_level": 25,
+    "check_interval_min": 60,
+    "require_tier": "мифический",
+    "for_hero": "31389504",
+    "send_to": "31389504"
   },
   "mail": {
     "enabled": true,

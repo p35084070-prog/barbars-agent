@@ -959,6 +959,174 @@ class Game:
         self.goto(url)
         return pages.parse_worn_gear(self.p.content())
 
+    def other_hero_gear(self, hero_id: str) -> list[dict[str, str]]:
+        """Снаряжение другого героя (/user/body/id/<id>) — нужно, чтобы покупать
+        ему вещи, которых у него ещё нет."""
+        from . import pages
+
+        self.goto(f"https://barbars.ru/user/body/id/{hero_id}")
+        return pages.parse_worn_gear(self.p.content())
+
+    def shop_item_price(self, item_id: str) -> tuple[int, int]:
+        """(золото, серебро) цены товара магазина — со страницы самого товара."""
+        from . import pages
+
+        self.goto(f"https://barbars.ru/trade/auction/shop/item/id/{item_id}")
+        return pages.parse_price_text(self.body_text())
+
+    def buy_shop_item_capped(self, item_id: str, max_gold: int = 3) -> tuple[bool, str]:
+        """Купить товар магазина, если золота на вещь не больше max_gold.
+
+        Цена проверяется на странице товара («Купить за …»): покупать вслепую
+        нельзя — лимит игрока «не больше 3 золота на вещь».
+        """
+        from . import pages
+
+        self.goto(f"https://barbars.ru/trade/auction/shop/item/id/{item_id}")
+        gold, silver = pages.parse_price_text(self.body_text())
+        if gold > max_gold:
+            return False, f"цена {gold} зол. превышает лимит {max_gold} зол."
+        if not self.click_href("border:buyoutLink"):
+            return False, "кнопка покупки не найдена"
+        self.confirm_if_needed()
+        self._settle()
+        return True, f"куплено за {gold} зол. / {silver} сер."
+
+    def market_lots(self) -> list[dict[str, Any]]:
+        """Лоты «Аукциона вещей» (/trade/auction).
+
+        Вход через хаб /trade/auctions: там переключается вкладка «Аукцион вещей»
+        (при прямом заходе на /trade/auction открывается главная страница).
+        """
+        from . import pages
+
+        self.goto("https://barbars.ru/trade/auctions")
+        try:
+            link = self.p.locator("a:has-text('Аукцион вещей')")
+            if link.count():
+                link.first.click(timeout=8000)
+                self._settle()
+        except Exception:
+            pass
+        if "trade/auction/item/id/" not in (self.p.content() or ""):
+            self.goto("https://barbars.ru/trade/auction")
+        return pages.parse_market_lots(self.p.content())
+
+    def buy_market_lot(self, item_id: str, pt: int, max_gold: int = 3) -> tuple[bool, str]:
+        """Выкупить лот на «Аукционе вещей» (страница лота -> «Выкупить сразу за …»)."""
+        from . import pages
+
+        self.goto(f"https://barbars.ru/trade/auction/item/id/{item_id}/pt/{pt}")
+        gold, silver = pages.parse_price_text(self.body_text())
+        if gold > max_gold:
+            return False, f"цена {gold} зол. превышает лимит {max_gold} зол."
+        if not self.click_href("border:buyoutLink"):
+            return False, "кнопка выкупа не найдена"
+        self.confirm_if_needed()
+        self._settle()
+        return True, f"выкуплено за {gold} зол. / {silver} сер."
+
+    def put_on_auction(
+        self,
+        item_id: str,
+        bid_gold: int = 1,
+        bid_silver: int = 0,
+        buyout_gold: int = 2,
+        buyout_silver: int = 0,
+    ) -> tuple[bool, str]:
+        """Выставить вещь на «Аукцион вещей» (лот: начальная цена и цена выкупа)."""
+        self.goto(f"https://barbars.ru/item/id/{item_id}")
+        html = self.p.content()
+        m = re.search(r'href="([^"]*actionBlock:auctionLink[^"]*)"', html)
+        if not m:
+            return False, "ссылки «на аукцион» нет (вещь личная или неразрешена)"
+        self.goto("https://barbars.ru/" + m.group(1).replace("../../", ""))
+        self._settle()
+        try:
+            self.p.fill("input[name='bidGold']", str(int(bid_gold)), timeout=5000)
+            self.p.fill("input[name='bidSilver']", str(int(bid_silver)), timeout=5000)
+            self.p.fill("input[name='buyoutGold']", str(int(buyout_gold)), timeout=5000)
+            self.p.fill("input[name='buyoutSilver']", str(int(buyout_silver)), timeout=5000)
+        except Exception as exc:
+            return False, f"поля формы не заполнились: {exc}"
+        try:
+            self.p.click("input[type='submit'][value='выставить']", timeout=8000)
+        except Exception as exc:
+            return False, f"кнопка «выставить» не нажата: {exc}"
+        self._settle()
+        if "выставлена на аукцион" in " ".join(self.body_text().split()).lower():
+            return True, (
+                f"выставлено: ставка {bid_gold} зол. {bid_silver} сер., "
+                f"выкуп {buyout_gold} зол. {buyout_silver} сер."
+            )
+        return False, "лот не подтверждён игрой"
+
+    def send_bag_item_to(self, recipient_id: str, item_id: str, message: str = "Снаряжение") -> bool:
+        """Передать одну вещь из рюкзака почтой (вкладка «Вещи» -> «Рюкзак» -> выбрать)."""
+        self.goto(f"https://barbars.ru/user/mail/send/id/{recipient_id}")
+        if not self.click_href("sendMessageForm:mailItemLink"):
+            return False
+        self._settle()
+        html = self.p.content()
+        index: str | None = None
+        for chunk in html.split("<div"):
+            if f"item/id/{item_id}" in chunk:
+                m = re.search(r"sendItemContainer:items:(\d+):selectLink", chunk)
+                if m:
+                    index = m.group(1)
+                break
+        if index is None:
+            return False
+        if not self.click_href(f"sendItemContainer:items:{index}:selectLink"):
+            return False
+        self._settle()
+        try:
+            self.p.fill("textarea[name='text']", message, timeout=5000)
+        except Exception:
+            pass
+        try:
+            self.p.click("input[type='submit'][value='отправить']", timeout=8000)
+        except Exception:
+            return False
+        self._settle()
+        return True
+
+    def bag_items(self) -> list[dict[str, Any]]:
+        """Содержимое рюкзака: [{index, item_id, name, mythic, personal, better,
+        wear, crack}] — чтобы решать, что надеть, продать или разобрать."""
+        self.goto("https://barbars.ru/user/rack")
+        html = self.p.content()
+        out: list[dict[str, Any]] = []
+        for chunk, index in self._item_blocks(html):
+            m = re.search(r"item/id/(\d+)\"><span>([^<]{2,60})</span>", chunk, re.S)
+            text = " ".join(re.sub("<[^>]+>", " ", chunk).split())
+            out.append(
+                {
+                    "index": index,
+                    "item_id": m.group(1) if m else "",
+                    "name": m.group(2).strip() if m else "",
+                    "mythic": "bonusdarkiron" in chunk,
+                    "personal": ", личный" in text,
+                    "better": "Лучше" in text,
+                    "wear": f"items:{index}:wearLink" in chunk,
+                    "crack": "crackLink" in chunk,
+                }
+            )
+        return out
+
+    def item_actions(self, item_id: str) -> list[str]:
+        """Доступные действия со страницы вещи: «надеть», «на аукцион», …"""
+        self.goto(f"https://barbars.ru/item/id/{item_id}")
+        html = self.p.content()
+        out = []
+        for m in re.finditer(
+            r'<a[^>]+href="([^"]*actionBlock[^"]*)"[^>]*>(.*?)</a>', html, re.S
+        ):
+            label = " ".join(re.sub("<[^>]+>", "", m.group(2)).split())
+            if label:
+                out.append(label)
+        return out
+
     def buy_shop_item(self, href: str) -> bool:
         """Купить товар в магазине снаряжения (страница товара -> «Купить за …»)."""
         url = href if href.startswith("http") else f"https://barbars.ru/{href.lstrip('/')}"
