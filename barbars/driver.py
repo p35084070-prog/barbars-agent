@@ -60,6 +60,58 @@ def parse_amount(raw: str | None) -> int:
     return int(value)
 
 
+def parse_master_page(html: str) -> dict[str, Any]:
+    """Разбор страницы /user/master: цены параметров и цена уровня мастерства.
+
+    Возвращает:
+      {"params": [{"param": "strength", "cost": 100, "gain": 24,
+                   "currency": "gold", "href": ...}],
+       "mastery": {"iron": 3000, "mifril": 200}}
+
+    В разметке иконка валюты лежит рядом с числом: `<img ... money_gold.png><span>100</span>`.
+    Тег `<img>` в игре закрывается без слэша (`<img ...>`), поэтому в регулярках
+    нельзя писать `/>` — иначе цены не читаются и прокачка молча не работает.
+    """
+    params: list[dict[str, Any]] = []
+    for m in re.finditer(r"moreParamsPanel:(\w+):upBlock:upLink", html):
+        segment = html[m.end():m.end() + 400]
+        # валюта стоимости: иконка сразу после «за»
+        cost_m = re.search(
+            r"за\s*<span[^>]*>\s*<img[^>]*icons/(\w+)\.png[^>]*>\s*<span>([\d.,]+[KkMm]?)</span>",
+            segment,
+        )
+        if not cost_m:
+            continue
+        gain_m = re.search(r"\+[^0-9]{0,40}(\d+)", segment)
+        currency = {
+            "money_gold": "gold",
+            "money_silver": "silver",
+            "ironbar": "iron",
+            "mifrilbar": "mifril",
+            "silverbar": "silver",
+        }.get(cost_m.group(1), cost_m.group(1))
+        params.append(
+            {
+                "param": m.group(1),
+                "cost": parse_amount(cost_m.group(2)),
+                "gain": int(gain_m.group(1)) if gain_m else 1,
+                "currency": currency,
+                "href": f"moreParamsPanel:{m.group(1)}:upBlock:upLink",
+            }
+        )
+    mastery: dict[str, int] = {}
+    m = re.search(r"upgradeLink", html)
+    if m:
+        segment = html[m.start():m.start() + 500]
+        for icon, number in re.findall(
+            r"icons/(ironbar|mifrilbar|money_\w+)\.png[^>]*>\s*<span>([\d.,]+[KkMm]?)</span>",
+            segment,
+        ):
+            key = {"ironbar": "iron", "mifrilbar": "mifril", "money_gold": "gold"}.get(icon, icon)
+            mastery[key] = parse_amount(number)
+    return {"params": params, "mastery": mastery}
+
+
 @dataclass
 class Status:
     """Топ-панель: здоровье, энергия, золото, серебро, железо, мифрил, бутылки."""
@@ -1931,45 +1983,7 @@ class Game:
         "currency": "iron", "href": ...}], "mastery": {"iron": 35000, "mifril": 200}}
         """
         self.goto("https://barbars.ru/user/master")
-        html = self.p.content()
-        params: list[dict[str, Any]] = []
-        for m in re.finditer(r"moreParamsPanel:(\w+):upBlock:upLink", html):
-            segment = html[m.end():m.end() + 400]
-            # валюта стоимости: иконка сразу после «за»
-            cost_m = re.search(
-                r"за\s*<span[^>]*>\s*<img[^>]*icons/(\w+)\.png[^>]*/>\s*<span>([\d.,]+[KkMm]?)</span>",
-                segment,
-            )
-            if not cost_m:
-                continue
-            gain_m = re.search(r"\+[^0-9]{0,40}(\d+)", segment)
-            currency = {
-                "money_gold": "gold",
-                "money_silver": "silver",
-                "ironbar": "iron",
-                "mifrilbar": "mifril",
-                "silverbar": "silver",
-            }.get(cost_m.group(1), cost_m.group(1))
-            params.append(
-                {
-                    "param": m.group(1),
-                    "cost": parse_amount(cost_m.group(2)),
-                    "gain": int(gain_m.group(1)) if gain_m else 1,
-                    "currency": currency,
-                    "href": f"moreParamsPanel:{m.group(1)}:upBlock:upLink",
-                }
-            )
-        mastery: dict[str, int] = {}
-        m = re.search(r"upgradeLink", html)
-        if m:
-            segment = html[m.start():m.start() + 500]
-            for icon, number in re.findall(
-                r"icons/(ironbar|mifrilbar|money_\w+)\.png[^>]*/>\s*<span>([\d.,]+[KkMm]?)</span>",
-                segment,
-            ):
-                key = {"ironbar": "iron", "mifrilbar": "mifril", "money_gold": "gold"}.get(icon, icon)
-                mastery[key] = parse_amount(number)
-        return {"params": params, "mastery": mastery}
+        return parse_master_page(self.p.content())
 
     def master_upgrade_options(self) -> list[dict[str, Any]]:
         """Параметры героя, которые можно улучшить: /user/master.

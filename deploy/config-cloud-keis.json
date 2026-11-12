@@ -55,7 +55,7 @@
     "enabled": true,
     "resource": "iron",
     "amount": 1250,
-    "keep_iron": 50000,
+    "keep_iron": 2000,
     "allow_silver": false,
     "keep_silver": 20,
     "check_interval_min": 30,

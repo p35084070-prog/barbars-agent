@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from barbars.driver import parse_amount
-from barbars import pages, rules
+from barbars import driver, pages, rules
 from barbars.llm import ClaudeAdvisor
 
 config = json.loads((Path(__file__).resolve().parents[1] / "config.json").read_text(encoding="utf-8"))
@@ -60,7 +60,10 @@ assert d.action == "altar", d  # починка не требуется — же
 state.iron = 100_000
 d = rules.decide(state, config)
 assert d.action == "altar", d
-state.iron = 10_000  # ниже порога — жертвовать нечего
+state.iron = 10_000  # железа хватает на жертву (keep_iron алтаря 2000)
+d = rules.decide(state, config)
+assert d.action == "altar", d
+state.iron = 2_000  # ниже порога — жертвовать нечего
 state.autocrack_set_today = True  # авторазбор уже настроен
 # Политика «герой всегда активен»: обязательные события важнее башен.
 state.farm_skip = []
@@ -174,7 +177,51 @@ assert d.action == "upgrade_mastery", d
 up_state.mifril = 100  # мифрила не хватает
 d = rules.decide(up_state, config)
 assert d.action == "upgrade", d  # вернулись к прокачке параметра
+# цена мастерства только за железо (низкий уровень героя) — мифрил не нужен
+fw_cfg = json.loads(json.dumps(config))
+fw_cfg["upgrade"]["keep_iron"] = 5000
+up_state.iron = 28_490
+up_state.mifril = 0
+up_state.mastery_cost = {"iron": 3_000}
+d = rules.decide(up_state, fw_cfg)
+assert d.action == "upgrade_mastery", d
+assert d.params["iron"] == 3_000, d
+# железа не хватает с учётом запаса — мастерство не качаем
+up_state.iron = 7_000
+d = rules.decide(up_state, fw_cfg)
+assert d.action != "upgrade_mastery", d
+# без мастерства — качаем параметр за железо
+up_state.mastery_cost = {}
+up_state.iron = 15_000
+d = rules.decide(up_state, fw_cfg)
+assert d.action == "upgrade", d
 print("upgrade: ok")
+
+# --- разбор страницы мастерства (реальная разметка /user/master) ---
+master_html = """
+<div><img width="12" height="12" src="/images/icons/star_default.png" alt="" border="0">
+<a href="../?wicket:interface=:3:upgradeLink::ILinkListener::">Повысить за
+<img width="12" height="12" src="/images/icons/ironbar.png" alt="" border="0"><span>35.0K</span> +
+<img width="12" height="12" src="/images/icons/mifrilbar.png" alt="" border="0"><span>200</span></a></div>
+<div><img width="12" height="12" src="/images/icons/strength.png" alt="" border="0">
+<span>Сила</span>: <span>5037</span>
+[<a href="../?wicket:interface=:3:moreParamsPanel:strength:upBlock:upLink::ILinkListener::">улучшить</a>]
+<span class="info">+<span>24</span></span> за
+<span><img class="internalIcon" alt="" border="0" src="/images/icons/money_gold.png"><span>100</span></span></div>
+"""
+mp = driver.parse_master_page(master_html)
+assert mp["mastery"] == {"iron": 35000, "mifril": 200}, mp
+assert len(mp["params"]) == 1, mp
+assert mp["params"][0]["param"] == "strength", mp
+assert mp["params"][0]["cost"] == 100, mp
+assert mp["params"][0]["currency"] == "gold", mp
+assert mp["params"][0]["gain"] == 24, mp
+# цена мастерства только за железо (низкий уровень героя)
+master_html_iron = master_html.replace(
+    '<img width="12" height="12" src="/images/icons/mifrilbar.png" alt="" border="0"><span>200</span>', "")
+mi = driver.parse_master_page(master_html_iron)
+assert mi["mastery"] == {"iron": 35000}, mi
+print("master page parse: ok")
 
 # --- боевая политика ----------------------------------------------
 cs = rules.CombatState(our_hp=1000, our_energy=3748, enemy_hp=49000,
