@@ -2133,8 +2133,9 @@ class Game:
 
         entered = False
         for label in ("Начать бой!", "Войти в замок", "Войти", "Встать в очередь"):
-            # «Начать бой!» может вести в платный бой (1 золото) — такие пропускаем
-            avoid_gold = label in ("Начать бой!", "Войти")
+            # вход может быть платным (золото) — по правилам игрока золото
+            # не тратим, поэтому такие кнопки пропускаем
+            avoid_gold = True
             if self._click_any_text(label, avoid_gold=avoid_gold):
                 entered = True
                 result["stage"] = label
@@ -2165,15 +2166,21 @@ class Game:
         return result
 
     def _near_gold(self, locator: Any) -> bool:
-        """Рядом с кнопкой входа упоминается золото — значит, действие платное."""
+        """Рядом с кнопкой упоминается золото — значит, действие платное.
+
+        Проверяем и саму кнопку («Бить дракона за 4 золота»), и её блок —
+        иначе платный бой можно было бы случайно начать.
+        """
         try:
             info = locator.evaluate(
                 """el => {
                     const row = el.closest('tr') || el.closest('li') || el.parentElement;
-                    if (!row) return '';
-                    const imgs = Array.from(row.querySelectorAll('img'))
+                    const imgs = Array.from(row ? row.querySelectorAll('img') : [])
                         .map(i => i.getAttribute('src') || '').join(' ');
-                    return (row.innerText || '') + ' ' + imgs;
+                    const own = Array.from(el.querySelectorAll('img'))
+                        .map(i => i.getAttribute('src') || '').join(' ');
+                    return (el.innerText || '') + ' ' +
+                           (row ? (row.innerText || '') : '') + ' ' + imgs + ' ' + own;
                 }"""
             )
         except Exception:

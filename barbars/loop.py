@@ -264,6 +264,22 @@ class Agent:
         state.raid_today = int(self.daily.get("raid", 0) or 0)
         now = time.time()
         state.farm_skip = [name for name, ts in self.farm_cooldown.items() if ts > now]
+        # диагностика: золото и серебро не должны убывать сами по себе
+        prev = getattr(self, "prev_wallet", None)
+        if prev:
+            if state.gold is not None and prev.get("gold") is not None and state.gold < prev["gold"]:
+                self.log(
+                    f"внимание: золото уменьшилось на {prev['gold'] - state.gold} "
+                    f"({prev['gold']} -> {state.gold}) — где-то платный клик",
+                    "WARN",
+                )
+            if state.silver is not None and prev.get("silver") is not None and state.silver < prev["silver"]:
+                self.log(
+                    f"внимание: серебро уменьшилось на {prev['silver'] - state.silver} "
+                    f"({prev['silver']} -> {state.silver})",
+                    "WARN",
+                )
+        self.prev_wallet = {"gold": state.gold, "silver": state.silver}
         self._check_altar(state)
         self._check_market(state)
         self._check_auction(state)
