@@ -1193,6 +1193,8 @@ class Agent:
         wait_sec = int(decision.params.get("wait_sec", 120))
         retry = float(self.config.get("farm", {}).get("retry_min", 30))
         max_streak = int(self.config.get("farm", {}).get("max_streak", 3))
+        # каждая попытка события считается: после N попыток — башня (фон)
+        self.activity_fights += 1
         result = self.game.enter_activity(url, wait_sec=wait_sec)
         if not result.get("ok"):
             note = result.get("note") or result.get("stage") or "недоступно"
@@ -1200,6 +1202,7 @@ class Agent:
             self.farm_streak[name] = 0
             self.log(f"событие «{name}» недоступно: {note} (пропустим {retry} мин)", "INFO")
             self.game.click_text("Покинуть бой")
+            self._maybe_tower()
             return
         outcome = self._fight_loop()
         self.fights_done += 1
@@ -1212,13 +1215,16 @@ class Agent:
             self.farm_cooldown[name] = time.time() + retry * 60
             self.farm_streak[name] = 0
             self.log(f"событие «{name}»: пауза {retry} мин, идём к следующему")
-        # Башня — постоянный фон: между событиями обязательно идём на неё.
-        self.activity_fights += 1
+        self._maybe_tower()
+
+    def _maybe_tower(self) -> None:
+        """Башня — постоянный фон: между событиями обязательно идём на неё."""
         tower_every = int(self.config.get("farm", {}).get("tower_every", 0) or 0)
-        if tower_every and self.activity_fights % tower_every == 0:
-            rounds = int(self.config.get("tower_farm", {}).get("rounds", 3))
-            self.log("чередуем: башня между событиями")
-            self._do_tower(rules.Decision("tower", params={"rounds": rounds}))
+        if not tower_every or self.activity_fights % tower_every:
+            return
+        rounds = int(self.config.get("tower_farm", {}).get("rounds", 3))
+        self.log("чередуем: башня между событиями")
+        self._do_tower(rules.Decision("tower", params={"rounds": rounds}))
 
     def _do_repair(self) -> None:
         hero_id = self.game.hero_id

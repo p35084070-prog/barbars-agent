@@ -99,7 +99,7 @@
   },
   "farm": {
     "enabled": true,
-    "wait_sec": 180,
+    "wait_sec": 120,
     "retry_min": 15,
     "max_streak": 3,
     "tower_every": 3,
