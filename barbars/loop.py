@@ -769,14 +769,15 @@ class Agent:
                 # во время попытки зал отдаёт участнику боевую панель
                 self.log("рейд: мы в бою с боссом")
                 self._raid_fight()
-                return
+                # после боя ждём отката и пробуем снова — цикл «откат → убили»
+                continue
             if info.get("closed"):
                 # идёт попытка (или откат): зал нам боевую панель не отдал
                 closed_checks += 1
                 if closed_checks % 4 == 1 and self.game.join_current_fight(url):
                     self.log("рейд: вошли в общий бой")
                     self._raid_fight()
-                    return
+                    continue
                 time.sleep(check_sec)
                 continue
             closed_checks = 0
@@ -792,7 +793,7 @@ class Agent:
                     if "Покинуть бой" not in self.game.body_text():
                         self.game.join_current_fight(url)
                     self._raid_fight()
-                    return
+                    continue
             time.sleep(check_sec)
         self.log("рейд: окно вышло, ждём следующего")
 
