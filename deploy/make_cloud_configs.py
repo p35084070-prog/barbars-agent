@@ -84,3 +84,19 @@ patch_actions(
     "firewhite",
     "state/firewhite/daily.json",
 )
+patch(
+    "config-vagojan.json",
+    "config-cloud-vagojan.json",
+    "profile-vagojan",
+    "logs/vagojan",
+    "vagojan",
+    "vagojan.txt",
+    "state/vagojan/daily.json",
+)
+patch_actions(
+    "config-vagojan.json",
+    "config-actions-vagojan.json",
+    "profile-vagojan",
+    "vagojan",
+    "state/vagojan/daily.json",
+)

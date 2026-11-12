@@ -23,6 +23,7 @@ ok-session*.b64
 # Локальные конфиги (с путями к рабочему столу) — в облаке свои
 config.json
 config-firewhite.json
+config-vagojan.json
 
 # Разобранные страницы игры и временные дампы
 knowledge/discovered/
