@@ -63,6 +63,10 @@ def main() -> int:
                 link_text = " ".join(re.sub("<[^>]+>", " ", m.group(2)).split())
                 if any(k in link_text for k in ("бой", "Штурм", "вступи", "начать", "Обновить", "В бой")):
                     print("   ссылка:", link_text[:50], "->", m.group(1)[:70])
+            # рюкзак и сундук: хватает ли места для дропа
+            counts = g.bag_counts()
+            print("   рюкзак:", counts.get("bag_used"), "/", counts.get("bag_total"),
+                  "| сундук:", counts.get("chest_used"), "/", counts.get("chest_total"))
         finally:
             g.close()
     return 0

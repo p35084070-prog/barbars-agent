@@ -1972,6 +1972,17 @@ class Game:
                 return True
         return False
 
+    def _combat_costs_gold(self) -> bool:
+        """Кнопка боя рядом с ценой в золоте — такой бой платный."""
+        for link in self.p.locator("a").all():
+            try:
+                text = (link.inner_text() or "").strip()
+            except Exception:
+                continue
+            if text.startswith(("Бить", "Атаковать", "Ударить", "Жечь")) and self._near_gold(link):
+                return True
+        return False
+
     def enter_activity(self, url: str, wait_sec: int = 90) -> dict[str, Any]:
         """Зайти в активность и дождаться боя.
 
@@ -1985,12 +1996,17 @@ class Game:
         result: dict[str, Any] = {"ok": False, "stage": "", "note": ""}
         self.goto(url)
         if self.has_combat_button():
+            if self._combat_costs_gold():
+                result["note"] = "бой платный (золото) — не тратим"
+                return result
             result.update(ok=True, stage="fight")
             return result
 
         entered = False
         for label in ("Начать бой!", "Войти в замок", "Войти", "Встать в очередь"):
-            if self._click_any_text(label):
+            # «Начать бой!» может вести в платный бой (1 золото) — такие пропускаем
+            avoid_gold = label in ("Начать бой!", "Войти")
+            if self._click_any_text(label, avoid_gold=avoid_gold):
                 entered = True
                 result["stage"] = label
                 break
@@ -2019,11 +2035,29 @@ class Game:
         result["note"] = "бой не начался за отведённое время"
         return result
 
-    def _click_any_text(self, label: str) -> bool:
+    def _near_gold(self, locator: Any) -> bool:
+        """Рядом с кнопкой входа упоминается золото — значит, действие платное."""
+        try:
+            info = locator.evaluate(
+                """el => {
+                    const row = el.closest('tr') || el.closest('li') || el.parentElement;
+                    if (!row) return '';
+                    const imgs = Array.from(row.querySelectorAll('img'))
+                        .map(i => i.getAttribute('src') || '').join(' ');
+                    return (row.innerText || '') + ' ' + imgs;
+                }"""
+            )
+        except Exception:
+            return False
+        text = str(info or "").lower()
+        return "money_gold" in text or "зол" in text
+
+    def _click_any_text(self, label: str, avoid_gold: bool = False) -> bool:
         """Кликнуть по элементу с текстом — не только <a>, но и span/div/button.
 
         В игре кнопки входа («Встать в очередь», «Войти в замок») — обычные
-        <span>/<div> с обработчиком, а не ссылки.
+        <span>/<div> с обработчиком, а не ссылки. При `avoid_gold` платные
+        кнопки (рядом золото) пропускаются — золото тратить нельзя.
         """
         for tag in ("a", "button", "span", "div", "li", "input"):
             try:
@@ -2038,6 +2072,8 @@ class Game:
                 except Exception:
                     continue
                 if label not in text or len(text) > len(label) + 40:
+                    continue
+                if avoid_gold and self._near_gold(target):
                     continue
                 try:
                     target.scroll_into_view_if_needed(timeout=3000)
