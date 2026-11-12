@@ -69,13 +69,19 @@ JSESSION_RE = re.compile(r"jsessionid=([A-Za-z0-9]+)")
 
 
 def load_session(raw: str) -> tuple[list[dict], str]:
-    """Принимает base64(gzip(json)) либо готовый JSON с cookie."""
-    raw = (raw or "").strip()
+    """Принимает base64(gzip(json)) либо готовый JSON с cookie.
+
+    Сектет в CI может прийти с BOM или лишними переводами строк — поэтому
+    чистим строку перед разбором и дополняем base64 до кратности 4.
+    """
+    raw = (raw or "").strip().lstrip("\ufeff").strip()
     if not raw:
         return [], IPHONE_UA
     if raw.startswith("{"):
         payload = json.loads(raw)
     else:
+        raw = raw.replace("\n", "").replace("\r", "")
+        raw += "=" * (-len(raw) % 4)
         payload = json.loads(gzip.decompress(base64.b64decode(raw)))
     return payload.get("cookies", []), payload.get("ua", IPHONE_UA)
 
