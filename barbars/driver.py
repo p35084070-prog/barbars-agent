@@ -1224,25 +1224,38 @@ class Game:
         """Активировать свиток (или прочитать книгу).
 
         Свиток активируется ссылками `scrollUse4Link` (на 4 часа) и
-        `scrollUseAllLink` (на все 24 часа). Если цена не нулевая — золото не
-        тратим (правило игрока), такой свиток пропускаем.
+        `scrollUseAllLink` (на все 24 часа). При активном премиуме активация
+        бесплатна (цена 0) — тогда активируем сразу. Обе опции проверяются по
+        очереди: если одна платная, может быть бесплатная другая. Если цену не
+        удалось прочитать, а рядом есть золото — не рискуем (золото не тратим).
         """
         self.goto(f"https://barbars.ru/item/id/{item_id}")
         html = self.p.content()
+        notes: list[str] = []
         for marker, hours in (("scrollUseAllLink", "24 часа"), ("scrollUse4Link", "4 часа")):
             m = re.search(rf'href="([^"]*{marker}[^"]*)"', html)
             if not m:
                 continue
-            tail = html[m.end():m.end() + 400]
+            tail = html[m.end():m.end() + 500]
             price_m = re.search(r"цена[:\s]*(?:<[^>]+>\s*)*<span[^>]*>([\d\s]+)</span>", tail)
-            price = int(re.sub(r"\D", "", price_m.group(1)) or 0) if price_m else 0
-            if only_free and price > 0:
-                return False, f"цена {price} зол. — не тратим золото"
+            if price_m:
+                price = int(re.sub(r"\D", "", price_m.group(1)) or 0)
+            elif "money_gold" in tail or "зол" in tail.lower():
+                price = -1  # цена не распознана, но золото рядом есть — не рискуем
+            else:
+                price = 0
+            if only_free and price != 0:
+                reason = "цена не распознана" if price < 0 else f"цена {price} зол."
+                notes.append(f"{hours}: {reason}")
+                continue
             if self.click_href(marker):
                 self._settle()
                 self.confirm_if_needed()
                 self._settle()
                 return True, f"активирован на {hours}"
+            notes.append(f"{hours}: не сработало")
+        if notes:
+            return False, "; ".join(notes) + " — не тратим золото"
         # книга: «прочитать книгу»
         if "bookOpenLink" in html:
             if self.click_href("bookOpenLink"):

@@ -296,5 +296,50 @@ class TestFarmRule(unittest.TestCase):
         self.assertIsNone(rules._pick_farm(state, self.config))
 
 
+class TestAlwaysActive(unittest.TestCase):
+    """Политика «герой всегда активен»: события → башни, ротация, башня фоном."""
+
+    MANDATORY = ("Арена", "Турниры", "Выживание", "Подземелья (Время)",
+                 "Великие битвы", "Замок: Зеркало боли", "Замок: Колыбель жизни",
+                 "Битва героев")
+
+    def _configs(self) -> list[tuple[str, dict]]:
+        out = []
+        for name in ("config.json", "config-firewhite.json"):
+            path = ROOT / name
+            if path.exists():
+                out.append((name, json.loads(path.read_text(encoding="utf-8"))))
+        return out
+
+    def test_both_heroes_have_same_mandatory_modes(self) -> None:
+        for name, cfg in self._configs():
+            names = [e["name"] for e in cfg["farm"]["events"]]
+            for mode in self.MANDATORY:
+                self.assertIn(mode, names, f"{name}: нет обязательного режима {mode}")
+
+    def test_both_heroes_farm_towers(self) -> None:
+        for name, cfg in self._configs():
+            self.assertTrue(cfg.get("tower_farm", {}).get("enabled"), f"{name}: башни выключены")
+
+    def test_rotation_is_configured(self) -> None:
+        for name, cfg in self._configs():
+            farm = cfg.get("farm", {})
+            self.assertGreaterEqual(int(farm.get("max_streak", 0)), 1, f"{name}: нет ротации")
+            self.assertGreaterEqual(int(farm.get("retry_min", 0)), 1, f"{name}: нет паузы")
+            self.assertGreaterEqual(int(farm.get("tower_every", 0)), 1, f"{name}: башня не чередуется")
+
+    def test_events_above_towers(self) -> None:
+        cfg = json.loads((ROOT / "config.json").read_text(encoding="utf-8"))
+        state = rules.GameState(level=20, iron=10_000, free_dungeon=0, free_duel=0)
+        state.autocrack_set_today = True
+        state.farm_skip = []
+        decision = rules.decide(state, cfg)
+        self.assertEqual(decision.action, "activity")
+        # события на паузе — башня
+        state.farm_skip = [e["name"] for e in cfg["farm"]["events"]]
+        decision = rules.decide(state, cfg)
+        self.assertEqual(decision.action, "tower")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

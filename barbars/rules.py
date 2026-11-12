@@ -365,8 +365,15 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if market is not None:
         return market
 
+    # 9g. Фарм-события: арена, турниры, выживание, подземелья, великие битвы,
+    #     замки. По требованию игрока герой должен быть ПОСТОЯННО в бою, поэтому
+    #     события идут выше башен: сначала обязательные события, башни — фоном.
+    farm = _pick_farm(state, config)
+    if farm is not None:
+        return farm
+
     # 10. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
-    #     Основной способ прокачки для новых героев (у них нет клана и подземелий).
+    #     Это постоянный фон: если события недоступны — герой идёт на башни.
     tower = _pick_tower(state, config)
     if tower is not None:
         return tower
@@ -384,13 +391,6 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
         keep = int(donate_cfg.get("keep_iron", 500_000))
         if (state.iron or 0) - keep >= chunk:
             return Decision("donate", target="iron", params={"amount": chunk}, reason="вкладываем излишки железа в клан")
-
-    # 12. Фарм-события: все активности, где можно фармить бесплатно
-    #     (клановые боссы, арена, выживание, замки, башни, битва героев).
-    #     Стоят ниже разовых дел (опыт, авторазбор, продажа), чтобы они не терялись.
-    farm = _pick_farm(state, config)
-    if farm is not None:
-        return farm
 
     # 13. Ничего не делаем — ждём регенерации/обновления лимитов.
     no_fights = state.free_dungeon <= 0 and state.free_duel <= 0

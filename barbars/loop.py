@@ -40,6 +40,10 @@ class Agent:
         self.market_checked_at: float = 0.0
         # фарм-события, которые не удалось запустить (имя -> время до повторной попытки)
         self.farm_cooldown: dict[str, float] = {}
+        # сколько боёв подряд прошло в каждом событии (нужно для ротации)
+        self.farm_streak: dict[str, int] = {}
+        # счётчик боёв в событиях: по нему чередуем башню, чтобы она была фоном
+        self.activity_fights = 0
         # колодец удачи и мудрец — тоже кэшируем, чтобы не ходить на страницы каждый цикл
         self.well_cache: dict[str, Any] = {}
         self.well_checked_at: float = 0.0
@@ -1170,24 +1174,43 @@ class Agent:
             self.log(f"аукцион: не удалось снять лот {resource}", "WARN")
 
     def _do_activity(self, decision: rules.Decision) -> None:
-        """Фарм-событие: зайти в активность и подраться, если противник появился."""
+        """Фарм-событие: зайти в активность и подраться, если противник появился.
+
+        Чтобы герой не застревал в одном режиме, после `farm.max_streak` боёв
+        подряд событие уходит на паузу (retry_min) — так очередь доходит до
+        башен и других обязательных активностей.
+        """
         name = decision.target or "событие"
         url = decision.params.get("url", "")
         wait_sec = int(decision.params.get("wait_sec", 120))
+        retry = float(self.config.get("farm", {}).get("retry_min", 30))
+        max_streak = int(self.config.get("farm", {}).get("max_streak", 3))
         result = self.game.enter_activity(url, wait_sec=wait_sec)
         if not result.get("ok"):
             note = result.get("note") or result.get("stage") or "недоступно"
-            retry = float(self.config.get("farm", {}).get("retry_min", 30))
             self.farm_cooldown[name] = time.time() + retry * 60
+            self.farm_streak[name] = 0
             self.log(f"событие «{name}» недоступно: {note} (пропустим {retry} мин)", "INFO")
             self.game.click_text("Покинуть бой")
             return
-        self.farm_cooldown.pop(name, None)
-        self.log(f"событие «{name}»: бой начался ({result.get('stage')})")
         outcome = self._fight_loop()
         self.fights_done += 1
-        self.log(f"событие «{name}»: бой завершён — {outcome}")
+        self.farm_cooldown.pop(name, None)
+        streak = self.farm_streak.get(name, 0) + 1
+        self.farm_streak[name] = streak
+        self.log(f"событие «{name}»: бой завершён — {outcome} ({streak}/{max_streak})")
         self.game.click_text("Покинуть бой")
+        if max_streak and streak >= max_streak:
+            self.farm_cooldown[name] = time.time() + retry * 60
+            self.farm_streak[name] = 0
+            self.log(f"событие «{name}»: пауза {retry} мин, идём к следующему")
+        # Башня — постоянный фон: между событиями обязательно идём на неё.
+        self.activity_fights += 1
+        tower_every = int(self.config.get("farm", {}).get("tower_every", 0) or 0)
+        if tower_every and self.activity_fights % tower_every == 0:
+            rounds = int(self.config.get("tower_farm", {}).get("rounds", 3))
+            self.log("чередуем: башня между событиями")
+            self._do_tower(rules.Decision("tower", params={"rounds": rounds}))
 
     def _do_repair(self) -> None:
         hero_id = self.game.hero_id

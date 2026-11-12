@@ -29,6 +29,11 @@
     "login_then_play": true,
     "cycle_max_sec": 300
   },
+  "tower_farm": {
+    "enabled": true,
+    "max_level": 0,
+    "rounds": 4
+  },
   "altar": {
     "enabled": true,
     "resource": "iron",
@@ -91,24 +96,30 @@
   },
   "farm": {
     "enabled": true,
-    "wait_sec": 120,
-    "retry_min": 30,
+    "wait_sec": 180,
+    "retry_min": 15,
+    "max_streak": 3,
+    "tower_every": 3,
     "events": [
-      {
-        "name": "Клановый босс: Мифический дракон",
-        "url": "https://barbars.ru/game/dragonDungeon"
-      },
-      {
-        "name": "Клановый босс: Святилище предков",
-        "url": "https://barbars.ru/game/greatBoss"
-      },
       {
         "name": "Арена",
         "url": "https://barbars.ru/game/arena"
       },
       {
+        "name": "Турниры",
+        "url": "https://barbars.ru/game/contests"
+      },
+      {
         "name": "Выживание",
         "url": "https://barbars.ru/game/survival"
+      },
+      {
+        "name": "Подземелья (Время)",
+        "url": "https://barbars.ru/game/dungeons"
+      },
+      {
+        "name": "Великие битвы",
+        "url": "https://barbars.ru/games/greats"
       },
       {
         "name": "Замок: Зеркало боли",
@@ -119,12 +130,16 @@
         "url": "https://barbars.ru/castle/8"
       },
       {
-        "name": "Башни: карта",
-        "url": "https://barbars.ru/game/towers/map"
-      },
-      {
         "name": "Битва героев",
         "url": "https://barbars.ru/game/battle"
+      },
+      {
+        "name": "Клановый босс: Мифический дракон",
+        "url": "https://barbars.ru/game/dragonDungeon"
+      },
+      {
+        "name": "Клановый босс: Святилище предков",
+        "url": "https://barbars.ru/game/greatBoss"
       }
     ]
   },

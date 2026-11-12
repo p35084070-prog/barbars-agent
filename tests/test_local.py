@@ -62,9 +62,15 @@ d = rules.decide(state, config)
 assert d.action == "altar", d
 state.iron = 10_000  # ниже порога — жертвовать нечего
 state.autocrack_set_today = True  # авторазбор уже настроен
-state.farm_skip = [e["name"] for e in config["farm"]["events"]]  # фарм-события отключены
+# Политика «герой всегда активен»: обязательные события важнее башен.
+state.farm_skip = []
 d = rules.decide(state, config)
-assert d.action == "wait", d
+assert d.action == "activity", d
+assert d.target == config["farm"]["events"][0]["name"], d
+# все события на паузе — идём на башни (постоянный фон)
+state.farm_skip = [e["name"] for e in config["farm"]["events"]]
+d = rules.decide(state, config)
+assert d.action == "tower", d
 # бонус не понижаем: при текущем +25% железо (+12,5%) не предлагаем
 state.iron = 1_000_000
 state.altar_bonus = 25.0
