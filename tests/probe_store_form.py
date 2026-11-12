@@ -1,44 +1,59 @@
-"""Форма выставления вещи на «Витрину клана»: панель toPublicStoreLink (без отправки)."""
+"""Проба продажи вещи: форма цены на витрине и разделы аукциона вещей."""
 from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
-from urllib.parse import urljoin
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from game_state import DESKTOP, login, text_of  # noqa: E402
+from barbars.driver import Game  # noqa: E402
+from game_state import DESKTOP  # noqa: E402
 
 BASE = "https://barbars.ru"
 
 
-def main() -> int:
-    lines = [l.strip().lstrip("\ufeff") for l in (DESKTOP / "barbars-firewhite-credentials.txt").read_text(encoding="utf-8-sig").splitlines()]
+def creds(name: str) -> tuple[str, str]:
+    f = DESKTOP / name
+    lines = [l.strip().lstrip("\ufeff") for l in f.read_text(encoding="utf-8-sig").splitlines()]
     lines = [l for l in lines if l]
-    s = login(lines[0], lines[1])
-    rack = s.get(f"{BASE}/user/rack", timeout=30).text
-    ids = re.findall(r'href="\.\./item/id/(\d+)"', rack)
-    if not ids:
-        print("нет вещей")
-        return 1
-    item_id = ids[0]
-    page = s.get(f"{BASE}/item/id/{item_id}", timeout=30).text
-    print("вещь:", " ".join(text_of(page).split())[:200])
-    m = re.search(r'href="([^"]*toPublicStoreLink[^"]*)"', page)
-    if not m:
-        print("ссылки toPublicStoreLink нет")
-        return 1
-    url = urljoin(f"{BASE}/item/id/{item_id}", m.group(1).replace("&amp;", "&"))
-    print("открываем:", url)
-    res = s.get(url, timeout=30, headers={"Referer": f"{BASE}/item/id/{item_id}"})
-    t = " ".join(text_of(res.text).split())
-    print("ПАНЕЛЬ:", t[:900])
-    print("поля ввода:", re.findall(r"<input[^>]*name=[\"']([^\"']+)[\"'][^>]*>", res.text)[:20])
-    print("select:", re.findall(r"<select[^>]*name=[\"']([^\"']+)[\"']", res.text)[:10])
-    for name in re.findall(r"<input[^>]*name=[\"']([^\"']+)[\"'][^>]*value=[\"']([^\"']*)[\"']", res.text)[:15]:
-        print("   input:", name)
-    print("кнопки:", re.findall(r">([^<>]{2,40})</(?:a|button|input)>", res.text)[:20])
+    return lines[0], lines[1]
+
+
+def main() -> int:
+    user, password = creds("barbars-firewhite-credentials.txt")
+    cfg = {"base_url": BASE, "profile_dir": "profile-probe-store", "headless": True,
+           "auth": {"credentials_file": str(DESKTOP / "barbars-firewhite-credentials.txt")},
+           "humanize": {"enabled": False}}
+    g = Game(cfg, "profile-probe-store")
+    try:
+        g.start()
+        g.goto(f"{BASE}/login")
+        g.p.fill("input[name='login']", user, timeout=8000)
+        g.p.fill("input[name='password']", password, timeout=8000)
+        g.p.click("input[type='submit'], button:has-text('Войти')", timeout=8000)
+        g.p.wait_for_load_state("domcontentloaded", timeout=20000)
+        print("авторизован:", g.is_authenticated())
+
+        # 1. Клик «на витрину» на дубликате (Перчатки Атланта уже на витрине — берём из рюкзака)
+        g.goto(f"{BASE}/item/id/2092650299")
+        print("\n--- страница вещи, есть 'на витрину':", "toPublicStoreLink" in g.p.content())
+        # 2. Страницы аукциона вещей
+        for url in (f"{BASE}/trade/auctions", f"{BASE}/trade/auctions/0/1",
+                    f"{BASE}/trade/auction", f"{BASE}/trade/auction/items"):
+            try:
+                g.goto(url)
+                txt = " ".join(g.body_text().split())
+                print(f"\n### {url}\n{txt[:600]}")
+                links = sorted(set(re.findall(r'href="([^"#]+)"', g.p.content())))
+                for l in links:
+                    if "trade" in l or "auction" in l:
+                        print("   link:", l)
+            except Exception as exc:
+                print(f"\n### {url} ERROR {exc}")
+    finally:
+        g.close()
     return 0
 
 
