@@ -40,7 +40,7 @@ jobs:
           KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
           KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
           FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
-          FW_PASS: ${{ secrets.BARBARS_FIREWHILE_PASSWORD }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
         run: |
           mkdir -p credentials
           printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
