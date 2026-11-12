@@ -179,6 +179,16 @@ def active_clan_quest(game: Game) -> str:
     return ""
 
 
+def quest_expired(game: Game) -> bool:
+    """Активное задание просрочено («Время истекло»).
+
+    Такое задание надо отменить, иначе агент не возьмёт новое — и не будет
+    ни награды, ни опыта за задание.
+    """
+    text = " ".join(game.body_text().split())
+    return "Время истекло" in text
+
+
 def talents(game: Game) -> list[Talent]:
     """Список талантов на /user/stances."""
     out: list[Talent] = []

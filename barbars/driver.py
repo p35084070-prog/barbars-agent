@@ -862,6 +862,19 @@ class Game:
         self._settle()
         return True
 
+    def cancel_clan_quest(self) -> bool:
+        """Отменить текущее задание («Отменить задание»)."""
+        locator = self.p.locator(
+            "a:has-text('Отменить задание'), button:has-text('Отменить задание')")
+        if locator.count() == 0:
+            return False
+        try:
+            locator.first.click(timeout=8000)
+        except Exception:
+            return False
+        self._settle()
+        return True
+
     def spend_talent(self, talent_name: str) -> tuple[bool, str]:
         """Потратить очко таланта.
 
@@ -2174,10 +2187,9 @@ class Game:
 
         entered = False
         for label in ("Начать бой!", "Войти в замок", "Войти", "Встать в очередь"):
-            # вход может быть платным (золото) — по правилам игрока золото
-            # не тратим, поэтому такие кнопки пропускаем
-            avoid_gold = True
-            if self._click_any_text(label, avoid_gold=avoid_gold):
+            # вход может быть платным (золото или серебро) — по правилам игрока
+            # за вход не платим, поэтому такие кнопки пропускаем
+            if self._click_any_text(label, avoid_gold=True, avoid_paid=True):
                 entered = True
                 result["stage"] = label
                 break
@@ -2212,29 +2224,42 @@ class Game:
         Проверяем и саму кнопку («Бить дракона за 4 золота»), и её блок —
         иначе платный бой можно было бы случайно начать.
         """
+        return self._near_paid(locator, ("money_gold", "зол"))
+
+    def _near_paid(self, locator: Any, marks: tuple[str, ...] = ("money_gold", "money_silver", "зол", "сер")) -> bool:
+        """Рядом с кнопкой — цена в золоте или серебре: действие платное.
+
+        Смотрим саму кнопку и только компактный блок вокруг неё (tr/li/span):
+        если взять большой родительский div, то рядом всегда найдётся счётчик
+        в шапке страницы и все входы будут считаться платными.
+        """
         try:
             info = locator.evaluate(
                 """el => {
-                    const row = el.closest('tr') || el.closest('li') || el.parentElement;
-                    const imgs = Array.from(row ? row.querySelectorAll('img') : [])
+                    const compact = el.closest('tr') || el.closest('li')
+                        || (el.parentElement
+                            && ['SPAN', 'BUTTON', 'A', 'TD'].includes(el.parentElement.tagName)
+                            ? el.parentElement : null);
+                    const imgs = Array.from(compact ? compact.querySelectorAll('img') : [])
                         .map(i => i.getAttribute('src') || '').join(' ');
                     const own = Array.from(el.querySelectorAll('img'))
                         .map(i => i.getAttribute('src') || '').join(' ');
                     return (el.innerText || '') + ' ' +
-                           (row ? (row.innerText || '') : '') + ' ' + imgs + ' ' + own;
+                           (compact ? (compact.innerText || '') : '') + ' ' + imgs + ' ' + own;
                 }"""
             )
         except Exception:
             return False
         text = str(info or "").lower()
-        return "money_gold" in text or "зол" in text
+        return any(mark.lower() in text for mark in marks)
 
-    def _click_any_text(self, label: str, avoid_gold: bool = False) -> bool:
+    def _click_any_text(self, label: str, avoid_gold: bool = False, avoid_paid: bool = False) -> bool:
         """Кликнуть по элементу с текстом — не только <a>, но и span/div/button.
 
         В игре кнопки входа («Встать в очередь», «Войти в замок») — обычные
         <span>/<div> с обработчиком, а не ссылки. При `avoid_gold` платные
-        кнопки (рядом золото) пропускаются — золото тратить нельзя.
+        кнопки (рядом золото) пропускаются — золото тратить нельзя;
+        `avoid_paid` — то же для серебра.
         """
         for tag in ("a", "button", "span", "div", "li", "input"):
             try:
@@ -2249,6 +2274,8 @@ class Game:
                 except Exception:
                     continue
                 if label not in text or len(text) > len(label) + 40:
+                    continue
+                if avoid_paid and self._near_paid(target):
                     continue
                 if avoid_gold and self._near_gold(target):
                     continue

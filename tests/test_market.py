@@ -188,7 +188,7 @@ class TestExpRule(unittest.TestCase):
         state = rules.GameState()
         state.iron = 500000
         state.exp_options = [{"percent": 5.0, "currency": "iron", "amount": 10000}]
-        state.exp_buys_today = 1
+        state.exp_buys_today = int(self.config.get("exp", {}).get("max_per_day", 1))
         decision = rules.decide(state, self.config)
         self.assertNotEqual(decision.action, "exp")
 
@@ -302,7 +302,7 @@ class TestFarmRule(unittest.TestCase):
 class TestAlwaysActive(unittest.TestCase):
     """Политика «герой всегда активен»: события → башни, ротация, башня фоном."""
 
-    MANDATORY = ("Арена", "Турниры", "Выживание", "Подземелья (Время)",
+    MANDATORY = ("Арена", "Турнир героев", "Выживание", "Подземелья (Время)",
                  "Великие битвы", "Замок: Зеркало боли", "Замок: Колыбель жизни",
                  "Битва героев")
 

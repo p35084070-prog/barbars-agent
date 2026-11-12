@@ -270,16 +270,21 @@ class Agent:
         # предохранитель: аномальная убыль железа (было 505 000 -> стало 281
         # за один клик по подарку колодца) — траты блокируем на час
         prev_iron = getattr(self, "prev_iron", None)
+        expected = int(getattr(self, "expected_spend", 0) or 0)
+        self.expected_spend = 0
         state.spend_blocked = self.block_spend_until > now
-        if prev_iron is not None and state.iron is not None and prev_iron - state.iron > 1000:
-            self.block_spend_until = now + 3600
-            state.spend_blocked = True
-            self.log(
-                f"внимание: железо упало на {prev_iron - state.iron} "
-                f"({prev_iron} -> {state.iron}) — траты заблокированы на час",
-                "ERROR",
-            )
-        if state.iron is not None:
+        if prev_iron is not None and state.iron is not None:
+            delta = prev_iron - state.iron
+            # плановые траты (опыт у мудреца, мастерство, параметры, алтарь)
+            # учитываем отдельно — аномалией считаем только сверх них
+            if delta - expected > 1000:
+                self.block_spend_until = now + 3600
+                state.spend_blocked = True
+                self.log(
+                    f"внимание: железо упало на {delta} "
+                    f"({prev_iron} -> {state.iron}) — траты заблокированы на час",
+                    "ERROR",
+                )
             self.prev_iron = state.iron
         # диагностика: золото и серебро не должны убывать сами по себе
         prev = getattr(self, "prev_wallet", None)
@@ -373,6 +378,8 @@ class Agent:
             self._do_talent(state)
         elif decision.action == "quest":
             self._do_quest(decision)
+        elif decision.action == "cancel_quest":
+            self._do_cancel_quest()
         elif decision.action == "fight":
             self._do_fight(decision)
         elif decision.action == "donate":
@@ -1135,6 +1142,7 @@ class Agent:
         """Повышение уровня мастерства: железо + мифрил (постоянный бонус)."""
         iron = int(decision.params.get("iron", 0))
         mifril = int(decision.params.get("mifril", 0))
+        self.expected_spend = iron
         if self.game.upgrade_mastery_level():
             self._bump("upgrade")
             self.log(f"прокачка: уровень мастерства повышен (за {iron} железа и {mifril} мифрила)")
@@ -1150,6 +1158,7 @@ class Agent:
         if not href:
             self.log("прокачка: нет ссылки на улучшение", "WARN")
             return
+        self.expected_spend = cost
         if self.game.upgrade_master_param(href):
             self._bump("upgrade")
             self.log(f"прокачка: параметр {param} улучшен за {cost} железа")
@@ -1337,6 +1346,7 @@ class Agent:
     def _do_exp(self, decision: rules.Decision) -> None:
         """Покупка опыта у мудреца за железо (золото не трогаем)."""
         amount = int(decision.params.get("amount", 0))
+        self.expected_spend = amount
         result = self.game.buy_exp_with_iron(amount)
         if result.get("ok"):
             self._bump("exp")
@@ -1472,6 +1482,8 @@ class Agent:
         """Пожертвование в алтарь клана — бонус ко всем параметрам."""
         resource = decision.target or "iron"
         amount = decision.params.get("amount")
+        if resource == "iron":
+            self.expected_spend = int(amount or 0)
         result = self.game.activate_altar(resource=resource, amount=amount)
         if result.get("ok"):
             self.log(
@@ -1517,6 +1529,17 @@ class Agent:
             self.log(f"талант {talent.name} не изучен: {detail}")
         self.log("не удалось потратить очко таланта — вернусь к талантам позже")
         self.talent_blocked_until = time.time() + 1800
+
+    def _do_cancel_quest(self) -> None:
+        """Отменить просроченное клановое задание — иначе новое не взять."""
+        if not self.game.guild_id:
+            self.log("нет клана — отменять нечего")
+            return
+        self.game.goto(f"guild/quests/0/{self.game.guild_id}")
+        if self.game.cancel_clan_quest():
+            self.log("задание просрочено — отменили, берём новое")
+        else:
+            self.log("не удалось отменить просроченное задание", "WARN")
 
     def _do_quest(self, decision: rules.Decision) -> None:
         if not self.game.guild_id:

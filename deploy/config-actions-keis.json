@@ -73,7 +73,7 @@
     }
   },
   "market": {
-    "enabled": false,
+    "enabled": true,
     "resources": [
       "mifril",
       "bottles"
@@ -97,7 +97,7 @@
   },
   "exp": {
     "enabled": true,
-    "max_per_day": 1,
+    "max_per_day": 2,
     "keep_iron": 100000,
     "min_iron": 5000,
     "check_interval_min": 60
@@ -124,8 +124,8 @@
         "url": "https://barbars.ru/game/arena"
       },
       {
-        "name": "Турниры",
-        "url": "https://barbars.ru/game/contests"
+        "name": "Турнир героев",
+        "url": "https://barbars.ru/game/tournament/0/1"
       },
       {
         "name": "Выживание",
@@ -156,7 +156,7 @@
   "fight": {
     "repair_enabled": true,
     "repair_reserve": null,
-    "hp_flee_threshold": 30,
+    "hp_flee_threshold": 15,
     "use_potions_below_hp": 25,
     "energy_attack_threshold": 0.85,
     "energy_wait_sec": 2,

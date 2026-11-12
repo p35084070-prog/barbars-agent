@@ -54,6 +54,8 @@ class GameState:
     targets: list[pages.FightTarget] = field(default_factory=list)
     quests: list[pages.ClanQuest] = field(default_factory=list)
     active_quest: str = ""
+    # активное задание просрочено («Время истекло») — его надо отменить
+    quest_expired: bool = False
     # торговля
     market_prices: dict[str, float] = field(default_factory=dict)  # серебро за единицу
     market_checked: bool = False
@@ -192,6 +194,8 @@ def collect_state(game: Game, config: dict[str, Any]) -> GameState:
         game.goto(f"https://barbars.ru/guild/quests/0/{game.guild_id}")
         state.active_quest = pages.active_clan_quest(game)
         state.quests = pages.clan_quests(game)
+        # просроченное задание надо отменить, иначе новое не взять
+        state.quest_expired = pages.quest_expired(game)
     return state
 
 
@@ -268,6 +272,9 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
         return Decision("talent", reason=f"не потрачено очков талантов: {state.talent_points}")
 
     # 5. Клановое задание — если активного нет, берём подходящее.
+    #    Просроченное («Время истекло») сначала отменяем: иначе новое не взять.
+    if state.quest_expired:
+        return Decision("cancel_quest", reason="задание просрочено — отменяем, чтобы взять новое")
     if not state.active_quest and state.quests:
         wanted = _pick_quest(state)
         return Decision("quest", target=wanted, params={"index": wanted.index}, reason="берём клановое задание")
@@ -1015,7 +1022,10 @@ class CombatPolicy:
             return Decision("ability", target=dodge["name"], params={"href": dodge["href"]}, reason="уклонение при низком HP")
 
         # Критическое здоровье — отступаем, а не продолжаем бить.
-        if cs.flee_links and hp_ratio * 100 < self.hp_flee:
+        # В рейде на босса (force=True) не убегаем: побег ставит герою метку
+        # «сбежал с поля боя» и закрывает вход на арену и выживание — из-за
+        # этого герой перестаёт получать опыт и фармить ресурсы.
+        if cs.flee_links and hp_ratio * 100 < self.hp_flee and not force:
             return Decision("flee", params={"text": cs.flee_links[0]}, reason="HP критическое, отступаем")
 
         # Энергия должна быть почти максимальной: урон растёт с зарядом меча.

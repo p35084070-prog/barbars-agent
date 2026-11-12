@@ -74,6 +74,11 @@ assert d.target == config["farm"]["events"][0]["name"], d
 state.farm_skip = [e["name"] for e in config["farm"]["events"]]
 d = rules.decide(state, config)
 assert d.action == "tower", d
+# просроченное клановое задание — сначала отменяем, иначе новое не взять
+state.quest_expired = True
+d = rules.decide(state, config)
+assert d.action == "cancel_quest", d
+state.quest_expired = False
 # бонус не понижаем: при текущем +25% железо (+12,5%) не предлагаем
 state.iron = 1_000_000
 state.altar_bonus = 25.0
@@ -248,6 +253,12 @@ assert choice.action == "flee", choice
 cs_no_flee = rules.CombatState(our_hp=500, our_energy=3748, attack_links=["Бить"], abilities=[])
 choice = policy.choose(cs_no_flee, st_low, st_low)
 assert choice.action == "attack", choice
+# в рейде на босса (force=True) не убегаем: побег ставит метку «сбежал с поля
+# боя» и закрывает вход на арену и выживание — герой перестаёт фармить
+cs_flee = rules.CombatState(our_hp=500, our_energy=3748, attack_links=["Бить"],
+                            abilities=[], flee_links=["Сбежать"])
+choice = policy.choose(cs_flee, st_low, st_low, force=True)
+assert choice.action != "flee", choice
 print("CombatPolicy: ok")
 
 # --- LLM: разбор JSON-ответа --------------------------------------
