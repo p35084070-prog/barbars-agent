@@ -481,7 +481,14 @@ def parse_battlefields(html: str, text: str = "") -> dict[str, Any]:
         low = (label + " " + href).lower()
         if "refresh" in low:
             continue
-        if any(k in low for k in ("join", "start", "fight", "battle", "attack", "вступи", "начать", "атакова")):
+        if any(
+            k in low
+            for k in (
+                "join", "start", "fight", "battle", "attack",
+                "вступи", "начать", "атакова", "в бой", "бой", "штурм",
+                "участв", "зайти", "войти",
+            )
+        ):
             join.append({"label": label, "href": href})
     return {
         "countdown": countdown,
