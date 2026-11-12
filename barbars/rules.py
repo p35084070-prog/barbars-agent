@@ -282,6 +282,15 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if raid is not None:
         return raid
 
+    # 5c. Прокачка параметров и мастерства железом (/user/master).
+    #     Стоит раньше боёв и фарма: пока хватает железа, вкладываем его в
+    #     параметры (мастерство даёт +1% ко всем боевым параметрам за уровень),
+    #     а когда железо кончится — агент возвращается к фарму.
+    #     Золотые варианты по правилам игрока не тратим.
+    upgrade = _pick_upgrade(state, config)
+    if upgrade is not None:
+        return upgrade
+
     # 6. Бой — если есть бесплатные бои и герой не на нуле.
     target = _pick_target(state, config)
     if target is not None:
@@ -347,11 +356,8 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if gear is not None:
         return gear
 
-    # 9a. Прокачка параметров героя железом (/user/master).
-    #     Золото по правилам не тратим, поэтому берём только железные варианты.
-    upgrade = _pick_upgrade(state, config)
-    if upgrade is not None:
-        return upgrade
+    # 9a. Прокачка параметров героя железом (/user/master) — основная проверка
+    #     уже выше (шаг 5c); сюда попадаем, если там нечего было качать.
 
     # 9b. Магазин снаряжения: покупаем вещи 25 уровня (мифические) с
     #     максимальными характеристиками, не дороже лимита по золоту.
