@@ -350,6 +350,7 @@ SLOT_KEYS: list[tuple[str, str]] = [
     ("шлем", "шлем"),
     ("накидка", "накидка"),
     ("бурка", "броня"),
+    ("бушлат", "броня"),
     ("кольчуга", "броня"),
     ("кираса", "броня"),
     ("поножи", "штаны"),
@@ -387,22 +388,21 @@ def slot_of(name: str) -> tuple[str, str]:
 def parse_worn_gear(html: str) -> list[dict[str, str]]:
     """Что надето на герое (/user/body/id/<id>).
 
-    В разметке: «Шлем Воина 20 ур, Шлем» — название вещи и её слот.
+    В разметке вид: `item/id/2092969918"><span>Шлем Воина</span></a> ...
+    <span class="">20</span> ур, <span>Шлем</span>` — название вещи и её слот.
     """
+    slots = {
+        "шлем", "амулет", "наплечники", "накидка", "броня", "пояс",
+        "штаны", "браслеты", "перчатки", "кольцо", "оружие", "обувь",
+    }
     out: list[dict[str, str]] = []
-    for m in re.finditer(r"<span>([^<]{3,40})</span>\s*</a>\s*</span>\s*<br/>\s*<span[^>]*>\s*([^<]{2,20})", html):
-        name = m.group(1).strip()
+    pattern = re.compile(
+        r"item/id/\d+\"><span>([^<]{2,40})</span></a>.{0,200}?ур,\s*<span>([^<]{2,20})</span>",
+        re.S,
+    )
+    for m in pattern.finditer(html):
         slot = m.group(2).strip().lower()
-        if slot in ("шлем", "амулет", "наплечники", "накидка", "броня", "пояс",
-                    "штаны", "браслеты", "перчатки", "кольцо", "оружие", "обувь"):
-            out.append({"name": name, "slot": slot})
-    if out:
-        return out
-    # запасной разбор: «<span>Название</span> ... , <span>Слот</span>»
-    for m in re.finditer(r"<span>([^<]{3,40})</span>(?:(?!</table>).){0,300}?<span[^>]*>([^<]{2,20})</span>", html):
-        slot = m.group(2).strip().lower()
-        if slot in ("шлем", "амулет", "наплечники", "накидка", "броня", "пояс",
-                    "штаны", "браслеты", "перчатки", "кольцо", "оружие", "обувь"):
+        if slot in slots:
             out.append({"name": m.group(1).strip(), "slot": slot})
     return out
 

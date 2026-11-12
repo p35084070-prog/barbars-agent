@@ -378,6 +378,7 @@ class Agent:
             self.log("почта: забрать не удалось", "WARN")
             self.mail_checked_at = 0.0
             return
+        self.mail_pending = False
         self.log("почта: письма забраны")
         worn = self.game.equip_better_items(limit=int(self.config.get("gear", {}).get("max_equip", 8)))
         if worn:

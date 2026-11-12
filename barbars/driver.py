@@ -963,7 +963,11 @@ class Game:
         """Купить товар в магазине снаряжения (страница товара -> «Купить за …»)."""
         url = href if href.startswith("http") else f"https://barbars.ru/{href.lstrip('/')}"
         self.goto(url)
-        return self.click_href("border:buyoutLink")
+        if not self.click_href("border:buyoutLink"):
+            return False
+        # покупка может требовать подтверждения
+        self.confirm_if_needed()
+        return True
 
     def take_mail(self) -> bool:
         """Забрать всё из почты («ЗАБРАТЬ ВСЕ ИЗ ПОЧТЫ»)."""
@@ -971,14 +975,22 @@ class Game:
         return self.click_href("getAllFromMessages")
 
     def mail_pending(self) -> bool:
-        """Есть ли на почте что забирать (письма с вещами или деньгами)."""
+        """Есть ли на почте что забирать (письма с вещами или деньгами).
+
+        Важно: кнопка «ЗАБРАТЬ ВСЕ ИЗ ПОЧТЫ» есть на странице всегда, её
+        наличие не значит, что есть письма. Смотрим именно на пометку
+        «ЗАБРАТЬ» в самих письмах.
+        """
         self.goto("https://barbars.ru/user/mail")
         html = self.p.content()
         if "getAllFromMessages" not in html:
             return False
         text = re.sub(r"<[^>]+>", " ", html)
         text = " ".join(text.split())
-        return "ЗАБРАТЬ" in text.upper() or "пришли" in text.lower()
+        # «ЗАБРАТЬ» в письме, но не кнопка «ЗАБРАТЬ ВСЕ ИЗ ПОЧТЫ»
+        if re.search(r"ЗАБРАТЬ(?!\s+ВСЕ)", text):
+            return True
+        return "пришли" in text.lower()
 
     # ------------------------------------------------------------------ торговля
 
@@ -1167,6 +1179,17 @@ class Game:
             out["chest_used"], out["chest_total"] = int(m.group(1)), int(m.group(2))
         return out
 
+    def confirm_if_needed(self) -> bool:
+        """Подтвердить действие, если игра требует подтверждения.
+
+        Например, надеть вещь: «Вещь станет личной… Подтверди, что хочешь
+        надеть эту вещь» → «Да, подтверждаю». Без этого вещь не надевается.
+        """
+        try:
+            return self.click_text("Да, подтверждаю")
+        except Exception:
+            return False
+
     def equip_better_items(self, limit: int = 8) -> int:
         """Надеть вещи, помеченные «Лучше (+N)» — герой становится сильнее.
 
@@ -1197,6 +1220,8 @@ class Game:
                 continue
             if not self.click_href(f"items:{target}:wearLink"):
                 break
+            # игра спрашивает подтверждение («вещь станет личной»)
+            self.confirm_if_needed()
             worn += 1
         return worn
 
