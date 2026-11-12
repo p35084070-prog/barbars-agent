@@ -48,6 +48,9 @@ class Agent:
         self.master_cache: list[dict[str, Any]] = []
         self.mastery_cache: dict[str, int] = {}
         self.master_checked_at: float = 0.0
+        # почта: есть ли что забрать (проверяем не каждый цикл)
+        self.mail_checked_at: float = 0.0
+        self.mail_pending: bool = False
         # текущий режим авторазбора (нужно, чтобы не включать его заново)
         self.autocrack_kind: str = ""
         # крайний срок работы (0 = работаем бесконечно); нужен в облаке,
@@ -104,6 +107,8 @@ class Agent:
             except Exception:
                 data = {}
         if data.get("date") != today:
+            # купленные слоты не сбрасываем: вещи покупаются один раз
+            bought = data.get("shop_slots", []) or []
             data = {
                 "date": today,
                 "sold": 0,
@@ -111,6 +116,7 @@ class Agent:
                 "gift": False,
                 "autocrack": False,
                 "award": False,
+                "shop_slots": bought,
             }
             self._save_daily(data)
         return data
@@ -181,6 +187,7 @@ class Agent:
                 self.gear_blocked_until = 0.0
         self.daily = self._load_daily()
         state.sold_today = int(self.daily.get("sold", 0))
+        state.shop_slots = list(self.daily.get("shop_slots", []) or [])
         state.exp_buys_today = int(self.daily.get("exp", 0))
         state.well_gift_taken_today = bool(self.daily.get("gift", False))
         state.autocrack_set_today = bool(self.daily.get("autocrack", False))
@@ -191,6 +198,7 @@ class Agent:
         self._check_well(state)
         self._check_exp(state)
         self._check_master(state)
+        self._check_mail(state)
         self._maybe_daily_award()
         self.log("состояние: " + state.summary())
 
@@ -279,6 +287,10 @@ class Agent:
             self._do_upgrade(decision)
         elif decision.action == "upgrade_mastery":
             self._do_upgrade_mastery(decision)
+        elif decision.action == "shop":
+            self._do_shop(decision, state)
+        elif decision.action == "mail":
+            self._do_mail()
         elif decision.action == "wait":
             time.sleep(2)
 
@@ -359,6 +371,76 @@ class Agent:
                 f"ждём {pause_min} мин, идём фармить",
                 "WARN",
             )
+
+    def _do_mail(self) -> None:
+        """Забрать почту (присланные вещи/деньги) и надеть присланное."""
+        if not self.game.take_mail():
+            self.log("почта: забрать не удалось", "WARN")
+            self.mail_checked_at = 0.0
+            return
+        self.log("почта: письма забраны")
+        worn = self.game.equip_better_items(limit=int(self.config.get("gear", {}).get("max_equip", 8)))
+        if worn:
+            self.log(f"почта: надето присланных вещей {worn}")
+
+    def _do_shop(self, decision: rules.Decision, state: rules.GameState) -> None:
+        """Закупка снаряжения 25+ уровня в «Магазине снаряжения».
+
+        Алгоритм по требованию игрока: выбираем вещи с максимальными
+        характеристиками («Лучше (+N)») по каждому слоту, не дороже лимита
+        по золоту; купленное приходит на почту — забираем, надеваем,
+        а снятое разбирается обычным шагом «рюкзак».
+        """
+        from . import pages
+
+        max_gold = int(decision.params.get("max_gold", 3))
+        max_silver = int(decision.params.get("max_silver", 0))
+        sets = list(decision.params.get("sets", ["", "goliaf", "atlant", "veteran"]))
+        max_buys = int(decision.params.get("max_buys", 2))
+        bought_slots = list(self.daily.get("shop_slots", []) or [])
+        try:
+            items: list[dict[str, Any]] = []
+            for set_name in sets:
+                items += self.game.shop_gear(set_name)
+            worn = self.game.worn_gear()
+        except Exception as exc:
+            self.log(f"магазин: не удалось получить товары: {exc}", "WARN")
+            return
+        picked = pages.pick_shop_items(items, worn, max_gold, max_silver, bought_slots)
+        if not picked:
+            self.log("магазин: подходящих товаров нет (лимит по золоту или нет денег)")
+            return
+        bought = 0
+        for item in picked[:max_buys]:
+            gold_need = int(item.get("gold", 0))
+            silver_need = int(item.get("silver", 0))
+            if gold_need > int(state.gold or 0) or silver_need > int(state.silver or 0):
+                self.log(
+                    f"магазин: «{item.get('name')}» не по карману "
+                    f"(нужно {gold_need} золота / {silver_need} серебра)"
+                )
+                continue
+            if not self.game.buy_shop_item(str(item.get("href", ""))):
+                self.log(f"магазин: не удалось купить {item.get('name')}", "WARN")
+                continue
+            bought += 1
+            slot, _kind = pages.slot_of(str(item.get("name", "")))
+            if slot and slot not in bought_slots:
+                bought_slots.append(slot)
+            self.log(
+                f"магазин: куплена «{item.get('name')}» ({item.get('level')} ур, "
+                f"+{item.get('bonus')}) за {gold_need} золота / {silver_need} серебра"
+            )
+        if not bought:
+            return
+        self.daily = self._load_daily()
+        self.daily["shop_slots"] = bought_slots
+        self._save_daily()
+        # купленное приходит письмом — забираем и надеваем
+        if self.game.take_mail():
+            self.log("почта: купленное забрано")
+        worn = self.game.equip_better_items(limit=int(self.config.get("gear", {}).get("max_equip", 8)))
+        self.log(f"магазин: надето новых вещей {worn}")
 
     def _do_upgrade_mastery(self, decision: rules.Decision) -> None:
         """Повышение уровня мастерства: железо + мифрил (постоянный бонус)."""
@@ -482,6 +564,25 @@ class Agent:
             return
         self.exp_checked_at = now
         state.exp_options = list(self.exp_cache)
+
+    def _check_mail(self, state: rules.GameState) -> None:
+        """Раз в 3 минуты смотрим почту: не прислали ли вещи."""
+        if not self.config.get("mail", {}).get("enabled", True):
+            return
+        interval = float(self.config.get("mail", {}).get("check_interval_min", 3)) * 60
+        now = time.time()
+        if self.mail_checked_at and now - self.mail_checked_at < interval:
+            state.mail_pending = self.mail_pending
+            return
+        try:
+            self.mail_pending = self.game.mail_pending()
+        except Exception as exc:
+            self.log(f"почта: проверка не удалась: {exc}", "WARN")
+            return
+        self.mail_checked_at = now
+        state.mail_pending = self.mail_pending
+        if self.mail_pending:
+            self.log("почта: есть что забрать")
 
     def _check_master(self, state: rules.GameState) -> None:
         """Раз в 10 минут читаем варианты прокачки параметров героя (/user/master).

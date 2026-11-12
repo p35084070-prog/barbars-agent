@@ -930,6 +930,56 @@ class Game:
             return result
         return result
 
+    # ------------------------------------------------------------------ магазин снаряжения
+
+    def shop_gear(self, set_name: str = "") -> list[dict[str, Any]]:
+        """Товары «Магазина снаряжения» (/trade/auction/shop).
+
+        set_name: "" — набор Берсерка (по умолчанию), "goliaf", "atlant",
+        "veteran". Товары 25 уровня мифического качества — то, что нужно
+        герою 25+ уровня.
+        """
+        from . import pages
+
+        url = "https://barbars.ru/trade/auction/shop"
+        if set_name:
+            url += f"/0/{set_name}"
+        self.goto(url)
+        return pages.parse_shop_gear(self.p.content())
+
+    def worn_gear(self) -> list[dict[str, str]]:
+        """Что надето на герое: [{"name": "Шлем Воина", "slot": "шлем"}, ...]."""
+        from . import pages
+
+        url = (
+            f"https://barbars.ru/user/body/id/{self.hero_id}"
+            if self.hero_id
+            else "https://barbars.ru/user/body"
+        )
+        self.goto(url)
+        return pages.parse_worn_gear(self.p.content())
+
+    def buy_shop_item(self, href: str) -> bool:
+        """Купить товар в магазине снаряжения (страница товара -> «Купить за …»)."""
+        url = href if href.startswith("http") else f"https://barbars.ru/{href.lstrip('/')}"
+        self.goto(url)
+        return self.click_href("border:buyoutLink")
+
+    def take_mail(self) -> bool:
+        """Забрать всё из почты («ЗАБРАТЬ ВСЕ ИЗ ПОЧТЫ»)."""
+        self.goto("https://barbars.ru/user/mail")
+        return self.click_href("getAllFromMessages")
+
+    def mail_pending(self) -> bool:
+        """Есть ли на почте что забирать (письма с вещами или деньгами)."""
+        self.goto("https://barbars.ru/user/mail")
+        html = self.p.content()
+        if "getAllFromMessages" not in html:
+            return False
+        text = re.sub(r"<[^>]+>", " ", html)
+        text = " ".join(text.split())
+        return "ЗАБРАТЬ" in text.upper() or "пришли" in text.lower()
+
     # ------------------------------------------------------------------ торговля
 
     def open_bazaar_tab(self, resource: str = "bottles") -> bool:

@@ -111,6 +111,29 @@ d = rules.decide(bag_state, config)
 assert d.action == "gear", d
 print("gear loop: ok")
 
+# --- магазин снаряжения: выбор по максимальным характеристикам --------
+shop_items = [
+    {"name": "Шлем Берсерка", "level": 25, "bonus": 179, "gold": 0, "silver": 55, "tier": "мифический", "href": "trade/auction/shop/item/id/1"},
+    {"name": "Перчатки Берсерка", "level": 25, "bonus": 400, "gold": 2, "silver": 0, "tier": "мифический", "href": "trade/auction/shop/item/id/2"},
+    {"name": "Топор Берсерка", "level": 25, "bonus": 305, "gold": 0, "silver": 55, "tier": "мифический", "href": "trade/auction/shop/item/id/3"},
+    {"name": "Копье Голиафа", "level": 25, "bonus": 316, "gold": 0, "silver": 55, "tier": "мифический", "href": "trade/auction/shop/item/id/4"},
+    {"name": "Шлем Ветерана", "level": 25, "bonus": 250, "gold": 0, "silver": 55, "tier": "мифический", "href": "trade/auction/shop/item/id/5"},
+    {"name": "Амулет Берсерка", "level": 25, "bonus": 371, "gold": 6, "silver": 30, "tier": "мифический", "href": "trade/auction/shop/item/id/6"},
+]
+worn = [{"name": "Секира Воина", "slot": "оружие"}, {"name": "Шлем Воина", "slot": "шлем"}]
+picked = pages.pick_shop_items(shop_items, worn, max_gold=3)
+names = [p["name"] for p in picked]
+assert "Перчатки Берсерка" in names, names          # 2 золота, +400 — берём
+assert "Шлем Ветерана" in names, names              # по слоту «шлем» максимум +250 > +179
+assert "Шлем Берсерка" not in names, names          # проигрывает по бонусу
+assert "Топор Берсерка" not in names, names         # оружие другого типа
+assert "Копье Голиафа" not in names, names          # оружие другого типа
+assert "Амулет Берсерка" not in names, names         # 6 золота > лимита 3
+# уже купленный слот пропускаем
+picked2 = pages.pick_shop_items(shop_items, worn, max_gold=3, bought_slots=["шлем", "перчатки"])
+assert not [p for p in picked2 if p["name"].startswith("Шлем")], picked2
+print("shop pick: ok")
+
 # --- прокачка параметров железом ----------------------------------
 up_state = rules.GameState(
     hp=1000, max_hp=4042, energy=4000, max_energy=4076, level=14, klass="воин",

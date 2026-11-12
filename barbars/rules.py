@@ -72,6 +72,10 @@ class GameState:
     # прокачка: варианты улучшения параметров героя (железо) и мастерства
     master_options: list[dict[str, Any]] = field(default_factory=list)
     mastery_cost: dict[str, int] = field(default_factory=dict)
+    # магазин снаряжения: слоты, которые уже куплены (по дневному счётчику)
+    shop_slots: list[str] = field(default_factory=list)
+    # почта: есть ли что забрать
+    mail_pending: bool = False
     # рюкзак и сундук: сколько занято
     bag: dict[str, int] = field(default_factory=dict)
     # фарм-события: какие из них сейчас не запускаются (кулдаун)
@@ -275,6 +279,11 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if sell is not None:
         return sell
 
+    # 8.5. Почта: забрать присланные вещи/деньги и надеть их.
+    #     Важно раньше шага «рюкзак», чтобы присланное не ушло под разбор.
+    if config.get("mail", {}).get("enabled", True) and state.mail_pending:
+        return Decision("mail", target="почта", reason="на почте есть что забрать")
+
     # 9. Рюкзак: надеть лучшие вещи и разобрать остальное на железо.
     #    Забитый рюкзак блокирует новый дроп — из-за этого встаёт опыт.
     gear = _pick_gear(state, config)
@@ -286,6 +295,12 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     upgrade = _pick_upgrade(state, config)
     if upgrade is not None:
         return upgrade
+
+    # 9b. Магазин снаряжения: покупаем вещи 25 уровня (мифические) с
+    #     максимальными характеристиками, не дороже лимита по золоту.
+    shop = _pick_shop(state, config)
+    if shop is not None:
+        return shop
 
     # 10. Фарм башни: бесплатные бои, капает опыт, железо, бутылочки и вещи.
     #     Основной способ прокачки для новых героев (у них нет клана и подземелий).
@@ -366,8 +381,10 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
     chest_total = int(bag.get("chest_total", 20) or 20)
     keep = int(cfg.get("keep_bag", 4))
     crack_chest = bool(cfg.get("crack_chest", True))
-    chest_full = chest_used >= chest_total
-    if used <= keep and not (crack_chest and chest_full):
+    chest_used = int(bag.get("chest_used", 0) or 0)
+    # чистим сундук всегда, если там что-то есть: там копится старый хлам,
+    # из-за которого потом некуда складывать новый дроп
+    if used <= keep and not (crack_chest and chest_used > 0):
         return None
     overflow = (used >= total) and (chest_used >= chest_total)
     crack = bool(cfg.get("crack", True))
@@ -394,6 +411,39 @@ def _pick_gear(state: GameState, config: dict[str, Any]) -> Decision | None:
             "sell_store": bool(cfg.get("sell_store", True)),
         },
         reason=f"рюкзак заполнен на {used}/{total} — надеваем лучшее и разбираем остальное",
+    )
+
+
+def _pick_shop(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Закупка снаряжения 25+ уровня в «Магазине снаряжения».
+
+    По правилу игрока: на вещь можно потратить до трёх золотых, берём то,
+    что даёт максимальные характеристики («Лучше (+N)»).
+    """
+    cfg = config.get("shop", {})
+    if not cfg.get("enabled"):
+        return None
+    min_level = int(cfg.get("min_level", 25))
+    if int(state.level or 0) < min_level:
+        return None
+    slots = int(cfg.get("max_slots", 12))
+    if len(state.shop_slots) >= slots:
+        return None
+    if int(state.gold or 0) <= 0 and int(state.silver or 0) <= 0:
+        return None
+    return Decision(
+        "shop",
+        target="снаряжение",
+        params={
+            "max_gold": int(cfg.get("max_gold", 3)),
+            "max_silver": int(cfg.get("max_silver", 0)),
+            "sets": list(cfg.get("sets", ["", "goliaf", "atlant", "veteran"])),
+            "max_buys": int(cfg.get("max_buys_per_cycle", 2)),
+        },
+        reason=(
+            f"покупаем снаряжение {min_level} уровня (куплено слотов: "
+            f"{len(state.shop_slots)}/{slots})"
+        ),
     )
 
 

@@ -202,5 +202,23 @@
     "keep_mifril": 0,
     "check_interval_min": 10
   },
+  "shop": {
+    "enabled": true,
+    "min_level": 25,
+    "max_gold": 3,
+    "max_silver": 0,
+    "max_slots": 12,
+    "max_buys_per_cycle": 2,
+    "sets": [
+      "",
+      "goliaf",
+      "atlant",
+      "veteran"
+    ]
+  },
+  "mail": {
+    "enabled": true,
+    "check_interval_min": 3
+  },
   "daily_file": "state/firewhite/daily.json"
 }

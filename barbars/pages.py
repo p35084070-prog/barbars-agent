@@ -343,6 +343,161 @@ _GOLD_RE = re.compile(r"money_gold\.png\"[^>]*>\s*<span>([\d\s]+)</span>", re.S)
 _SILVER_RE = re.compile(r"money_silver\.png\"[^>]*>\s*<span>([\d\s]+)</span>", re.S)
 
 
+SLOT_KEYS: list[tuple[str, str]] = [
+    ("наплечник", "наплечники"),
+    ("медальон", "амулет"),
+    ("амулет", "амулет"),
+    ("шлем", "шлем"),
+    ("накидка", "накидка"),
+    ("бурка", "броня"),
+    ("кольчуга", "броня"),
+    ("кираса", "броня"),
+    ("поножи", "штаны"),
+    ("штаны", "штаны"),
+    ("пояс", "пояс"),
+    ("наручи", "браслеты"),
+    ("браслет", "браслеты"),
+    ("перчатки", "перчатки"),
+    ("рукавицы", "перчатки"),
+    ("перстень", "кольцо"),
+    ("кольцо", "кольцо"),
+    ("сапоги", "обувь"),
+    ("ботинки", "обувь"),
+]
+
+WEAPON_KINDS = ("секира", "топор", "копье", "копьё", "посох", "молот", "меч")
+
+
+def slot_of(name: str) -> tuple[str, str]:
+    """Слот и тип (для оружия) по названию вещи.
+
+    «Шлем Берсерка» -> («шлем», «»), «Секира Воина» -> («оружие», «секира»).
+    Пустой слот означает, что название не распознано.
+    """
+    low = name.lower()
+    for kind in WEAPON_KINDS:
+        if kind in low:
+            return ("оружие", kind)
+    for key, slot in SLOT_KEYS:
+        if key in low:
+            return (slot, "")
+    return ("", "")
+
+
+def parse_worn_gear(html: str) -> list[dict[str, str]]:
+    """Что надето на герое (/user/body/id/<id>).
+
+    В разметке: «Шлем Воина 20 ур, Шлем» — название вещи и её слот.
+    """
+    out: list[dict[str, str]] = []
+    for m in re.finditer(r"<span>([^<]{3,40})</span>\s*</a>\s*</span>\s*<br/>\s*<span[^>]*>\s*([^<]{2,20})", html):
+        name = m.group(1).strip()
+        slot = m.group(2).strip().lower()
+        if slot in ("шлем", "амулет", "наплечники", "накидка", "броня", "пояс",
+                    "штаны", "браслеты", "перчатки", "кольцо", "оружие", "обувь"):
+            out.append({"name": name, "slot": slot})
+    if out:
+        return out
+    # запасной разбор: «<span>Название</span> ... , <span>Слот</span>»
+    for m in re.finditer(r"<span>([^<]{3,40})</span>(?:(?!</table>).){0,300}?<span[^>]*>([^<]{2,20})</span>", html):
+        slot = m.group(2).strip().lower()
+        if slot in ("шлем", "амулет", "наплечники", "накидка", "броня", "пояс",
+                    "штаны", "браслеты", "перчатки", "кольцо", "оружие", "обувь"):
+            out.append({"name": m.group(1).strip(), "slot": slot})
+    return out
+
+
+def parse_shop_gear(html: str) -> list[dict[str, Any]]:
+    """Товары «Магазина снаряжения» (/trade/auction/shop).
+
+    Блок товара: картинка, название со ссылкой на страницу товара, уровень,
+    пометка «Лучше (+N)» и цена (серебро и/или золото иконками).
+    Возвращает: {"name", "level", "bonus", "gold", "silver", "item_id",
+    "tier", "href"}.
+    """
+    out: list[dict[str, Any]] = []
+    for chunk in html.split('<div class="hr"></div>'):
+        m = re.search(
+            r'href="(?:\.\./)*(trade/auction/shop/item/id/(\d+))"><span>([^<]+)</span>', chunk
+        )
+        if not m:
+            continue
+        level_m = re.search(r'itemBad">(\d+)</span>\s*ур', chunk)
+        bonus_m = re.search(r"Лучше\s*\(\s*\+(\d+)\s*\)", chunk)
+        tier = "?"
+        for key, label in (
+            ("bonusdarkiron", "мифический"),
+            ("bonuslegendary", "легендарный"),
+            ("bonusepic", "эпический"),
+            ("bonusrare", "редкий"),
+            ("bonusgreen", "необычный"),
+            ("bonuscopper", "обычный"),
+        ):
+            if key in chunk:
+                tier = label
+                break
+        gold = silver = 0
+        for icon, number in re.findall(
+            r"icons/(money_gold|money_silver)\.png[^>]*/>\s*<span>([\d.,]+)</span>", chunk
+        ):
+            value = parse_amount(number)
+            if icon == "money_gold":
+                gold = value
+            else:
+                silver = value
+        out.append(
+            {
+                "name": m.group(3).strip(),
+                "item_id": m.group(2),
+                "href": m.group(1),
+                "level": int(level_m.group(1)) if level_m else 0,
+                "bonus": int(bonus_m.group(1)) if bonus_m else 0,
+                "gold": gold,
+                "silver": silver,
+                "tier": tier,
+            }
+        )
+    return out
+
+
+def pick_shop_items(
+    items: list[dict[str, Any]],
+    worn: list[dict[str, str]],
+    max_gold: int = 3,
+    max_silver: int = 0,
+    bought_slots: tuple[str, ...] | list[str] = (),
+) -> list[dict[str, Any]]:
+    """Выбрать товары магазина снаряжения к покупке.
+
+    Правила:
+      * золота на вещь — не больше max_gold (серебро — если max_silver задан);
+      * оружие берём только того же типа, что надето (иначе герой его не наденет);
+      * на каждый слот — одна вещь, с максимальным бонусом «Лучше (+N)»;
+      * уже купленные слоты пропускаем.
+    """
+    weapon_kind = ""
+    for w in worn:
+        if w.get("slot") == "оружие":
+            weapon_kind = slot_of(w.get("name", ""))[1]
+    best: dict[str, dict[str, Any]] = {}
+    for item in items:
+        slot, kind = slot_of(item.get("name", ""))
+        if not slot:
+            continue
+        if slot == "оружие" and kind != weapon_kind:
+            continue
+        if int(item.get("gold", 0)) > max_gold:
+            continue
+        if max_silver and int(item.get("silver", 0)) > max_silver:
+            continue
+        if slot in bought_slots:
+            continue
+        current = best.get(slot)
+        if current is None or int(item.get("bonus", 0)) > int(current.get("bonus", 0)):
+            best[slot] = item
+    return sorted(best.values(), key=lambda x: -int(x.get("bonus", 0)))
+
+
 def parse_lots(html: str, resource: str) -> list[dict[str, Any]]:
     """Разбор лотов аукциона ресурсов из HTML страницы.
 
