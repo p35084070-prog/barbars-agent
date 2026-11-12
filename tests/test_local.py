@@ -195,6 +195,11 @@ up_state.mastery_cost = {}
 up_state.iron = 15_000
 d = rules.decide(up_state, fw_cfg)
 assert d.action == "upgrade", d
+# предохранитель: после аномальной убыли железа траты заблокированы
+up_state.spend_blocked = True
+d = rules.decide(up_state, fw_cfg)
+assert d.action != "upgrade", d
+up_state.spend_blocked = False
 print("upgrade: ok")
 
 # --- разбор страницы мастерства (реальная разметка /user/master) ---

@@ -89,6 +89,9 @@ class Agent:
         # починка: если кнопки «Починить» нет, не пытаемся каждый цикл —
         # иначе агент не доходит до рейда, прокачки и фарма
         self.repair_skip_until: float = 0.0
+        # предохранитель: после аномальной убыли железа траты блокируются
+        self.block_spend_until: float = 0.0
+        self.prev_iron: int | None = None
         # аналогично для клановых заданий: если «Взять задание» недоступно
         # (задание занято другим игроком), возвращаемся к нему позже
         self.quest_blocked_until: float = 0.0
@@ -264,6 +267,20 @@ class Agent:
         state.raid_today = int(self.daily.get("raid", 0) or 0)
         now = time.time()
         state.farm_skip = [name for name, ts in self.farm_cooldown.items() if ts > now]
+        # предохранитель: аномальная убыль железа (было 505 000 -> стало 281
+        # за один клик по подарку колодца) — траты блокируем на час
+        prev_iron = getattr(self, "prev_iron", None)
+        state.spend_blocked = self.block_spend_until > now
+        if prev_iron is not None and state.iron is not None and prev_iron - state.iron > 1000:
+            self.block_spend_until = now + 3600
+            state.spend_blocked = True
+            self.log(
+                f"внимание: железо упало на {prev_iron - state.iron} "
+                f"({prev_iron} -> {state.iron}) — траты заблокированы на час",
+                "ERROR",
+            )
+        if state.iron is not None:
+            self.prev_iron = state.iron
         # диагностика: золото и серебро не должны убывать сами по себе
         prev = getattr(self, "prev_wallet", None)
         if prev:

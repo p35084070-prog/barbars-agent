@@ -70,6 +70,8 @@ class GameState:
     autocrack_kind: str = ""
     # усталость героя: 0 — нет, -30 — минус треть добычи в башнях
     tire: int = 0
+    # предохранитель: железо упало аномально — траты железа заблокированы
+    spend_blocked: bool = False
     # рюкзак: шаг «рюкзак» не дал эффекта (сундук полон, надеть нечего)
     gear_blocked: bool = False
     # прокачка: варианты улучшения параметров героя (железо) и мастерства
@@ -211,7 +213,7 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     #    Бонус протухает примерно через 2,5 часа, и он ЗАМЕНЯЕТСЯ новым:
     #    жертвовать вариантом с меньшим бонусом, чем уже есть, нельзя.
     altar_cfg = config.get("altar", {})
-    if altar_cfg.get("enabled", True):
+    if altar_cfg.get("enabled", True) and not state.spend_blocked:
         renew_before = float(altar_cfg.get("renew_before_min", 25))
         current_bonus = float(state.altar_bonus or 0)
         expired = current_bonus <= 0
@@ -287,9 +289,10 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     #     параметры (мастерство даёт +1% ко всем боевым параметрам за уровень),
     #     а когда железо кончится — агент возвращается к фарму.
     #     Золотые варианты по правилам игрока не тратим.
-    upgrade = _pick_upgrade(state, config)
-    if upgrade is not None:
-        return upgrade
+    if not state.spend_blocked:
+        upgrade = _pick_upgrade(state, config)
+        if upgrade is not None:
+            return upgrade
 
     # 6. Бой — если есть бесплатные бои и герой не на нуле.
     target = _pick_target(state, config)
@@ -307,7 +310,9 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
 
     # 7. Опыт у мудреца — платим железом (золото не трогаем).
     exp_cfg = config.get("exp", {})
-    if exp_cfg.get("enabled", True) and state.exp_buys_today < int(exp_cfg.get("max_per_day", 1)):
+    if (exp_cfg.get("enabled", True)
+            and not state.spend_blocked
+            and state.exp_buys_today < int(exp_cfg.get("max_per_day", 1))):
         keep_iron = int(exp_cfg.get("keep_iron", 100_000))
         free_iron = (state.iron or 0) - keep_iron
         options = [
@@ -406,7 +411,7 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
 
     # 11. Вклад в хранилище клана — только излишки железа, и только если разрешено.
     donate_cfg = spend.get("clan_donate", {})
-    if donate_cfg.get("enabled") and donate_cfg.get("iron"):
+    if donate_cfg.get("enabled") and donate_cfg.get("iron") and not state.spend_blocked:
         chunk = int(donate_cfg.get("iron_amount", 50_000))
         keep = int(donate_cfg.get("keep_iron", 500_000))
         if (state.iron or 0) - keep >= chunk:
