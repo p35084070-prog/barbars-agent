@@ -67,7 +67,7 @@
     }
   },
   "market": {
-    "enabled": true,
+    "enabled": false,
     "resources": [
       "mifril",
       "bottles"
@@ -219,7 +219,7 @@
     "check_interval_min": 10
   },
   "shop": {
-    "enabled": true,
+    "enabled": false,
     "min_level": 25,
     "max_gold": 3,
     "max_silver": 0,
@@ -237,7 +237,7 @@
     "keep_silver": 20
   },
   "auction": {
-    "enabled": true,
+    "enabled": false,
     "max_per_cycle": 3,
     "max_per_day": 15,
     "min_level": 25,
@@ -248,7 +248,7 @@
     "buyout_silver": 0
   },
   "trade_market": {
-    "enabled": true,
+    "enabled": false,
     "max_gold": 3,
     "max_buys_per_cycle": 1,
     "max_per_day": 3,

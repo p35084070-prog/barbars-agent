@@ -56,7 +56,7 @@
     }
   },
   "market": {
-    "enabled": true,
+    "enabled": false,
     "resources": [
       "mifril",
       "bottles"
@@ -217,7 +217,7 @@
     "share_with": "31389504"
   },
   "auction": {
-    "enabled": true,
+    "enabled": false,
     "max_per_cycle": 3,
     "max_per_day": 15,
     "min_level": 25,
@@ -228,7 +228,7 @@
     "buyout_silver": 0
   },
   "trade_market": {
-    "enabled": true,
+    "enabled": false,
     "max_gold": 3,
     "max_buys_per_cycle": 1,
     "max_per_day": 3,
