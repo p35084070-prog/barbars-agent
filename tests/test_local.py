@@ -33,7 +33,7 @@ print("образец боя сохранён: fight_sample.html")
 
 # --- правила: приоритеты ------------------------------------------
 state = rules.GameState(
-    hp=1000, max_hp=3698, energy=3000, max_energy=3748, level=67, klass="медик",
+    hp=1000, max_hp=3698, energy=3000, max_energy=3748, level=20, klass="медик",
     iron=1_000_000, mifril=40, gold=28, silver=76, bottles=290, talent_points=0,
     free_dungeon=2, free_duel=3,
     needs_repair=True, repair_cost=6,
