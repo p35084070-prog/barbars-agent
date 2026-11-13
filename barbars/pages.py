@@ -578,14 +578,16 @@ def parse_battlefields(html: str, text: str = "") -> dict[str, Any]:
         low = (label + " " + href).lower()
         if "refresh" in low:
             continue
-        if any(
-            k in low
-            for k in (
-                "join", "start", "fight", "battle", "attack",
-                "вступи", "начать", "атакова", "в бой", "бой", "штурм",
-                "участв", "зайти", "войти",
-            )
-        ):
+        # Ссылка входа — только по href-маркеру или по явной подписи.
+        # Раньше кнопки искались и по подписи, и это давало ложные срабатывания:
+        # название сражения «Штурм Крепости» попадало под «штурм», и агент
+        # каждый цикл пытался «войти» на Поля сражений вместо рейда.
+        href_hit = any(k in href.lower() for k in ("join", "start", "fight", "battle", "attack"))
+        label_hit = any(
+            k in label.lower()
+            for k in ("вступи", "присоедин", "в бой", "начать бой", "зайти", "войти", "участвовать")
+        )
+        if href_hit or label_hit:
             join.append({"label": label, "href": href})
     return {
         "countdown": countdown,
