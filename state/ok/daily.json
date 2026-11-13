@@ -2,7 +2,7 @@
   "date": "2026-11-13",
   "sold": 0,
   "exp": 1,
-  "gift": false,
+  "gift": true,
   "autocrack": false,
   "award": false,
   "auction": 0,
@@ -11,6 +11,6 @@
   "shop_buy_ids": [],
   "shop_slots": [],
   "shop_bought": [],
-  "raid_last_at": 1794586581.408294,
-  "raid": 3
+  "raid_last_at": 1794599052.5712562,
+  "raid": 10
 }
