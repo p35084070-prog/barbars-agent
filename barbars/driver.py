@@ -694,7 +694,7 @@ class Game:
         # id героя и клана — из ссылок вида user/body/id/<id> и guild/<id>
         try:
             body_link = self.p.locator("a[href*='user/body/id/']").first
-            hero_id = re.search(r"(\d+)$", body_link.get_attribute("href") or "")
+            hero_id = re.search(r"user/body/id/(\d+)", body_link.get_attribute("href") or "")
             if hero_id:
                 self.hero_id = int(hero_id.group(1))
         except Exception:
@@ -854,7 +854,7 @@ class Game:
         может не быть вовсе. Поэтому чиним по очереди все найденные ссылки.
         """
         repaired = False
-        for _ in range(12):
+        for _ in range(25):
             locator = self.p.locator(
                 "a:has-text('Починить'), button:has-text('Починить')")
             if locator.count() == 0:
@@ -1590,6 +1590,43 @@ class Game:
         self._settle()
         return True
 
+    def send_resources_to(self, recipient_id: str, resource: str, amount: int) -> dict[str, Any]:
+        """Передать другому игроку ресурс (железо/мифрил/бутылочки) почтой.
+
+        Форма: /user/mail/send/id/<id> -> вкладка «Ресурсы» -> тип -> количество
+        -> «отправить». Комиссия игры: 5 серебра за каждые 10 000 железа
+        (или 5 мифрила / 10 бутылочек).
+        """
+        result: dict[str, Any] = {"ok": False, "message": ""}
+        if amount <= 0:
+            result["message"] = "нечего отправлять"
+            return result
+        type_value = {"iron": "2", "mifril": "3", "bottles": "1"}.get(resource)
+        if type_value is None:
+            result["message"] = f"неизвестный ресурс: {resource}"
+            return result
+        self.goto(f"https://barbars.ru/user/mail/send/id/{recipient_id}")
+        if not self.click_href("sendMessageForm:mailGoodsLink"):
+            result["message"] = "вкладка «Ресурсы» не открылась"
+            return result
+        try:
+            self.p.select_option("select[name='type']", type_value, timeout=8000)
+            self.p.fill("input[name='amount']", str(int(amount)), timeout=8000)
+        except Exception as exc:  # noqa: BLE001
+            result["message"] = f"не удалось заполнить форму: {str(exc).splitlines()[0]}"
+            return result
+        try:
+            self.p.click("input[name=':submit'][value='отправить']", timeout=8000)
+        except Exception:
+            result["message"] = "кнопка «отправить» не нажалась"
+            return result
+        self._settle()
+        text = " ".join(self.body_text().split())
+        if "отправ" in text.lower() and "успеш" in text.lower():
+            result["ok"] = True
+        result["message"] = f"отправлено {amount} {resource}"
+        return result
+
     def send_money_to(self, recipient_id: str, gold: int = 0, silver: int = 0) -> bool:
         """Передать золото/серебро другому игроку почтой.
 
@@ -1681,6 +1718,77 @@ class Game:
             "mine": "filterMyLotsLink",
         }.get(resource, "filterPotionsLink")
         return self.click_href(pattern)
+
+    def iron_lots(self) -> list[dict[str, Any]]:
+        """Лоты железа на аукционе ресурсов: количество, цена в золоте и серебре."""
+        from . import pages
+
+        if not self.open_bazaar_tab("iron"):
+            return []
+        out: list[dict[str, Any]] = []
+        pattern = re.compile(
+            r"<img[^>]*ironbar[^>]*>\s*<span>(\d+)</span>\s*<span>жлз</span>\s*<span>(.*?)</span>\s*"
+            r'<a[^>]*href="([^"]*buyLink[^"]*)"',
+            re.S,
+        )
+        for m in pattern.finditer(self.p.content() or ""):
+            price_html = m.group(2)
+            gold = re.search(r"money_gold[^>]*>\s*<span>(\d+)</span>", price_html)
+            silver = re.search(r"money_silver[^>]*>\s*<span>(\d+)</span>", price_html)
+            out.append(
+                {
+                    "qty": int(m.group(1)),
+                    "gold": int(gold.group(1)) if gold else 0,
+                    "silver": int(silver.group(1)) if silver else 0,
+                    "href": m.group(3),
+                }
+            )
+        return out
+
+    def buy_iron_with_gold(self, min_iron: int, max_gold: int) -> dict[str, Any]:
+        """Купить железо на аукционе ресурсов, потратив не больше max_gold золота.
+
+        Лоты железа выставлены в золоте и серебре (например, 2 000 000 железа
+        = 40 зол). Покупаем самый дешёвый по «золото на 1000 железа», если он
+        укладывается в лимит золота, и только если железа реально не хватает.
+        """
+        result: dict[str, Any] = {"ok": False, "message": "", "qty": 0, "gold": 0}
+        lots = self.iron_lots()
+        if not lots:
+            result["message"] = "лоты железа не найдены"
+            return result
+
+        def score(lot: dict[str, Any]) -> float:
+            return (lot["gold"] * 1000 + lot["silver"] * 20) / max(1, lot["qty"])
+
+        affordable = [lot for lot in lots if lot["gold"] <= max_gold and lot["qty"] >= min_iron]
+        if not affordable:
+            result["message"] = (
+                f"нет лотов железа под лимит {max_gold} зол "
+                f"(минимум {min_iron} железа); доступно {len(lots)} лотов"
+            )
+            return result
+        best = min(affordable, key=score)
+        url = best["href"]
+        if not url.startswith("http"):
+            url = f"https://barbars.ru/{url.lstrip('./').lstrip('/')}"
+        self.goto(url)
+        # страница подтверждения: «Подтверди, что ты хочешь купить: N жлз по цене G»
+        text = " ".join(self.body_text().split())
+        if "Да, подтверждаю" not in text:
+            result["message"] = "страница подтверждения не открылась"
+            return result
+        if not self.click_text("Да, подтверждаю"):
+            result["message"] = "не удалось подтвердить покупку"
+            return result
+        self._settle()
+        result["ok"] = True
+        result["qty"] = best["qty"]
+        result["gold"] = best["gold"]
+        result["message"] = (
+            f"куплено {best['qty']} железа за {best['gold']} зол + {best['silver']} сер"
+        )
+        return result
 
     def sell_resource(
         self,
@@ -1829,6 +1937,42 @@ class Game:
             result = {"ok": True, "message": f"опыт куплен за {cost} железа", "cost": cost}
             return result
         result["message"] = f"варианта «{iron_amount} железа» нет"
+        return result
+
+    def buy_exp_with_gold(self, gold_amount: int) -> dict[str, Any]:
+        """Купить опыт у мудреца за золото.
+
+        В мобильной сборке игры мудрец отдаёт опыт только за золото:
+        «Пожертвовать 7 золота» (14% опыта), «Пожертвовать 5 золота» (10%).
+        Железо в этой сборке купить нельзя — рынка ресурсов нет, поэтому
+        золото — единственный способ докупить прогресс.
+        """
+        result: dict[str, Any] = {"ok": False, "message": ""}
+        self.goto("https://barbars.ru/trade/ironmaster")
+        for link in self.p.locator("a").all():
+            try:
+                label = (link.inner_text() or "").strip().replace("\n", " ")
+            except Exception:
+                continue
+            if "Пожертвовать" not in label or "золот" not in label.lower():
+                continue
+            m = re.search(r"Пожертвовать\s*([\d\s]+)\s*золота", label, re.IGNORECASE)
+            if not m:
+                continue
+            cost = parse_amount(m.group(1))
+            if cost != gold_amount:
+                continue
+            try:
+                self.human.move_mouse_to(self.p, link)
+                self.human.pause("action")
+                link.click(timeout=8000)
+            except Exception as exc:
+                result["message"] = f"клик не удался: {str(exc).splitlines()[0]}"
+                return result
+            self._settle()
+            self.human.pause("page")
+            return {"ok": True, "message": f"опыт куплен за {cost} золота", "cost": cost}
+        result["message"] = f"варианта «{gold_amount} золота» нет"
         return result
 
     # ------------------------------------------------------------------ рюкзак и вещи

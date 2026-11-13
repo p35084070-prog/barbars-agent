@@ -410,6 +410,8 @@ class Agent:
             self._do_upgrade(decision)
         elif decision.action == "upgrade_mastery":
             self._do_upgrade_mastery(decision)
+        elif decision.action == "buy_iron":
+            self._do_buy_iron(decision)
         elif decision.action == "shop":
             self._do_shop(decision, state)
             self.shop_checked_at = time.time()
@@ -1182,6 +1184,23 @@ class Agent:
         except Exception as exc:
             self.log(f"передача: ошибка — {exc}", "WARN")
 
+    def _do_buy_iron(self, decision: rules.Decision) -> None:
+        """Покупка железа на аукционе ресурсов за золото.
+
+        Лоты железа в игре выставлены в золоте и серебре (2 000 000 железа
+        = 40 зол), поэтому золото можно тратить на железо — это разрешено
+        только явно (конфиг `spend.buy_iron`).
+        """
+        params = decision.params
+        result = self.game.buy_iron_with_gold(
+            min_iron=int(params.get("min_iron", 10_000)),
+            max_gold=int(params.get("max_gold", 0)),
+        )
+        if result.get("ok"):
+            self.log(f"железо: {result.get('message')}")
+        else:
+            self.log(f"железо: купить не удалось — {result.get('message')}", "WARN")
+
     def _do_upgrade_mastery(self, decision: rules.Decision) -> None:
         """Повышение уровня мастерства: железо + мифрил (постоянный бонус)."""
         iron = int(decision.params.get("iron", 0))
@@ -1388,13 +1407,23 @@ class Agent:
             )
 
     def _do_exp(self, decision: rules.Decision) -> None:
-        """Покупка опыта у мудреца за железо (золото не трогаем)."""
+        """Покупка опыта у мудреца — железом или золотом."""
         amount = int(decision.params.get("amount", 0))
+        currency = str(decision.params.get("currency", "iron"))
+        percent = decision.params.get("percent")
+        if currency == "gold":
+            result = self.game.buy_exp_with_gold(amount)
+            if result.get("ok"):
+                self._bump("exp")
+                self.log(f"мудрец: куплен опыт за {amount} золота ({percent}% прокачки)")
+            else:
+                self.log(f"мудрец: покупка опыта за золото не удалась — {result.get('message')}", "WARN")
+            return
         self.expected_spend = amount
         result = self.game.buy_exp_with_iron(amount)
         if result.get("ok"):
             self._bump("exp")
-            self.log(f"мудрец: куплен опыт за {amount} железа ({decision.params.get('percent')}% прокачки)")
+            self.log(f"мудрец: куплен опыт за {amount} железа ({percent}% прокачки)")
         else:
             self.log(f"мудрец: покупка опыта не удалась — {result.get('message')}", "WARN")
 

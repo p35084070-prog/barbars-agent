@@ -129,7 +129,8 @@ class GameState:
             f"опыт={pages.fmt_amount(self.xp_cur)}/{pages.fmt_amount(self.xp_need)} "
             f"участие={pages.fmt_amount(self.participation)} "
             f"свободных_очков_талантов={self.talent_points} "
-            f"бесплатных_боёв=подземелья:{self.free_dungeon}/дуэли:{self.free_duel}"
+            f"бесплатных_боёв=подземелья:{self.free_dungeon}/дуэли:{self.free_duel} "
+            f"таймеры=подземелья:{self.dungeon_in_min}мин/дуэли:{self.duel_in_min}мин"
         )
 
 
@@ -224,6 +225,13 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
         cost = state.repair_cost
         if cost is None or (state.iron or 0) >= cost:
             return Decision("repair", reason=f"чиним снаряжение (железа нужно {cost})")
+
+    # 1a. Железа не хватает, а золото есть — покупаем железо на аукционе.
+    #     Разрешено только явной настройкой `spend.buy_iron.enabled`.
+    if not state.spend_blocked:
+        buy_iron = _pick_buy_iron(state, config)
+        if buy_iron is not None:
+            return buy_iron
 
     # 2. Алтарь клана: пожертвование даёт бонус ко всем параметрам клана.
     #    Бонус протухает примерно через 2,5 часа, и он ЗАМЕНЯЕТСЯ новым:
@@ -350,6 +358,30 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
                 params={"amount": best["amount"], "percent": best.get("percent")},
                 reason=f"покупаем {best.get('percent')}% опыта у мудреца за {best['amount']} железа",
             )
+        # 7-б. Опыт за золото — если железом не оплатить (например, в мобильной
+        #      сборке мудрец берёт только золото, а железо тратить не на что).
+        if exp_cfg.get("buy_with_gold"):
+            gold_options = [
+                o
+                for o in state.exp_options
+                if o.get("currency") == "gold"
+                and o.get("amount", 0) <= (state.gold or 0)
+                and o.get("amount", 0) >= int(exp_cfg.get("min_gold", 5))
+            ]
+            if gold_options:
+                best = max(gold_options, key=lambda o: o.get("percent", 0))
+                return Decision(
+                    "exp",
+                    target=str(best["amount"]),
+                    params={
+                        "amount": best["amount"],
+                        "percent": best.get("percent"),
+                        "currency": "gold",
+                    },
+                    reason=(
+                        f"покупаем {best.get('percent')}% опыта у мудреца за {best['amount']} золота"
+                    ),
+                )
 
     # 8. Продажа ресурсов на аукционе: мифрил и бутылочки (железо не продаём).
     cancel = _pick_cancel(state, config)
@@ -597,6 +629,34 @@ def _pick_shop(state: GameState, config: dict[str, Any]) -> Decision | None:
         reason=(
             f"покупаем снаряжение {min_level} уровня (куплено слотов: "
             f"{len(state.shop_slots)}/{slots})"
+        ),
+    )
+
+
+def _pick_buy_iron(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Купить железо на аукционе ресурсов за золото.
+
+    Нужно, когда золото уже зачислено герою (например, игрок сам закинул
+    его vagojan), а железа не хватает на ремонт снаряжения или прокачку.
+    Лоты железа на аукционе выставлены в золоте и серебре: 2 000 000 железа
+    = 40 зол. Лимит золота задаётся конфигом `spend.buy_iron.max_gold`.
+    """
+    cfg = config.get("spend", {}).get("buy_iron", {}) or {}
+    if not cfg.get("enabled"):
+        return None
+    max_gold = int(cfg.get("max_gold", 0))
+    if max_gold <= 0 or int(state.gold or 0) <= 0:
+        return None
+    min_iron = int(cfg.get("min_iron", 10_000))
+    if int(state.iron or 0) >= int(cfg.get("keep_iron", min_iron)):
+        return None
+    return Decision(
+        "buy_iron",
+        target="железо",
+        params={"min_iron": min_iron, "max_gold": max_gold},
+        reason=(
+            f"железа мало ({state.iron}), а золота хватает — покупаем железо "
+            f"за золото (до {max_gold} зол)"
         ),
     )
 

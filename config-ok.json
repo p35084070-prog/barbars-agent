@@ -94,6 +94,8 @@
     "max_per_day": 1,
     "keep_iron": 100000,
     "min_iron": 5000,
+    "buy_with_gold": true,
+    "min_gold": 5,
     "check_interval_min": 60
   },
   "well": {

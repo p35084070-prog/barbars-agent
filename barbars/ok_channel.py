@@ -262,6 +262,24 @@ class OkGame(Game):
         return cookies, ua
 
     # ------------------------------------------------------------------ кадр игры
+    def _detect_hero_id(self, frame: Frame) -> None:
+        """Определить id героя.
+
+        В мобильной версии игры на главной ссылка на героя — просто
+        `user/body` (без id), поэтому обычный разбор ссылки не даёт ничего.
+        Но в handshake-URL ОК есть подписанный `logged_user_id` — это и есть
+        id героя. Без него агент не заходит на страницу снаряжения и не
+        чинит вещи.
+        """
+        try:
+            url = frame.url
+        except Exception:  # noqa: BLE001
+            url = ""
+        m = re.search(r"logged_user_id=(\d+)", url)
+        if m:
+            self.hero_id = int(m.group(1))
+            print(f"[ОК] герой: id={self.hero_id}")
+
     def current_frame(self) -> Frame:
         """Текущий кадр с игрой (переищется, если ОК пересоздал iframe)."""
         frame = self._frame_ref
@@ -366,6 +384,7 @@ class OkGame(Game):
             self.close()
             raise GameError("Игра через ОК не загрузилась")
         self._frame_ref = frame
+        self._detect_hero_id(frame)
         self._adapter = OkFrameAdapter(self)  # type: ignore[assignment]
         self.page = self._adapter  # type: ignore[assignment]
 
