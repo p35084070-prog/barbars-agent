@@ -5,8 +5,12 @@ name: agent-vagojan
 # входить в игру каждые 15 минут.
 
 on:
-  schedule:
-    - cron: '*/20 * * * *'
+  # Расписание отключено 13.11.2026: у героя vagojan нет кредов от barbars.ru,
+  # он обслуживается агентом agent-ok через канал ОК (hero_id 1286381).
+  # Прогоны падали с «автовход не удался». workflow_dispatch оставлен на будущее,
+  # когда появятся BARBARS_VAGOJAN_* секреты.
+  # schedule:
+  #   - cron: '*/20 * * * *'
   workflow_dispatch:
     inputs:
       duration:
