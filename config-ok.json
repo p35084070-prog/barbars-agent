@@ -79,7 +79,7 @@
       "keep_iron": 500000
     },
     "buy_iron": {
-      "enabled": true,
+      "enabled": false,
       "max_gold": 40,
       "min_iron": 10000,
       "keep_iron": 10000

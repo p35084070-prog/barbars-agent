@@ -645,8 +645,11 @@ def _pick_buy_iron(state: GameState, config: dict[str, Any]) -> Decision | None:
     if not cfg.get("enabled"):
         return None
     max_gold = int(cfg.get("max_gold", 0))
-    if max_gold <= 0 or int(state.gold or 0) <= 0:
+    gold = int(state.gold or 0)
+    if max_gold <= 0 or gold <= 0:
         return None
+    # лот нельзя купить, если золота в кассе не хватает: ограничиваем лимит
+    max_gold = min(max_gold, gold)
     min_iron = int(cfg.get("min_iron", 10_000))
     if int(state.iron or 0) >= int(cfg.get("keep_iron", min_iron)):
         return None
