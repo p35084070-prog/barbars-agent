@@ -290,5 +290,11 @@
     "enabled": true,
     "check_interval_min": 3
   },
+  "ally_repair": {
+    "enabled": true,
+    "heroes": [],
+    "check_interval_min": 60,
+    "keep_iron": 20000
+  },
   "daily_file": "state/vagojan/daily.json"
 }

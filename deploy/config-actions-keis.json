@@ -294,6 +294,14 @@
     "enabled": true,
     "check_interval_min": 3
   },
+  "ally_repair": {
+    "enabled": true,
+    "heroes": [
+      "1286381"
+    ],
+    "check_interval_min": 60,
+    "keep_iron": 20000
+  },
   "state_dir": "logs/keis",
   "daily_file": "state/keis/daily.json",
   "account": "keis"

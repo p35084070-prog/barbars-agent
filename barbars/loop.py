@@ -89,6 +89,9 @@ class Agent:
         # починка: если кнопки «Починить» нет, не пытаемся каждый цикл —
         # иначе агент не доходит до рейда, прокачки и фарма
         self.repair_skip_until: float = 0.0
+        # ремонт снаряжения союзника (vagojan): износ от боёв, чинить недорого
+        self.ally_repair_checked_at: float = 0.0
+        self.ally_repaired_total: int = 0
         # предохранитель: после аномальной убыли железа траты блокируются
         self.block_spend_until: float = 0.0
         self.prev_iron: int | None = None
@@ -306,6 +309,7 @@ class Agent:
                 )
         self.prev_wallet = {"gold": state.gold, "silver": state.silver}
         self._check_altar(state)
+        self._check_ally_repair(state)
         self._check_market(state)
         self._check_auction(state)
         self._check_trade_market(state)
@@ -1525,6 +1529,44 @@ class Agent:
             # бесконечно выбирать ремонт и не дойдёт ни до рейда, ни до фарма.
             self.repair_skip_until = time.time() + 900
             self.log("починка не потребовалась (нет кнопки) — идём дальше", "WARN")
+
+    def _check_ally_repair(self, state: rules.GameState) -> None:
+        """Раз в check_interval_min чиним изношенное снаряжение союзника.
+
+        Ремонт чужой вещи доступен с любого аккаунта: на странице вещи
+        (`/item/id/<id>`) есть ссылка «починить за N», железо списывается
+        с того, кто чинит. Это дёшево (1-2 железа на вещь), а сломанная
+        вещь не даёт бонусов — поэтому чиним регулярно.
+
+        Список союзников и лимит железа — в конфиге `ally_repair`.
+        """
+        cfg = self.config.get("ally_repair", {}) or {}
+        if not cfg.get("enabled"):
+            return
+        heroes = [str(h) for h in (cfg.get("heroes") or []) if str(h).strip()]
+        if not heroes:
+            return
+        now = time.time()
+        interval = float(cfg.get("check_interval_min", 60)) * 60
+        if self.ally_repair_checked_at and now - self.ally_repair_checked_at < interval:
+            return
+        self.ally_repair_checked_at = now
+        keep_iron = int(cfg.get("keep_iron", 20_000))
+        if (state.iron or 0) < keep_iron:
+            self.log(
+                f"снаряжение союзника: железо ниже резерва ({state.iron} < {keep_iron}) — ремонт отложен",
+                "WARN",
+            )
+            return
+        for hero_id in heroes:
+            try:
+                fixed = self.game.repair_other_hero_gear(hero_id)
+            except Exception as exc:  # noqa: BLE001
+                self.log(f"снаряжение союзника {hero_id}: не удалось починить: {exc}", "WARN")
+                continue
+            if fixed:
+                self.ally_repaired_total += fixed
+                self.log(f"снаряжение союзника {hero_id}: починено вещей — {fixed}")
 
     def _check_altar(self, state: rules.GameState) -> None:
         """Раз в check_interval_min смотрим алтарь: бонус и когда он протухнет."""

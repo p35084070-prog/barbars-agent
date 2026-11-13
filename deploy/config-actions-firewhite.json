@@ -290,5 +290,13 @@
     "enabled": true,
     "check_interval_min": 3
   },
+  "ally_repair": {
+    "enabled": false,
+    "heroes": [
+      "1286381"
+    ],
+    "check_interval_min": 60,
+    "keep_iron": 20000
+  },
   "daily_file": "state/firewhite/daily.json"
 }

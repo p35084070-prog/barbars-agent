@@ -1142,6 +1142,55 @@ class Game:
         self.goto(f"https://barbars.ru/user/body/id/{hero_id}")
         return pages.parse_worn_gear(self.p.content())
 
+    def repair_other_hero_gear(self, hero_id: str, max_items: int = 15) -> int:
+        """Починить изношенное снаряжение другого героя клана.
+
+        На странице вещи чужого героя (`/item/id/<id>`) есть ссылка
+        «починить за N» (N — железо) даже для чужого снаряжения: ремонт
+        списывает железо с того, кто чинит. Вещи без ссылки «починить»
+        (например, у вещи с нулевой прочностью) пропускаем.
+
+        Возвращает количество починенных вещей.
+        """
+        self.goto(f"https://barbars.ru/user/body/id/{hero_id}")
+        items: list[tuple[str, str]] = []
+        for a in self.p.locator("a[href*='item/id/']").all():
+            try:
+                title = " ".join((a.inner_text() or "").split())
+                href = a.get_attribute("href") or ""
+            except Exception:
+                continue
+            m = re.search(r"item/id/(\d+)", href)
+            if m and title:
+                items.append((title, m.group(1)))
+        repaired = 0
+        for title, item_id in items[:max_items]:
+            self.goto(f"https://barbars.ru/item/id/{item_id}")
+            text = " ".join(self.body_text().split())
+            dur = re.search(r"Прочность:\s*(\d+)\s*/\s*(\d+)", text)
+            if not dur:
+                continue
+            cur, mx = int(dur.group(1)), int(dur.group(2))
+            if cur >= mx:
+                continue
+            # «починить за N» восстанавливает часть прочности — жмём, пока не цела
+            for _ in range(10):
+                if not self.click_href("repairLink"):
+                    break
+                self.reload()
+                text = " ".join(self.body_text().split())
+                dur = re.search(r"Прочность:\s*(\d+)\s*/\s*(\d+)", text)
+                if not dur:
+                    break
+                new_cur = int(dur.group(1))
+                if new_cur >= mx or new_cur == cur:
+                    cur = new_cur
+                    break
+                cur = new_cur
+            if cur >= mx:
+                repaired += 1
+        return repaired
+
     def shop_item_price(self, item_id: str) -> tuple[int, int]:
         """(золото, серебро) цены товара магазина — со страницы самого товара."""
         from . import pages
