@@ -531,7 +531,10 @@ def parse_raid_room(html: str, text: str = "") -> dict[str, Any]:
             out["limit"] = int(m.group(2))
         block = html[idx:idx + 4000]
         for chunk in block.split("<div>")[1:]:
-            hero = re.search(r'user/id/(\d+)"><span>([^<]+)</span>', chunk)
+            # в ссылке героя между id и кавычками стоит ;jsessionid=... — его надо учесть
+            hero = re.search(
+                r'user/id/(\d+)(?:;[^"]*?)?"><span>([^<]+)</span>', chunk
+            )
             if not hero:
                 continue
             entry = {"id": hero.group(1), "name": hero.group(2)}
