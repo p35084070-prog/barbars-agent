@@ -60,6 +60,7 @@ CHALLENGE_MARKERS = (
     "смс-код",
     "отправьте код",
     "подтверждение",
+    "попасть к злоумышленникам",
 )
 
 
@@ -210,6 +211,9 @@ def main() -> int:
                     if challenge:
                         log(f"⚠️ ОК требует подтверждения («{challenge}») — нужен ручной вход")
                         try:
+                            barrier = " ".join(page.inner_text("body").split()).replace(args.login, "[логин скрыт]").replace(args.password, "[пароль скрыт]")
+                            barrier = re.sub(r"https?://\S+|\+?\d[\d ()-]{8,}\d", "[скрыто]", barrier)
+                            log("защитный экран: " + barrier[:1600])
                             page.screenshot(path=str(ROOT / "logs" / "ok-autologin-challenge.png"))
                         except Exception:  # noqa: BLE001
                             pass
@@ -219,7 +223,8 @@ def main() -> int:
                     log("вход не завершился за отведённое время")
                     try:
                         text = " ".join(page.inner_text("body").split())
-                        log(f"страница: {text[:300]}")
+                        safe_text = text.replace(args.login, "[логин скрыт]").replace(args.password, "[пароль скрыт]")
+                        log(f"страница: {safe_text[:1600]}")
                         (ROOT / "logs").mkdir(parents=True, exist_ok=True)
                         (ROOT / "logs" / "ok-autologin-lastpage.html").write_text(
                             page.content(), encoding="utf-8")

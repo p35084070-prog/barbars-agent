@@ -37,11 +37,11 @@ def main():
                     target = match[1]
             print('CLAN_MEMBERS ' + json.dumps(members, ensure_ascii=False), flush=True)
             if target:
-                game.goto(f'https://barbars.ru/user/body/id/{target}')
+                game.goto(f'https://barbars.ru/user/id/{target}')
                 hero = game.hero()
                 print('QDLE_IDENTITY ' + json.dumps({'hero_id': target, 'class': hero.klass,
                       'level': hero.level, 'guild_id': hero.guild_id, 'max_hp': hero.max_hp,
-                      'max_energy': hero.max_energy}, ensure_ascii=False), flush=True)
+                      'max_energy': hero.max_energy, 'profile_evidence': [l.strip() for l in game.body_text().splitlines() if any(w in normalize_ru(l) for w in ['qdal', 'ур', 'воин', 'медик', 'сила', 'здоровье', 'энергия'])][:30]}, ensure_ascii=False), flush=True)
 
 
 if __name__ == "__main__":
