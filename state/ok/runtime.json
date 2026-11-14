@@ -17,7 +17,7 @@
       "role": "warrior"
     }
   ],
-  "raid_next_check_at": 1794668716.933911,
+  "raid_next_check_at": 1794688466.9035316,
   "raid_wait_for_closed": true,
   "raid_history": [
     {
@@ -5885,5 +5885,9 @@
     "account": "firewhite",
     "closed_observed_at": 1794650529.487488,
     "reopen_at": 1794650822.487488
+  },
+  "hero_maxima": {
+    "max_hp": 3118,
+    "max_energy": 3359
   }
 }
