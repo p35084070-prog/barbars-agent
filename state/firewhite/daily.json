@@ -1,8 +1,14 @@
 {
-  "date": "2026-11-11",
+  "date": "2026-11-14",
   "sold": 0,
   "exp": 0,
   "gift": false,
   "autocrack": false,
-  "award": false
+  "award": false,
+  "auction": 0,
+  "market": 0,
+  "market_bought": [],
+  "shop_buy_ids": [],
+  "shop_slots": [],
+  "shop_bought": []
 }
