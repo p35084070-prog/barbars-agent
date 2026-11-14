@@ -28,3 +28,10 @@ jobs:
           KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
           KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
         run: python -u -m tools.inspect_mail_options
+      - name: Войти в ОК2 сохранённым доступом
+        env:
+          OK_LOGIN: ${{ secrets.OK2_LOGIN }}
+          OK_PASSWORD: ${{ secrets.OK2_PASSWORD }}
+        run: python -u tools/ok_auto_login.py --out state/ok2 --profile profile-ok2-inspect-login --timeout 120
+      - name: Проверить героя ОК2 без начала боёв
+        run: python -u -m tools.inspect_ok2_hero
