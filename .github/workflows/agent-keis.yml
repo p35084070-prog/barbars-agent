@@ -1,96 +1,30 @@
 name: agent-keis
-
-# Схема: длинный сеанс фарма (5,5 часа) + самоперезапуск + cron-страховка.
-
 on:
-  schedule:
-    - cron: '*/20 * * * *'
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Сколько минут работать'
-        default: '330'
-
+        description: 'Только чтение вариантов почты, без отправки'
+        default: '0'
 permissions:
-  contents: write
-  actions: write
-
+  contents: read
 concurrency:
-  group: agent-keis
+  group: inspect-mail-options-keis
   cancel-in-progress: false
-
 jobs:
-  play:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 355
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-
       - name: Зависимости
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest
+          pip install -r requirements.txt
           python -m playwright install --with-deps chromium
-
-      - name: Проверка правил без входа в игру
-        run: python -m pytest tests/test_safety_offline.py -q
-
-      - name: Учётные данные из секретов
+      - name: Прочитать доступные ресурсы, ничего не отправлять
         env:
           KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
           KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
-        run: |
-          mkdir -p credentials
-          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
-          chmod 600 credentials/keis.txt
-
-      - name: Фарм
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          python -u run.py play \
-            --config deploy/config-actions-keis.json \
-            --headless \
-            --duration "${{ github.event.inputs.duration || '330' }}"
-
-      - name: Сохранить дневные счётчики
-        if: always()
-        run: |
-          git config user.name 'barbars-bot'
-          git config user.email 'bot@users.noreply.github.com'
-          git restore --staged .
-          git restore --worktree -- state/keis/repair-budget.json 2>/dev/null || true
-          for file in state/keis/daily.json state/keis/runtime.json; do
-            if [ -f "$file" ]; then git add "$file"; fi
-          done
-          if git diff --cached --quiet; then
-            echo 'счётчики не изменились'
-          else
-            git commit -m 'state(keis): дневные счётчики'
-            for i in 1 2 3; do
-              git pull --rebase origin main && git push origin HEAD:main && break
-              sleep 10
-            done
-          fi
-
-      - name: Следующий сеанс
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api -X POST \
-            "repos/${{ github.repository }}/actions/workflows/agent-keis.yml/dispatches" \
-            -f ref=main \
-            || echo 'не удалось запланировать следующий сеанс (подстрахует cron)'
-
-      - name: Логи
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-keis-${{ github.run_number }}
-          path: logs/keis
-          retention-days: 14
+        run: python -u -m tools.inspect_mail_options
