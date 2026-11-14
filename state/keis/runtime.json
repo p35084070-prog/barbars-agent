@@ -17,7 +17,7 @@
     }
   ],
   "raid_window": 997017,
-  "raid_next_check_at": 1794648477.258066,
+  "raid_next_check_at": 1794668665.8061068,
   "raid_wait_for_closed": true,
   "raid_history": [
     {
@@ -46,10 +46,2371 @@
       "boss_hp": null,
       "outcome": "результат не подтверждён",
       "telemetry": "observed log entries; totals may be incomplete"
+    },
+    {
+      "started_at": 1794648910.5227911,
+      "party": [
+        {
+          "id": "905853",
+          "name": "keis",
+          "role": "medic"
+        },
+        {
+          "id": "1286381",
+          "name": "vagojan",
+          "role": "warrior"
+        },
+        {
+          "id": "31389504",
+          "name": "fire white ii",
+          "role": "warrior"
+        }
+      ],
+      "expected_party": [
+        {
+          "account": "keis",
+          "names": [
+            "Кейс",
+            "KACE",
+            "keis"
+          ],
+          "role": "medic",
+          "id": "905853"
+        },
+        {
+          "account": "firewhite",
+          "names": [
+            "Firewall",
+            "firewhite"
+          ],
+          "role": "warrior",
+          "id": "31389504"
+        },
+        {
+          "account": "ok",
+          "names": [
+            "Лагиджан",
+            "WG",
+            "vagojan"
+          ],
+          "role": "warrior",
+          "id": "1286381"
+        }
+      ],
+      "mode": "every_respawn",
+      "boss_initial_hp_pct": 100,
+      "initiator": "keis",
+      "clan_kills_before": 5,
+      "combat_log_window": [],
+      "recent_events": [
+        "Ты начал бой"
+      ],
+      "boss_last_hp_pct": 66.0,
+      "boss_min_hp_pct": 66.0,
+      "latest_evidence": {
+        "boss_hp_pct": null,
+        "warriors_alive": null,
+        "medics_alive": null,
+        "combat_clock": null,
+        "our_hp": 7396,
+        "our_energy": 3748,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Лечить некого",
+          "Все воины убиты",
+          "Ты исцелил себя на 49 [руна]",
+          "Ты исцелил себя на 49",
+          "Ты полечил себя на 2518",
+          "Дракон ударил тебя на 540",
+          "fire white ii погиб от удара дракона",
+          "Дракон ударил тебя на 481",
+          "Дракон ударил тебя на 420",
+          "Дракон ударил тебя на 525"
+        ],
+        "at": 1794649511.9490771
+      },
+      "sample_signature": [
+        null,
+        null,
+        null,
+        null,
+        false
+      ],
+      "sample_logged_at": 1794649511.9490771,
+      "samples": [
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 6488,
+          "our_energy": 4076,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты начал бой"
+          ],
+          "at": 1794648914.8797276
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:22",
+          "our_hp": 5880,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 96",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 125"
+          ],
+          "at": 1794648937.6779213
+        },
+        {
+          "boss_hp_pct": 99.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:30",
+          "our_hp": 5492,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 134",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 101"
+          ],
+          "at": 1794648945.7511725
+        },
+        {
+          "boss_hp_pct": 98.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:44",
+          "our_hp": 7022,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 111",
+            "Дракон ударил тебя на 124",
+            "Ты полечил себя на 3296 крит",
+            "Дракон ударил тебя на 115",
+            "Дракон ударил тебя на 120"
+          ],
+          "at": 1794648958.8017097
+        },
+        {
+          "boss_hp_pct": 97.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:57",
+          "our_hp": 6422,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 96"
+          ],
+          "at": 1794648974.2092981
+        },
+        {
+          "boss_hp_pct": 96.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:07",
+          "our_hp": 6024,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 120"
+          ],
+          "at": 1794648982.6515563
+        },
+        {
+          "boss_hp_pct": 95.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:21",
+          "our_hp": 7059,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 111",
+            "Дракон ударил тебя на 96",
+            "Дракон ударил тебя на 130",
+            "Ты полечил себя на 3934 крит",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 131",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49"
+          ],
+          "at": 1794648997.2649088
+        },
+        {
+          "boss_hp_pct": 94.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:36",
+          "our_hp": 6331,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 110"
+          ],
+          "at": 1794649011.0310993
+        },
+        {
+          "boss_hp_pct": 93.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:42",
+          "our_hp": 6086,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 135",
+            "Дракон ударил тебя на 139"
+          ],
+          "at": 1794649018.2211993
+        },
+        {
+          "boss_hp_pct": 92.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:56",
+          "our_hp": 5358,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 114",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 106"
+          ],
+          "at": 1794649033.0810754
+        },
+        {
+          "boss_hp_pct": 91.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:11",
+          "our_hp": 4776,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 107",
+            "Дракон ударил тебя на 130"
+          ],
+          "at": 1794649047.5327647
+        },
+        {
+          "boss_hp_pct": 90.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:18",
+          "our_hp": 4440,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 96",
+            "Дракон ударил тебя на 130",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 134"
+          ],
+          "at": 1794649053.9450848
+        },
+        {
+          "boss_hp_pct": 89.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:33",
+          "our_hp": 6216,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 130",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 137"
+          ],
+          "at": 1794649069.5031788
+        },
+        {
+          "boss_hp_pct": 88.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:40",
+          "our_hp": 5883,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 103",
+            "Дракон ударил тебя на 115",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 130",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 120"
+          ],
+          "at": 1794649075.4013786
+        },
+        {
+          "boss_hp_pct": 87.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:54",
+          "our_hp": 5211,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 136",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 134"
+          ],
+          "at": 1794649090.1586225
+        },
+        {
+          "boss_hp_pct": 86.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:01",
+          "our_hp": 4979,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 131",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 136",
+            "Дракон ударил тебя на 129"
+          ],
+          "at": 1794649095.7123287
+        },
+        {
+          "boss_hp_pct": 86.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:14",
+          "our_hp": 4387,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 106",
+            "Дракон ударил тебя на 126",
+            "Дракон ударил тебя на 120"
+          ],
+          "at": 1794649120.0221632
+        },
+        {
+          "boss_hp_pct": 84.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:31",
+          "our_hp": 3698,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 116",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 136",
+            "Дракон ударил тебя на 96",
+            "Дракон ударил тебя на 125"
+          ],
+          "at": 1794649128.182454
+        },
+        {
+          "boss_hp_pct": 84.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:39",
+          "our_hp": 6831,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 3313 крит",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 116"
+          ],
+          "at": 1794649152.8708189
+        },
+        {
+          "boss_hp_pct": 81.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:05",
+          "our_hp": 5618,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 94",
+            "Дракон ударил тебя на 106",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 100",
+            "Дракон ударил тебя на 107"
+          ],
+          "at": 1794649162.0660124
+        },
+        {
+          "boss_hp_pct": 80.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:14",
+          "our_hp": 5281,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 106",
+            "Дракон ударил тебя на 121",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 94"
+          ],
+          "at": 1794649168.7350364
+        },
+        {
+          "boss_hp_pct": 79.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:28",
+          "our_hp": 7070,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 105",
+            "Дракон ударил тебя на 96",
+            "Дракон ударил тебя на 125",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 3518 крит",
+            "Дракон ударил тебя на 131"
+          ],
+          "at": 1794649183.9075775
+        },
+        {
+          "boss_hp_pct": 78.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:45",
+          "our_hp": 6255,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 128",
+            "Дракон ударил тебя на 96"
+          ],
+          "at": 1794649201.0234027
+        },
+        {
+          "boss_hp_pct": 77.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:52",
+          "our_hp": 6029,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 128"
+          ],
+          "at": 1794649207.6289866
+        },
+        {
+          "boss_hp_pct": 76.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:03",
+          "our_hp": 5413,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 99",
+            "Дракон ударил тебя на 102",
+            "Дракон впал в неистовую ярость!",
+            "Дракон ударил тебя на 134"
+          ],
+          "at": 1794649219.9976382
+        },
+        {
+          "boss_hp_pct": 75.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:19",
+          "our_hp": 6991,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 114",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 157",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 148",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 116"
+          ],
+          "at": 1794649234.7237105
+        },
+        {
+          "boss_hp_pct": 74.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:26",
+          "our_hp": 6573,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 154",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 114"
+          ],
+          "at": 1794649243.496215
+        },
+        {
+          "boss_hp_pct": 73.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:43",
+          "our_hp": 5570,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 198",
+            "Дракон ударил тебя на 186",
+            "Дракон ударил тебя на 172",
+            "Дракон ударил тебя на 159"
+          ],
+          "at": 1794649259.0158367
+        },
+        {
+          "boss_hp_pct": 72.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:51",
+          "our_hp": 4940,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 146",
+            "Дракон ударил тебя на 162",
+            "Дракон ударил тебя на 148",
+            "Дракон ударил тебя на 174"
+          ],
+          "at": 1794649267.577257
+        },
+        {
+          "boss_hp_pct": 71.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "06:12",
+          "our_hp": 3609,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 191",
+            "Дракон ударил тебя на 219",
+            "Дракон ударил тебя на 233"
+          ],
+          "at": 1794649287.524802
+        },
+        {
+          "boss_hp_pct": 70.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "06:24",
+          "our_hp": 5210,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 239",
+            "Дракон ударил тебя на 195",
+            "Дракон ударил тебя на 190",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 221",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49"
+          ],
+          "at": 1794649300.3189065
+        },
+        {
+          "boss_hp_pct": 69.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "06:37",
+          "our_hp": 6622,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 247",
+            "Дракон ударил тебя на 225",
+            "Дракон ударил тебя на 258",
+            "Дракон ударил тебя на 192"
+          ],
+          "at": 1794649313.4909923
+        },
+        {
+          "boss_hp_pct": 68.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "06:44",
+          "our_hp": 7396,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 259",
+            "Дракон ударил тебя на 248",
+            "Дракон ударил тебя на 193",
+            "Дракон ударил тебя на 247",
+            "Дракон ударил тебя на 225"
+          ],
+          "at": 1794649318.9749608
+        },
+        {
+          "boss_hp_pct": 68.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "06:49",
+          "our_hp": 7128,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 268",
+            "vagojan погиб от удара дракона",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 259",
+            "Дракон ударил тебя на 248",
+            "Дракон ударил тебя на 193",
+            "Дракон ударил тебя на 247"
+          ],
+          "at": 1794649324.8353891
+        },
+        {
+          "boss_hp_pct": 68.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "07:12",
+          "our_hp": 6048,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 402",
+            "Дракон ударил тебя на 365",
+            "Дракон ударил тебя на 430",
+            "Ты полечил себя на 23 крит [ярость]",
+            "Ты полечил себя на 23 крит",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 452",
+            "Дракон ударил тебя на 480"
+          ],
+          "at": 1794649348.3003445
+        },
+        {
+          "boss_hp_pct": 67.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "07:20",
+          "our_hp": 7267,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 432",
+            "Дракон ударил тебя на 460",
+            "Дракон ударил тебя на 407",
+            "Дракон ударил тебя на 402",
+            "Дракон ударил тебя на 365"
+          ],
+          "at": 1794649355.884615
+        },
+        {
+          "boss_hp_pct": 67.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "07:37",
+          "our_hp": 4239,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 410",
+            "Дракон ударил тебя на 428",
+            "Дракон ударил тебя на 490",
+            "Дракон ударил тебя на 398"
+          ],
+          "at": 1794649372.4793706
+        },
+        {
+          "boss_hp_pct": 66.0,
+          "warriors_alive": 0,
+          "medics_alive": 1,
+          "combat_clock": "07:58",
+          "our_hp": 7396,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 540",
+            "fire white ii погиб от удара дракона",
+            "Дракон ударил тебя на 481",
+            "Дракон ударил тебя на 420",
+            "Дракон ударил тебя на 525",
+            "Дракон ударил тебя на 426"
+          ],
+          "at": 1794649394.1300938
+        },
+        {
+          "boss_hp_pct": null,
+          "warriors_alive": null,
+          "medics_alive": null,
+          "combat_clock": null,
+          "our_hp": 7396,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Лечить некого",
+            "Все воины убиты",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 540",
+            "fire white ii погиб от удара дракона",
+            "Дракон ударил тебя на 481",
+            "Дракон ударил тебя на 420",
+            "Дракон ударил тебя на 525"
+          ],
+          "at": 1794649401.4556794
+        },
+        {
+          "boss_hp_pct": null,
+          "warriors_alive": null,
+          "medics_alive": null,
+          "combat_clock": null,
+          "our_hp": 7396,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Лечить некого",
+            "Все воины убиты",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 540",
+            "fire white ii погиб от удара дракона",
+            "Дракон ударил тебя на 481",
+            "Дракон ударил тебя на 420",
+            "Дракон ударил тебя на 525"
+          ],
+          "at": 1794649419.3446434
+        },
+        {
+          "boss_hp_pct": null,
+          "warriors_alive": null,
+          "medics_alive": null,
+          "combat_clock": null,
+          "our_hp": 7396,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Лечить некого",
+            "Все воины убиты",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 540",
+            "fire white ii погиб от удара дракона",
+            "Дракон ударил тебя на 481",
+            "Дракон ударил тебя на 420",
+            "Дракон ударил тебя на 525"
+          ],
+          "at": 1794649457.5127296
+        },
+        {
+          "boss_hp_pct": null,
+          "warriors_alive": null,
+          "medics_alive": null,
+          "combat_clock": null,
+          "our_hp": 7396,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Лечить некого",
+            "Все воины убиты",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 540",
+            "fire white ii погиб от удара дракона",
+            "Дракон ударил тебя на 481",
+            "Дракон ударил тебя на 420",
+            "Дракон ударил тебя на 525"
+          ],
+          "at": 1794649485.811351
+        },
+        {
+          "boss_hp_pct": null,
+          "warriors_alive": null,
+          "medics_alive": null,
+          "combat_clock": null,
+          "our_hp": 7396,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Лечить некого",
+            "Все воины убиты",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 540",
+            "fire white ii погиб от удара дракона",
+            "Дракон ударил тебя на 481",
+            "Дракон ударил тебя на 420",
+            "Дракон ударил тебя на 525"
+          ],
+          "at": 1794649511.9490771
+        }
+      ],
+      "observed_combat": true,
+      "healing_requests": 63,
+      "event_totals_exact": false,
+      "observed_damage": 0,
+      "observed_healing": 49,
+      "boss_hp": null,
+      "clan_kills_after": 5,
+      "confirmation": "счётчик убийств клана не вырос; победа не зафиксирована",
+      "outcome": "результат не подтверждён",
+      "boss_hp_pct": 66.0,
+      "telemetry": "percent HP from dragon icon; damage/healing are lower bounds; clicks are not healing",
+      "strength_assessment": "недостаточно данных об исходе"
+    },
+    {
+      "started_at": 1794649730.897534,
+      "party": [
+        {
+          "id": "905853",
+          "name": "keis",
+          "role": "medic"
+        },
+        {
+          "id": "1286381",
+          "name": "vagojan",
+          "role": "warrior"
+        },
+        {
+          "id": "31389504",
+          "name": "fire white ii",
+          "role": "warrior"
+        }
+      ],
+      "expected_party": [
+        {
+          "account": "keis",
+          "names": [
+            "Кейс",
+            "KACE",
+            "keis"
+          ],
+          "role": "medic",
+          "id": "905853"
+        },
+        {
+          "account": "firewhite",
+          "names": [
+            "Firewall",
+            "firewhite"
+          ],
+          "role": "warrior",
+          "id": "31389504"
+        },
+        {
+          "account": "ok",
+          "names": [
+            "Лагиджан",
+            "WG",
+            "vagojan"
+          ],
+          "role": "warrior",
+          "id": "1286381"
+        }
+      ],
+      "mode": "every_respawn",
+      "boss_initial_hp_pct": 100,
+      "initiator": "keis",
+      "clan_kills_before": 5,
+      "combat_log_window": [],
+      "recent_events": [
+        "Ты начал бой"
+      ],
+      "boss_last_hp_pct": 75.0,
+      "boss_min_hp_pct": 75.0,
+      "latest_evidence": {
+        "boss_hp_pct": 75.0,
+        "warriors_alive": 1,
+        "medics_alive": 1,
+        "combat_clock": "05:54",
+        "our_hp": 5793,
+        "our_energy": 3429,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 311",
+          "Дракон ударил тебя на 315",
+          "Дракон ударил тебя на 226",
+          "Дракон ударил тебя на 230",
+          "Дракон ударил тебя на 209"
+        ],
+        "at": 1794650109.976994
+      },
+      "sample_signature": [
+        75.0,
+        1,
+        1,
+        null,
+        false
+      ],
+      "sample_logged_at": 1794650109.976994,
+      "samples": [
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 7396,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты начал бой"
+          ],
+          "at": 1794649735.9382281
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:21",
+          "our_hp": 6890,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 113",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 139"
+          ],
+          "at": 1794649766.646053
+        },
+        {
+          "boss_hp_pct": 99.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:39",
+          "our_hp": 5994,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 135",
+            "Дракон ударил тебя на 129"
+          ],
+          "at": 1794649774.0477133
+        },
+        {
+          "boss_hp_pct": 98.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:44",
+          "our_hp": 5758,
+          "our_energy": 3435,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 110"
+          ],
+          "at": 1794649778.3174827
+        },
+        {
+          "boss_hp_pct": 97.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:58",
+          "our_hp": 7396,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 3821 крит",
+            "Дракон ударил тебя на 124",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 106"
+          ],
+          "at": 1794649792.1144612
+        },
+        {
+          "boss_hp_pct": 96.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:12",
+          "our_hp": 6810,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 115",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 97",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 106"
+          ],
+          "at": 1794649808.8689735
+        },
+        {
+          "boss_hp_pct": 95.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:21",
+          "our_hp": 6307,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 140",
+            "Дракон ударил тебя на 96",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 133"
+          ],
+          "at": 1794649817.3436203
+        },
+        {
+          "boss_hp_pct": 94.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:34",
+          "our_hp": 5743,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 140",
+            "Дракон ударил тебя на 112",
+            "Дракон ударил тебя на 96"
+          ],
+          "at": 1794649828.9332592
+        },
+        {
+          "boss_hp_pct": 93.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:50",
+          "our_hp": 7067,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 108",
+            "Дракон ударил тебя на 120",
+            "Ты полечил себя на 23 крит [ярость]",
+            "Ты полечил себя на 23 крит",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 110"
+          ],
+          "at": 1794649846.3126905
+        },
+        {
+          "boss_hp_pct": 92.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:04",
+          "our_hp": 6422,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 112",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 134",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49"
+          ],
+          "at": 1794649860.1474514
+        },
+        {
+          "boss_hp_pct": 91.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:21",
+          "our_hp": 5729,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 136",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 96"
+          ],
+          "at": 1794649876.9646106
+        },
+        {
+          "boss_hp_pct": 90.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:29",
+          "our_hp": 5378,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 130",
+            "Дракон ударил тебя на 120",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 134"
+          ],
+          "at": 1794649884.9049037
+        },
+        {
+          "boss_hp_pct": 89.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:43",
+          "our_hp": 7177,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 134",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 135",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 108"
+          ],
+          "at": 1794649898.497253
+        },
+        {
+          "boss_hp_pct": 88.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:56",
+          "our_hp": 6538,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 111"
+          ],
+          "at": 1794649911.3905497
+        },
+        {
+          "boss_hp_pct": 87.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:16",
+          "our_hp": 7050,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 103",
+            "Дракон ударил тебя на 114",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 101",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 102"
+          ],
+          "at": 1794649931.0818355
+        },
+        {
+          "boss_hp_pct": 86.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:24",
+          "our_hp": 6738,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 116",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 129"
+          ],
+          "at": 1794649939.523031
+        },
+        {
+          "boss_hp_pct": 85.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:31",
+          "our_hp": 6491,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 107",
+            "Дракон ударил тебя на 140",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 116"
+          ],
+          "at": 1794649947.3294148
+        },
+        {
+          "boss_hp_pct": 84.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:45",
+          "our_hp": 5810,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 96",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 106",
+            "Дракон ударил тебя на 138"
+          ],
+          "at": 1794649961.3593574
+        },
+        {
+          "boss_hp_pct": 83.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:00",
+          "our_hp": 7396,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 96",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49"
+          ],
+          "at": 1794649975.4595742
+        },
+        {
+          "boss_hp_pct": 82.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:14",
+          "our_hp": 6773,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 144",
+            "Дракон ударил тебя на 105",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 106"
+          ],
+          "at": 1794649990.0494623
+        },
+        {
+          "boss_hp_pct": 81.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:23",
+          "our_hp": 6330,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 97",
+            "Дракон ударил тебя на 106"
+          ],
+          "at": 1794649999.4713008
+        },
+        {
+          "boss_hp_pct": 80.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:38",
+          "our_hp": 5659,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 99",
+            "Дракон ударил тебя на 115",
+            "Дракон ударил тебя на 107"
+          ],
+          "at": 1794650013.9877493
+        },
+        {
+          "boss_hp_pct": 79.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "04:54",
+          "our_hp": 4963,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 136",
+            "Дракон ударил тебя на 129"
+          ],
+          "at": 1794650030.4026158
+        },
+        {
+          "boss_hp_pct": 78.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:08",
+          "our_hp": 6837,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 143",
+            "Дракон ударил тебя на 139",
+            "Дракон ударил тебя на 141",
+            "Дракон впал в неистовую ярость!"
+          ],
+          "at": 1794650044.9241436
+        },
+        {
+          "boss_hp_pct": 77.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:22",
+          "our_hp": 6084,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 123",
+            "Дракон ударил тебя на 115",
+            "Дракон ударил тебя на 109",
+            "Дракон ударил тебя на 126",
+            "Дракон ударил тебя на 155"
+          ],
+          "at": 1794650058.6809027
+        },
+        {
+          "boss_hp_pct": 76.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:30",
+          "our_hp": 5617,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 149",
+            "Дракон ударил тебя на 152",
+            "Дракон ударил тебя на 166",
+            "Дракон ударил тебя на 123"
+          ],
+          "at": 1794650066.6322331
+        },
+        {
+          "boss_hp_pct": 75.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "05:38",
+          "our_hp": 7396,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 19 крит [ярость]",
+            "Ты полечил себя на 19 крит",
+            "Ты полечил себя на 2518",
+            "Дракон ударил тебя на 158",
+            "Дракон ударил тебя на 177",
+            "Дракон ударил тебя на 164"
+          ],
+          "at": 1794650075.3593671
+        },
+        {
+          "boss_hp_pct": 75.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "05:47",
+          "our_hp": 6645,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 230",
+            "Дракон ударил тебя на 209",
+            "Дракон ударил тебя на 157",
+            "Дракон ударил тебя на 155",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Ты полечил себя на 19 крит [ярость]",
+            "Ты полечил себя на 19 крит",
+            "Ты полечил себя на 2518"
+          ],
+          "at": 1794650082.5300887
+        },
+        {
+          "boss_hp_pct": 75.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "05:54",
+          "our_hp": 5793,
+          "our_energy": 3429,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 311",
+            "Дракон ударил тебя на 315",
+            "Дракон ударил тебя на 226",
+            "Дракон ударил тебя на 230",
+            "Дракон ударил тебя на 209"
+          ],
+          "at": 1794650109.976994
+        }
+      ],
+      "observed_combat": true,
+      "healing_requests": 48,
+      "event_totals_exact": false,
+      "observed_damage": 0,
+      "observed_healing": 49,
+      "boss_hp": null,
+      "clan_kills_after": 5,
+      "confirmation": "счётчик убийств клана не вырос; победа не зафиксирована",
+      "outcome": "результат не подтверждён",
+      "boss_hp_pct": 75.0,
+      "telemetry": "percent HP from dragon icon; damage/healing are lower bounds; clicks are not healing",
+      "strength_assessment": "недостаточно данных об исходе"
+    },
+    {
+      "started_at": 1794650459.0130498,
+      "party": [
+        {
+          "id": "905853",
+          "name": "keis",
+          "role": "medic"
+        },
+        {
+          "id": "1286381",
+          "name": "vagojan",
+          "role": "warrior"
+        },
+        {
+          "id": "31389504",
+          "name": "fire white ii",
+          "role": "warrior"
+        }
+      ],
+      "expected_party": [
+        {
+          "account": "keis",
+          "names": [
+            "Кейс",
+            "KACE",
+            "keis"
+          ],
+          "role": "medic",
+          "id": "905853"
+        },
+        {
+          "account": "firewhite",
+          "names": [
+            "Firewall",
+            "firewhite"
+          ],
+          "role": "warrior",
+          "id": "31389504"
+        },
+        {
+          "account": "ok",
+          "names": [
+            "Лагиджан",
+            "WG",
+            "vagojan"
+          ],
+          "role": "warrior",
+          "id": "1286381"
+        }
+      ],
+      "mode": "every_respawn",
+      "boss_initial_hp_pct": 100,
+      "initiator": "keis",
+      "clan_kills_before": 5,
+      "combat_log_window": [],
+      "recent_events": [
+        "Ты начал бой"
+      ],
+      "boss_last_hp_pct": 100.0,
+      "boss_min_hp_pct": 100.0,
+      "latest_evidence": {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 1,
+        "medics_alive": 1,
+        "combat_clock": "00:00",
+        "our_hp": 3698,
+        "our_energy": 3748,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Начать бой может ветеран клана и выше"
+        ],
+        "at": 1794651062.184044
+      },
+      "sample_signature": [
+        100.0,
+        1,
+        1,
+        null,
+        false
+      ],
+      "sample_logged_at": 1794651062.184044,
+      "samples": [
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты начал бой"
+          ],
+          "at": 1794650465.7272913
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794650840.9428904
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794650856.0221066
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794650881.7695234
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794650920.2604518
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794650935.5373595
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794650963.5609114
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794650990.6661432
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794651034.2538233
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 1,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 3698,
+          "our_energy": 3748,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Начать бой может ветеран клана и выше"
+          ],
+          "at": 1794651062.184044
+        }
+      ],
+      "observed_combat": true,
+      "healing_requests": 1,
+      "observed_damage": 0,
+      "observed_healing": 0,
+      "boss_hp": null,
+      "event_totals_exact": false,
+      "clan_kills_after": 5,
+      "confirmation": "счётчик убийств клана не вырос; победа не зафиксирована",
+      "outcome": "результат не подтверждён",
+      "boss_hp_pct": 100,
+      "telemetry": "percent HP from dragon icon; damage/healing are lower bounds; clicks are not healing",
+      "strength_assessment": "недостаточно данных об исходе"
+    },
+    {
+      "started_at": 1794651160.4955099,
+      "party": [
+        {
+          "id": "905853",
+          "name": "keis",
+          "role": "medic"
+        },
+        {
+          "id": "1286381",
+          "name": "vagojan",
+          "role": "warrior"
+        },
+        {
+          "id": "31389504",
+          "name": "fire white ii",
+          "role": "warrior"
+        }
+      ],
+      "expected_party": [
+        {
+          "account": "keis",
+          "names": [
+            "Кейс",
+            "KACE",
+            "keis"
+          ],
+          "role": "medic",
+          "id": "905853"
+        },
+        {
+          "account": "firewhite",
+          "names": [
+            "Firewall",
+            "firewhite"
+          ],
+          "role": "warrior",
+          "id": "31389504"
+        },
+        {
+          "account": "ok",
+          "names": [
+            "Лагиджан",
+            "WG",
+            "vagojan"
+          ],
+          "role": "warrior",
+          "id": "1286381"
+        }
+      ],
+      "mode": "every_respawn",
+      "boss_initial_hp_pct": 100,
+      "initiator": "keis",
+      "clan_kills_before": 5,
+      "combat_log_window": [],
+      "recent_events": [
+        "Ты начал бой"
+      ],
+      "boss_last_hp_pct": 85.0,
+      "boss_min_hp_pct": 85.0,
+      "latest_evidence": {
+        "boss_hp_pct": 85.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "03:38",
+        "our_hp": 5256,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 134",
+          "Дракон ударил тебя на 94",
+          "Дракон ударил тебя на 107"
+        ],
+        "at": 1794651385.6055465
+      },
+      "sample_signature": [
+        85.0,
+        2,
+        1,
+        null,
+        false
+      ],
+      "sample_logged_at": 1794651377.0427039,
+      "samples": [
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:00",
+          "our_hp": 4042,
+          "our_energy": 4076,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты начал бой"
+          ],
+          "at": 1794651164.3486884
+        },
+        {
+          "boss_hp_pct": 100.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:13",
+          "our_hp": 6734,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2752",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 134",
+            "Ты начал бой"
+          ],
+          "at": 1794651179.478706
+        },
+        {
+          "boss_hp_pct": 99.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:29",
+          "our_hp": 8084,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2752",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 120",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49"
+          ],
+          "at": 1794651195.2405055
+        },
+        {
+          "boss_hp_pct": 98.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:45",
+          "our_hp": 7320,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 121",
+            "Дракон ударил тебя на 94",
+            "Дракон ударил тебя на 135",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 102"
+          ],
+          "at": 1794651211.0288138
+        },
+        {
+          "boss_hp_pct": 97.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "00:59",
+          "our_hp": 6740,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 129",
+            "Дракон ударил тебя на 134"
+          ],
+          "at": 1794651224.4029624
+        },
+        {
+          "boss_hp_pct": 96.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:13",
+          "our_hp": 6174,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 112",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 111",
+            "Дракон ударил тебя на 124"
+          ],
+          "at": 1794651237.9093387
+        },
+        {
+          "boss_hp_pct": 95.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:24",
+          "our_hp": 5631,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 111",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 107",
+            "Дракон ударил тебя на 98"
+          ],
+          "at": 1794651249.0227973
+        },
+        {
+          "boss_hp_pct": 95.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:31",
+          "our_hp": 5289,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 125",
+            "Дракон ударил тебя на 115",
+            "Дракон ударил тебя на 111"
+          ],
+          "at": 1794651273.2561486
+        },
+        {
+          "boss_hp_pct": 93.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "01:54",
+          "our_hp": 7132,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2752",
+            "Дракон ударил тебя на 110",
+            "Дракон ударил тебя на 116",
+            "Дракон ударил тебя на 107",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 120"
+          ],
+          "at": 1794651280.1602082
+        },
+        {
+          "boss_hp_pct": 92.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:02",
+          "our_hp": 6691,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 111",
+            "Дракон ударил тебя на 116",
+            "Дракон ударил тебя на 94",
+            "Ты полечил себя на 2752",
+            "Дракон ударил тебя на 110"
+          ],
+          "at": 1794651287.7897398
+        },
+        {
+          "boss_hp_pct": 92.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:09",
+          "our_hp": 6508,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты исцелил себя на 49 [руна]",
+            "Ты исцелил себя на 49",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 130",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 111"
+          ],
+          "at": 1794651315.8350239
+        },
+        {
+          "boss_hp_pct": 90.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:37",
+          "our_hp": 7909,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Ты полечил себя на 2752",
+            "Дракон ударил тебя на 98",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 94",
+            "Дракон ударил тебя на 129"
+          ],
+          "at": 1794651324.505652
+        },
+        {
+          "boss_hp_pct": 89.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:46",
+          "our_hp": 7559,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 94",
+            "Дракон ударил тебя на 127",
+            "Дракон ударил тебя на 129",
+            "Ты полечил себя на 2752",
+            "Дракон ударил тебя на 98",
+            "Дракон ударил тебя на 120"
+          ],
+          "at": 1794651331.930402
+        },
+        {
+          "boss_hp_pct": 88.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "02:52",
+          "our_hp": 7233,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 116",
+            "Дракон ударил тебя на 94",
+            "Дракон ударил тебя на 127"
+          ],
+          "at": 1794651338.3547552
+        },
+        {
+          "boss_hp_pct": 87.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:07",
+          "our_hp": 6643,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 94",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 111",
+            "Дракон ударил тебя на 129"
+          ],
+          "at": 1794651354.2894418
+        },
+        {
+          "boss_hp_pct": 86.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:25",
+          "our_hp": 5804,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 120",
+            "Дракон ударил тебя на 134",
+            "Дракон ударил тебя на 116"
+          ],
+          "at": 1794651370.31125
+        },
+        {
+          "boss_hp_pct": 85.0,
+          "warriors_alive": 2,
+          "medics_alive": 1,
+          "combat_clock": "03:31",
+          "our_hp": 5591,
+          "our_energy": 3742,
+          "terminal": null,
+          "personal_dead": false,
+          "terminal_evidence": [],
+          "notices": [
+            "Мифический дракон",
+            "Дракон ударил тебя на 111",
+            "Дракон ударил тебя на 102",
+            "Дракон ударил тебя на 120"
+          ],
+          "at": 1794651377.0427039
+        }
+      ],
+      "observed_combat": true,
+      "healing_requests": 26,
+      "event_totals_exact": false,
+      "observed_damage": 0,
+      "observed_healing": 49,
+      "boss_hp": null,
+      "clan_kills_after": 5,
+      "confirmation": "счётчик убийств клана не вырос; победа не зафиксирована",
+      "outcome": "результат не подтверждён",
+      "boss_hp_pct": 100,
+      "telemetry": "percent HP from dragon icon; damage/healing are lower bounds; clicks are not healing",
+      "strength_assessment": "недостаточно данных об исходе"
     }
   ],
   "last_raid": {
-    "started_at": 1794632317.0721993,
+    "started_at": 1794651160.4955099,
     "party": [
       {
         "id": "905853",
@@ -67,14 +2428,424 @@
         "role": "warrior"
       }
     ],
+    "expected_party": [
+      {
+        "account": "keis",
+        "names": [
+          "Кейс",
+          "KACE",
+          "keis"
+        ],
+        "role": "medic",
+        "id": "905853"
+      },
+      {
+        "account": "firewhite",
+        "names": [
+          "Firewall",
+          "firewhite"
+        ],
+        "role": "warrior",
+        "id": "31389504"
+      },
+      {
+        "account": "ok",
+        "names": [
+          "Лагиджан",
+          "WG",
+          "vagojan"
+        ],
+        "role": "warrior",
+        "id": "1286381"
+      }
+    ],
     "mode": "every_respawn",
+    "boss_initial_hp_pct": 100,
+    "initiator": "keis",
+    "clan_kills_before": 5,
+    "combat_log_window": [],
+    "recent_events": [
+      "Ты начал бой"
+    ],
+    "boss_last_hp_pct": 85.0,
+    "boss_min_hp_pct": 85.0,
+    "latest_evidence": {
+      "boss_hp_pct": 85.0,
+      "warriors_alive": 2,
+      "medics_alive": 1,
+      "combat_clock": "03:38",
+      "our_hp": 5256,
+      "our_energy": 3742,
+      "terminal": null,
+      "personal_dead": false,
+      "terminal_evidence": [],
+      "notices": [
+        "Мифический дракон",
+        "Дракон ударил тебя на 134",
+        "Дракон ударил тебя на 94",
+        "Дракон ударил тебя на 107"
+      ],
+      "at": 1794651385.6055465
+    },
+    "sample_signature": [
+      85.0,
+      2,
+      1,
+      null,
+      false
+    ],
+    "sample_logged_at": 1794651377.0427039,
+    "samples": [
+      {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "00:00",
+        "our_hp": 4042,
+        "our_energy": 4076,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты начал бой"
+        ],
+        "at": 1794651164.3486884
+      },
+      {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "00:13",
+        "our_hp": 6734,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты полечил себя на 2752",
+          "Дракон ударил тебя на 125",
+          "Дракон ударил тебя на 134",
+          "Ты начал бой"
+        ],
+        "at": 1794651179.478706
+      },
+      {
+        "boss_hp_pct": 99.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "00:29",
+        "our_hp": 8084,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты полечил себя на 2752",
+          "Дракон ударил тебя на 102",
+          "Дракон ударил тебя на 125",
+          "Дракон ударил тебя на 120",
+          "Ты исцелил себя на 49 [руна]",
+          "Ты исцелил себя на 49"
+        ],
+        "at": 1794651195.2405055
+      },
+      {
+        "boss_hp_pct": 98.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "00:45",
+        "our_hp": 7320,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 121",
+          "Дракон ударил тебя на 94",
+          "Дракон ударил тебя на 135",
+          "Дракон ударил тебя на 120",
+          "Дракон ударил тебя на 102"
+        ],
+        "at": 1794651211.0288138
+      },
+      {
+        "boss_hp_pct": 97.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "00:59",
+        "our_hp": 6740,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты исцелил себя на 49 [руна]",
+          "Ты исцелил себя на 49",
+          "Дракон ударил тебя на 120",
+          "Дракон ударил тебя на 129",
+          "Дракон ударил тебя на 134"
+        ],
+        "at": 1794651224.4029624
+      },
+      {
+        "boss_hp_pct": 96.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "01:13",
+        "our_hp": 6174,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 112",
+          "Дракон ударил тебя на 125",
+          "Дракон ударил тебя на 111",
+          "Дракон ударил тебя на 124"
+        ],
+        "at": 1794651237.9093387
+      },
+      {
+        "boss_hp_pct": 95.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "01:24",
+        "our_hp": 5631,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 111",
+          "Дракон ударил тебя на 102",
+          "Дракон ударил тебя на 107",
+          "Дракон ударил тебя на 98"
+        ],
+        "at": 1794651249.0227973
+      },
+      {
+        "boss_hp_pct": 95.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "01:31",
+        "our_hp": 5289,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 102",
+          "Дракон ударил тебя на 125",
+          "Дракон ударил тебя на 115",
+          "Дракон ударил тебя на 111"
+        ],
+        "at": 1794651273.2561486
+      },
+      {
+        "boss_hp_pct": 93.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "01:54",
+        "our_hp": 7132,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты полечил себя на 2752",
+          "Дракон ударил тебя на 110",
+          "Дракон ударил тебя на 116",
+          "Дракон ударил тебя на 107",
+          "Дракон ударил тебя на 102",
+          "Дракон ударил тебя на 120"
+        ],
+        "at": 1794651280.1602082
+      },
+      {
+        "boss_hp_pct": 92.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "02:02",
+        "our_hp": 6691,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 120",
+          "Дракон ударил тебя на 111",
+          "Дракон ударил тебя на 116",
+          "Дракон ударил тебя на 94",
+          "Ты полечил себя на 2752",
+          "Дракон ударил тебя на 110"
+        ],
+        "at": 1794651287.7897398
+      },
+      {
+        "boss_hp_pct": 92.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "02:09",
+        "our_hp": 6508,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты исцелил себя на 49 [руна]",
+          "Ты исцелил себя на 49",
+          "Дракон ударил тебя на 102",
+          "Дракон ударил тебя на 130",
+          "Дракон ударил тебя на 120",
+          "Дракон ударил тебя на 111"
+        ],
+        "at": 1794651315.8350239
+      },
+      {
+        "boss_hp_pct": 90.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "02:37",
+        "our_hp": 7909,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты полечил себя на 2752",
+          "Дракон ударил тебя на 98",
+          "Дракон ударил тебя на 120",
+          "Дракон ударил тебя на 94",
+          "Дракон ударил тебя на 129"
+        ],
+        "at": 1794651324.505652
+      },
+      {
+        "boss_hp_pct": 89.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "02:46",
+        "our_hp": 7559,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 94",
+          "Дракон ударил тебя на 127",
+          "Дракон ударил тебя на 129",
+          "Ты полечил себя на 2752",
+          "Дракон ударил тебя на 98",
+          "Дракон ударил тебя на 120"
+        ],
+        "at": 1794651331.930402
+      },
+      {
+        "boss_hp_pct": 88.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "02:52",
+        "our_hp": 7233,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 116",
+          "Дракон ударил тебя на 94",
+          "Дракон ударил тебя на 127"
+        ],
+        "at": 1794651338.3547552
+      },
+      {
+        "boss_hp_pct": 87.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "03:07",
+        "our_hp": 6643,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 94",
+          "Дракон ударил тебя на 134",
+          "Дракон ударил тебя на 111",
+          "Дракон ударил тебя на 129"
+        ],
+        "at": 1794651354.2894418
+      },
+      {
+        "boss_hp_pct": 86.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "03:25",
+        "our_hp": 5804,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 120",
+          "Дракон ударил тебя на 134",
+          "Дракон ударил тебя на 116"
+        ],
+        "at": 1794651370.31125
+      },
+      {
+        "boss_hp_pct": 85.0,
+        "warriors_alive": 2,
+        "medics_alive": 1,
+        "combat_clock": "03:31",
+        "our_hp": 5591,
+        "our_energy": 3742,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Дракон ударил тебя на 111",
+          "Дракон ударил тебя на 102",
+          "Дракон ударил тебя на 120"
+        ],
+        "at": 1794651377.0427039
+      }
+    ],
     "observed_combat": true,
+    "healing_requests": 26,
+    "event_totals_exact": false,
     "observed_damage": 0,
     "observed_healing": 49,
     "boss_hp": null,
+    "clan_kills_after": 5,
+    "confirmation": "счётчик убийств клана не вырос; победа не зафиксирована",
     "outcome": "результат не подтверждён",
-    "telemetry": "observed log entries; totals may be incomplete"
+    "boss_hp_pct": 100,
+    "telemetry": "percent HP from dragon icon; damage/healing are lower bounds; clicks are not healing",
+    "strength_assessment": "недостаточно данных об исходе"
   },
-  "raid_guard_until": 1794648492.258066,
-  "raid_reopen_at": null
+  "raid_guard_until": 0,
+  "raid_reopen_at": null,
+  "raid_spawn_witness": {
+    "account": "firewhite",
+    "closed_observed_at": 1794650529.487488,
+    "reopen_at": 1794650822.487488
+  },
+  "raid_published_reopen_at": 1794650441.0677743
 }
