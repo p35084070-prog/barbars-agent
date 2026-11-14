@@ -17,7 +17,7 @@
     }
   ],
   "raid_window": 997017,
-  "raid_next_check_at": 1794668665.8061068,
+  "raid_next_check_at": 1794688584.7184606,
   "raid_wait_for_closed": true,
   "raid_history": [
     {
@@ -2847,5 +2847,9 @@
     "closed_observed_at": 1794650529.487488,
     "reopen_at": 1794650822.487488
   },
-  "raid_published_reopen_at": 1794650441.0677743
+  "raid_published_reopen_at": 1794650441.0677743,
+  "hero_maxima": {
+    "max_hp": 4925,
+    "max_energy": 4076
+  }
 }
