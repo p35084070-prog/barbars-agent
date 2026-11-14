@@ -1113,6 +1113,7 @@ class Agent:
             active["samples"] = active["samples"][-120:]
             sample = dict(sample, damage_lower_bound=active.get("damage_lower_bound", 0),
                           healing_lower_bound=active.get("healing_lower_bound", 0),
+                          healing_received_lower_bound=active.get("healing_received_lower_bound", 0),
                           healing_requests=active.get("healing_requests", 0))
             self.log("рейд: замер " + json.dumps(sample, ensure_ascii=False))
             self._save_runtime()

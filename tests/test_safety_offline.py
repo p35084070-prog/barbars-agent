@@ -68,6 +68,16 @@ def test_empty_waiting_roster_is_not_a_loss():
     assert parse_dragon_evidence(dragon_panel(warriors=0, medics=0))['terminal'] is None
 
 
+def test_live_combat_rows_without_clock2_and_actual_polechil_word():
+    from barbars.raid_evidence import parse_dragon_evidence, record_sample
+    e = parse_dragon_evidence(dragon_panel(extra='<div>Ты ударил дракона на 357</div><div>keis полечил тебя на 2518</div><div>Ты полечил себя на 3296 крит</div>'))
+    active = {}
+    record_sample(active, e, 1)
+    assert active['damage_lower_bound'] == 357
+    assert active['healing_lower_bound'] == 3296
+    assert active['healing_received_lower_bound'] == 2518
+
+
 def test_event_overlap_keeps_repeated_hits_and_restart_without_double_count():
     from barbars.raid_evidence import parse_dragon_evidence, record_sample
     a = 'Ты ударил дракона на 357'
