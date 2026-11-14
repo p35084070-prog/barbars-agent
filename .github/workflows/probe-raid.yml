@@ -1,0 +1,111 @@
+name: probe-raid
+
+# Разведка зала мифического дракона по всем четырём нашим героям.
+#
+# Только чтение: агент не жмёт «Я готов!», не начинает бой и не меняет
+# готовность. Нужно, чтобы увидеть фактический состав зала: собрались ли
+# keis, fire white ii, vagojan (ОК) и qdal (ОК2) одновременно и видит ли
+# руководитель (keis) готовность всей четвёрки.
+#
+# Каждый аккаунт проверяется отдельным шагом: сбой одного не мешает
+# остальным. В лог пишутся строки PROBE_ROOM <json>.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # раз в час — дёшево и достаточно, чтобы поймать момент сборa
+    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-raid
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Учётные данные и сессии
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          OK_SESSION_B64: ${{ secrets.OK_SESSION_B64 }}
+          OK2_SESSION_B64: ${{ secrets.OK2_SESSION_B64 }}
+        run: |
+          mkdir -p credentials state/ok2
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          chmod 600 credentials/*.txt
+          if [ -n "$OK_SESSION_B64" ]; then
+            printf '%s' "$OK_SESSION_B64" > state/ok-session.b64
+          fi
+          if [ -n "$OK2_SESSION_B64" ]; then
+            printf '%s' "$OK2_SESSION_B64" > state/ok2/ok-session.b64
+          fi
+
+      - name: Зал — qdal (ОК2)
+        continue-on-error: true
+        run: python -u tools/probe_raid_room.py --config config-ok2.json --label ok2
+
+      - name: Зал — vagojan (ОК)
+        continue-on-error: true
+        run: python -u tools/probe_raid_room.py --config config-ok.json --label ok
+
+      - name: Зал — keis
+        continue-on-error: true
+        run: python -u tools/probe_raid_room.py --config deploy/config-actions-keis.json --label keis
+
+      - name: Зал — fire white ii
+        continue-on-error: true
+        run: python -u tools/probe_raid_room.py --config deploy/config-actions-firewhite.json --label firewhite
+
+      - name: Сводка состава
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, glob, os
+          print("### Состав зала мифического дракона\n")
+          print("| герой | id | класс | вход | HP босса | в зале | готовы | готовые id | таймер |")
+          print("|---|---|---|---|---|---|---|---|---|")
+          for path in sorted(glob.glob("logs/probe-room-*.json")):
+              try:
+                  d = json.loads(open(path, encoding="utf-8").read())
+              except Exception as exc:
+                  print(f"| {os.path.basename(path)} | — | — | — | — | — | — | {exc} | — |")
+                  continue
+              room = d.get("room") or {}
+              ready = room.get("ready") or []
+              waiting = room.get("waiting") or []
+              status = "ошибка: " + str(d.get("error")) if d.get("error") else "ок"
+              if d.get("expected_hero") and "НЕ СОВПАЛ" in str(d.get("expected_hero")):
+                  status = str(d.get("expected_hero"))
+              ids = ", ".join(str(p.get("id")) for p in ready) or "—"
+              print(f"| {d.get('label')} | {d.get('hero_id') or '—'} | {d.get('hero_class') or '—'} | {status} "
+                    f"| {room.get('hp') if room.get('hp') is not None else '—'} | {len(ready)+len(waiting)} | {len(ready)} "
+                    f"| {ids} | {room.get('reopen_in') or (room.get('in_fight') and 'бой' or '—')} |")
+          PY
+
+      - name: Логи
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-raid-${{ github.run_number }}
+          path: logs
+          retention-days: 7

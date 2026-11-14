@@ -746,3 +746,51 @@ def test_all_live_configs_use_respawn_mode(name):
     cfg = config(name)
     assert cfg["raid"]["every_respawn"]
     assert cfg["raid"]["max_fights_per_day"] == 0
+
+
+@pytest.mark.parametrize("icon,tier", [
+    ("bonusdarkiron", "мифический"),
+    ("bonuslegendary", "легендарный"),
+    ("bonusepic", "эпический"),
+    ("bonusrare", "редкий"),
+    ("bonusgreen", "необычный"),
+    ("bonuscopper", "обычный"),
+])
+def test_item_tier_from_bonus_icon(icon, tier):
+    assert pages.item_tier(f'<div class="{icon}">вещь</div>') == tier
+
+
+def _bag_html(tier_class: str) -> str:
+    return ('<div class="hr"></div>'
+            '<div><a href="../user/rack;jsessionid=X?items:0:crackIronPanel:crackLink">разобрать</a>'
+            f'<a href="../item/id/123"><span>Меч Атланта</span></a><span class="{tier_class}"></span></div>')
+
+
+@pytest.mark.parametrize("tier_class", ["bonusdarkiron", "bonuslegendary", "bonusepic"])
+def test_dragon_reward_tiers_are_never_cracked(tier_class):
+    # Награда за мифического дракона: 1 мифическая + 1 легендарная + 1 эпическая.
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.content.return_value = _bag_html(tier_class)
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    assert g.crack_items(limit=3) == 0
+    g.click_href.assert_not_called()
+
+
+def test_junk_tiers_are_still_cracked():
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.content.return_value = _bag_html("bonuscopper")
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    assert g.crack_items(limit=1) == 1
+    g.click_href.assert_called_once()
+
+
+@pytest.mark.parametrize("name", CONFIGS)
+def test_gear_cleanup_protects_reward_tiers(name):
+    # keep_tiers из конфига (по умолчанию) не должен пропускать наградные вещи.
+    cfg = config(name)
+    keep = tuple(cfg.get("gear", {}).get("keep_tiers", ("мифический", "легендарный", "эпический")))
+    assert set(keep) == {"мифический", "легендарный", "эпический"}

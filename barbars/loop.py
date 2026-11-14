@@ -522,11 +522,14 @@ class Agent:
         moved = 0
         sold = 0
         if crack:
-            # разбираем всё, кроме «Лучше» (их надо надеть) и мифических
+            # разбираем всё, кроме «Лучше» (их надо надеть) и вещей
+            # защищённых качеств (мифические/легендарные/эпические)
+            keep_tiers = tuple(gear_cfg.get("keep_tiers", ("мифический", "легендарный", "эпический")))
             cracked = self.game.crack_items(
                 limit=int(gear_cfg.get("crack_limit", 10)),
                 keep_better=True,
                 keep_mythic=True,
+                keep_tiers=keep_tiers,
             )
             # сундук: там копится старый хлам (1-11 ур), разбираем его со
             # страницы вещи — иначе место для нового дропа закончится
@@ -535,6 +538,7 @@ class Agent:
                     limit=int(gear_cfg.get("crack_chest_limit", 15)),
                     keep_mythic=True,
                     keep_better=True,
+                    keep_tiers=keep_tiers,
                 )
                 cracked += chest_cracked
         counts = self.game.bag_counts()

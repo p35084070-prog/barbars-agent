@@ -20,6 +20,11 @@ from .humanize import Humanizer
 
 BASE_URL = "https://barbars.ru/"
 
+# Качества вещей, которые нельзя разбирать на железо. Награда за мифического
+# дракона — 1 мифическая + 1 легендарная + 1 эпическая вещь, поэтому
+# легендарку и эпику тоже держим целыми (обычный хлам ломаем).
+PROTECTED_ITEM_TIERS = ("мифический", "легендарный", "эпический")
+
 # Числовые значения в игре используют суффиксы: 52k = 52000, 1.5M = 1500000
 _NUM_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([kKmMgG]?)")
 
@@ -2203,13 +2208,15 @@ class Game:
         limit: int = 20,
         keep_better: bool = True,
         keep_mythic: bool = True,
+        keep_tiers: tuple[str, ...] = PROTECTED_ITEM_TIERS,
     ) -> int:
         """Разобрать вещи в рюкзаке на железо.
 
-        Правило игрока: ломаем всё, что не надето и не нужно, кроме мифических
-        вещей (иконка `bonusdarkiron`) — их не ломаем. Пометка «Лучше» означает
-        «сильнее надетого» — такую вещь сначала надевают, и ломать её нельзя.
-        Свитки и книги не ломаем никогда.
+        Правило игрока: ломаем всё, что не надето и не нужно, кроме вещей
+        защищённых качеств (мифические, легендарные, эпические — награда за
+        мифического дракона: 1 мифическая + 1 легендарная + 1 эпическая).
+        Пометка «Лучше» означает «сильнее надетого» — такую вещь сначала
+        надевают, и ломать её нельзя. Свитки и книги не ломаем никогда.
 
         Ссылка разбора `items:N:crackIronPanel:crackLink` есть в списке рюкзака
         не у всех вещей (у эпических и мифических её нет) — для них разбор
@@ -2224,8 +2231,8 @@ class Game:
             for chunk, index in self._item_blocks(html):
                 if keep_better and "Лучше" in chunk:
                     continue
-                if "bonusdarkiron" in chunk or "мифическ" in normalize_ru(chunk):
-                    continue  # мифические вещи не ломаем
+                if self._tier_is_protected(chunk, keep_tiers):
+                    continue  # мифические/легендарные/эпические не ломаем
                 if self._is_scroll_or_book(chunk):
                     continue  # свитки и книги не разбираем
                 if f"list:{index}" in tried:
@@ -2243,7 +2250,7 @@ class Game:
                 ok = self.click_href(f"items:{target[1]}:crackIronPanel:crackLink")
                 key = f"list:{target[1]}"
             else:
-                ok = self._crack_item_page(target[1])
+                ok = self._crack_item_page(target[1], keep_tiers=keep_tiers)
                 key = target[1]
             if not ok:
                 # вещь не разбирается (например, «личная») — не застреваем,
@@ -2262,7 +2269,7 @@ class Game:
         """
         self.goto(f"https://barbars.ru/item/id/{item_id}")
         html = self.p.content()
-        if "bonusdarkiron" in html or "мифическ" in normalize_ru(html):
+        if self._tier_is_protected(html):
             return False
         return self.click_href("toPublicStoreLink")
 
@@ -2297,11 +2304,32 @@ class Game:
             sold += 1
         return sold
 
-    def _crack_item_page(self, item_id: str) -> bool:
+    def _tier_is_protected(self, chunk: str, keep_tiers: tuple[str, ...] = PROTECTED_ITEM_TIERS) -> bool:
+        """Вещь защищённого качества (мифическая/легендарная/эпическая)?
+
+        Качество берём по иконке бонуса (`bonusdarkiron`/`bonuslegendary`/
+        `bonusepic`) — это надёжнее текста, который игра местами пишет
+        с омоглифами.
+        """
+        from . import pages
+
+        if not keep_tiers:
+            return False
+        tier = pages.item_tier(chunk)
+        if tier and tier in keep_tiers:
+            return True
+        text = normalize_ru(chunk)
+        return any(word in text for word in ("мифическ", "легендарн", "эпическ"))
+
+    def _crack_item_page(
+        self,
+        item_id: str,
+        keep_tiers: tuple[str, ...] = PROTECTED_ITEM_TIERS,
+    ) -> bool:
         """Разобрать вещь со страницы самой вещи (`/item/id/<id>`)."""
         self.goto(f"https://barbars.ru/item/id/{item_id}")
         html = self.p.content()
-        if "bonusdarkiron" in html or "мифическ" in normalize_ru(html):
+        if self._tier_is_protected(html, keep_tiers):
             return False
         if "crackIronPanel:crackLink" not in html:
             return False
@@ -2312,16 +2340,18 @@ class Game:
         limit: int = 20,
         keep_mythic: bool = True,
         keep_better: bool = True,
+        keep_tiers: tuple[str, ...] = PROTECTED_ITEM_TIERS,
     ) -> int:
         """Разобрать вещи в сундуке на железо.
 
         В списке сундука разбора нет (только «в рюкзак»), поэтому ломаем со
         страницы вещи — ссылка `actionBlock:crackIronPanel:crackLink` там есть
-        и работает (проверено: эпическая вещь из сундука разобралась).
+        и работает.
 
-        Мифические вещи (`bonusdarkiron`) не ломаем; «Лучше» сначала надеваем.
-        Свитки и книги не ломаем — их активируем и читаем. Если вещь не
-        разбирается, пробуем следующую (иначе чистка сундука встаёт целиком).
+        Мифические, легендарные и эпические вещи не ломаем (награда за
+        дракона); «Лучше» сначала надеваем. Свитки и книги не ломаем — их
+        активируем и читаем. Если вещь не разбирается, пробуем следующую
+        (иначе чистка сундука встаёт целиком).
         """
         cracked = 0
         tried: set[str] = set()
@@ -2332,7 +2362,7 @@ class Game:
             for chunk, index in self._item_blocks(html):
                 if keep_better and "Лучше" in chunk:
                     continue
-                if "bonusdarkiron" in chunk or "мифическ" in normalize_ru(chunk):
+                if self._tier_is_protected(chunk, keep_tiers):
                     continue
                 if self._is_scroll_or_book(chunk):
                     continue  # свитки и книги не разбираем
@@ -2343,7 +2373,7 @@ class Game:
             if target is None:
                 break
             tried.add(target)
-            if not self._crack_item_page(target):
+            if not self._crack_item_page(target, keep_tiers=keep_tiers):
                 continue  # не разобралась — пробуем следующую
             cracked += 1
         return cracked

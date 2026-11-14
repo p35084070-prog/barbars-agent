@@ -625,6 +625,27 @@ def parse_ability_options(html: str) -> dict[str, Any]:
     return {"points": points, "options": options}
 
 
+ITEM_TIER_ICONS = (
+    ("bonusdarkiron", "мифический"),
+    ("bonuslegendary", "легендарный"),
+    ("bonusepic", "эпический"),
+    ("bonusrare", "редкий"),
+    ("bonusgreen", "необычный"),
+    ("bonuscopper", "обычный"),
+)
+
+
+def item_tier(chunk: str) -> str:
+    """Качество вещи по иконке бонуса: мифический/легендарный/эпический/…
+
+    Пустая строка — качество не распознано (тогда вещь считаем обычной).
+    """
+    for key, label in ITEM_TIER_ICONS:
+        if key in chunk:
+            return label
+    return ""
+
+
 def parse_market_lots(html: str) -> list[dict[str, Any]]:
     """Лоты «Аукциона вещей» (/trade/auction).
 
@@ -640,18 +661,7 @@ def parse_market_lots(html: str) -> list[dict[str, Any]]:
             continue
         name_m = re.search(r"item/id/\d+/pt/\d+\"[^>]*>(?:<span>)?([^<]{2,60})", chunk)
         level_m = re.search(r"(\d+)(?:</span>)?\s*ур", chunk)
-        tier = "?"
-        for key, label in (
-            ("bonusdarkiron", "мифический"),
-            ("bonuslegendary", "легендарный"),
-            ("bonusepic", "эпический"),
-            ("bonusrare", "редкий"),
-            ("bonusgreen", "необычный"),
-            ("bonuscopper", "обычный"),
-        ):
-            if key in chunk:
-                tier = label
-                break
+        tier = item_tier(chunk)
         gold = silver = 0
         for icon, number in re.findall(
             r"icons/(money_gold|money_silver)\.png\"[^>]*>\s*<span>([\d.,]+)</span>", chunk
@@ -699,18 +709,7 @@ def parse_shop_gear(html: str) -> list[dict[str, Any]]:
             continue
         level_m = re.search(r"(\d+)(?:</span>)?\s*ур\b", chunk)
         bonus_m = re.search(r"Лучше\s*\(\s*\+(\d+)\s*\)", chunk)
-        tier = "?"
-        for key, label in (
-            ("bonusdarkiron", "мифический"),
-            ("bonuslegendary", "легендарный"),
-            ("bonusepic", "эпический"),
-            ("bonusrare", "редкий"),
-            ("bonusgreen", "необычный"),
-            ("bonuscopper", "обычный"),
-        ):
-            if key in chunk:
-                tier = label
-                break
+        tier = item_tier(chunk)
         gold = silver = 0
         price_html = chunk
         price_at = chunk.find("цена")
