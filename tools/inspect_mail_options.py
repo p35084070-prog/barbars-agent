@@ -33,7 +33,7 @@ def main():
                     continue
                 name = ' '.join(link.inner_text().split())
                 members.append({'id': match[1], 'name': name})
-                if normalize_ru(name) == normalize_ru('Qdle'):
+                if normalize_ru(name) in {normalize_ru('Qdle'), normalize_ru('qdal')}:
                     target = match[1]
             print('CLAN_MEMBERS ' + json.dumps(members, ensure_ascii=False), flush=True)
             if target:
