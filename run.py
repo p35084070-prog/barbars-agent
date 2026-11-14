@@ -114,6 +114,16 @@ def cmd_play_ok(config: dict, headless: bool | None, iterations: int,
         print("Не удалось войти в игру через ОК.")
         game.close()
         return 1
+    expected = config.get("expected_hero")
+    if expected:
+        try:
+            hero = verify_expected_hero(game, expected)
+            config["_verified_hero_maxima"] = {k: getattr(hero, k, None) for k in ("max_hp", "max_energy")
+                                               if isinstance(getattr(hero, k, None), (int, float)) and getattr(hero, k) > 0}
+        except GameError as exc:
+            print(str(exc))
+            game.close()
+            return 1
     agent = Agent(game, config, log_dir=state_dir(config))
     try:
         agent.run_forever(max_iterations=iterations, duration_sec=duration_min * 60)
@@ -123,6 +133,18 @@ def cmd_play_ok(config: dict, headless: bool | None, iterations: int,
         agent.dump_state()
         game.close()
     return 0
+
+
+def verify_expected_hero(game, expected: dict):
+    """Reject a wrong OK session before the new account can do anything."""
+    game.goto("https://barbars.ru/user")
+    hero = game.hero()
+    if (str(game.hero_id) != str(expected.get("id"))
+            or hero.klass != expected.get("class")
+            or str(hero.guild_id) != str(expected.get("guild_id"))):
+        raise GameError("ОК: ID, класс или клан не совпадают с настроенным героем; действия запрещены")
+    print(f"[ОК] герой подтверждён: id={game.hero_id}, класс={hero.klass}, клан={hero.guild_id}", flush=True)
+    return hero
 
 
 def cmd_once(config: dict, headless: bool | None) -> int:
