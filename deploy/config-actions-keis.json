@@ -344,5 +344,6 @@
   },
   "state_dir": "logs/keis",
   "daily_file": "state/keis/daily.json",
-  "account": "keis"
+  "account": "keis",
+  "paths_relative_to": "repository"
 }

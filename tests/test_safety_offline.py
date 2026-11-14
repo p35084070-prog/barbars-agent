@@ -353,3 +353,15 @@ def test_repair_refuses_currency_payment():
     g._near_paid = Mock(return_value=True)
     assert not g.repair_all()
     g.page.locator.return_value.first.click.assert_not_called()
+
+
+@pytest.mark.parametrize("name", CONFIGS)
+def test_real_cloud_config_paths(name):
+    from run import load_config
+    cfg = load_config(ROOT / name)
+    assert Path(cfg["_root"]) == ROOT
+    assert (Path(cfg["_root"]) / cfg["daily_file"]).relative_to(ROOT).parts[0] == "state"
+    assert (Path(cfg["_root"]) / cfg["state_dir"]).relative_to(ROOT).parts[0] == "logs"
+    credentials = cfg.get("auth", {}).get("credentials_file")
+    if credentials:
+        assert (Path(cfg["_root"]) / credentials).relative_to(ROOT).parts[0] == "credentials"

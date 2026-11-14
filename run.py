@@ -1,4 +1,4 @@
-﻿"""CLI агента «Варвары».
+"""CLI агента «Варвары».
 
   python run.py login      # открыть браузер и залогиниться вручную (пароль нам не нужен)
   python run.py play       # автономная игра
@@ -30,7 +30,10 @@ def load_config(path: str | Path) -> dict:
     if not config_path.exists():
         raise SystemExit(f"Нет файла конфигурации: {config_path}")
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    config["_root"] = str(config_path.parent)
+    # Cloud configs live under deploy/, but credentials/state/logs are rooted
+    # at the repository. Keep legacy config-relative paths unless opted in.
+    base = Path(__file__).resolve().parent if config.get("paths_relative_to") == "repository" else config_path.resolve().parent
+    config["_root"] = str(base)
     return config
 
 

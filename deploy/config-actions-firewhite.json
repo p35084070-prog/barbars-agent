@@ -341,5 +341,6 @@
   "daily_file": "state/firewhite/daily.json",
   "trade_market": {
     "enabled": false
-  }
+  },
+  "paths_relative_to": "repository"
 }
