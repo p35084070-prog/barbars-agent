@@ -1,8 +1,9 @@
 """Read the real mail resource choices. Never select or send a resource."""
 import json
 import tempfile
+import re
 
-from barbars.driver import Game
+from barbars.driver import Game, normalize_ru
 
 
 def main():
@@ -22,6 +23,25 @@ def main():
                     for option in select.locator("option").all()]})
             print("MAIL_RESOURCE_OPTIONS " + json.dumps({"account": "keis", "recipient_id": "31389504",
                   "resource_tab_opened": opened, "fields": fields, "submitted": False}, ensure_ascii=False), flush=True)
+            game.goto('https://barbars.ru/guild/16675')
+            members = []
+            target = None
+            for link in game.p.locator('a').all():
+                href = link.get_attribute('href') or ''
+                match = re.search(r'user/(?:body/)?id/(\d+)', href)
+                if not match:
+                    continue
+                name = ' '.join(link.inner_text().split())
+                members.append({'id': match[1], 'name': name})
+                if normalize_ru(name) == normalize_ru('Qdle'):
+                    target = match[1]
+            print('CLAN_MEMBERS ' + json.dumps(members, ensure_ascii=False), flush=True)
+            if target:
+                game.goto(f'https://barbars.ru/user/body/id/{target}')
+                hero = game.hero()
+                print('QDLE_IDENTITY ' + json.dumps({'hero_id': target, 'class': hero.klass,
+                      'level': hero.level, 'guild_id': hero.guild_id, 'max_hp': hero.max_hp,
+                      'max_energy': hero.max_energy}, ensure_ascii=False), flush=True)
 
 
 if __name__ == "__main__":
