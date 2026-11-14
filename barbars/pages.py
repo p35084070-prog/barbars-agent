@@ -489,7 +489,7 @@ def parse_raid_room(html: str, text: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {
         "closed": False,
         "reopen_in": "",
-        "hp": 0,
+        "hp": None,
         "warriors": 0,
         "healers": 0,
         "ready": [],
@@ -522,34 +522,29 @@ def parse_raid_room(html: str, text: str = "") -> dict[str, Any]:
         elif "healer" in icon:
             out["healers"] = int(value or 0) if value.isdigit() else 0
 
-    # кто в зале и кто готов
-    idx = html.find("Кто здесь")
-    if idx >= 0:
-        head = html[idx:idx + 120]
-        m = re.search(r"Кто здесь\s*\[(\d+)\s*из\s*(\d+)\]", head)
-        if m:
-            out["limit"] = int(m.group(2))
-        block = html[idx:idx + 4000]
-        for chunk in block.split("<div>")[1:]:
-            # в ссылке героя между id и кавычками стоит ;jsessionid=... — его надо учесть
-            hero = re.search(
-                r'user/id/(\d+)(?:;[^"]*?)?"><span>([^<]+)</span>', chunk
-            )
-            if not hero:
-                continue
-            entry = {"id": hero.group(1), "name": hero.group(2)}
-            (out["ready"] if "check_green" in chunk else out["waiting"]).append(entry)
-
-    # Боевую панель во время попытки отдаётся участнику прямо на странице зала:
-    # «Бить дракона» (воин) или «Лечить союзников» (медик) + «<кто-то> начал бой».
-    # «Покинуть бой» не годится как признак: он есть и на странице отказа
-    # («Вход закрыт. Бой начался… ты не можешь принять участие»).
-    out["in_fight"] = (
-        "Бить дракона" in text
-        or "Лечить союзников" in text
-        or "начал бой" in text
+    # Work from hero links, independent of nested spans and session suffixes.
+    # Keep readiness local to one row so the next hero cannot donate a green tick.
+    from html import unescape
+    roster = html[html.find("Кто здесь"):] if "Кто здесь" in html else ""
+    hero_re = re.compile(r'<a\b[^>]*href=["\'][^"\']*user/id/(\d+)(?:;[^"\']*)?["\'][^>]*>(.*?)</a>', re.S)
+    for row in re.findall(r"<div\b[^>]*>(.*?)</div>", roster, re.S):
+        matches = list(hero_re.finditer(row))
+        if len(matches) != 1:
+            continue
+        hero = matches[0]
+        name = unescape(re.sub(r"<[^>]+>", "", hero.group(2))).strip()
+        role = "medic" if "healer" in row else ("warrior" if "warrior" in row else "")
+        entry = {"id": hero.group(1), "name": name, "role": role}
+        (out["ready"] if "check_green" in row else out["waiting"]).append(entry)
+    low = cyr_normalize(text)
+    out["locked_out"] = "не можешь принять участие" in low
+    out["closed"] = any(v in low for v in ("вход закрыт", "пустая пещера", "бой начался"))
+    out["valid"] = bool(roster or out["closed"] or "дракон" in low)
+    # A narrative 'someone started' or a leave button is not a combat panel.
+    out["in_fight"] = not out["locked_out"] and any(
+        label in low for label in ("бить дракона", "лечить союзников")
     )
-    out["locked_out"] = "не можешь принять участие" in text
+
     return out
 
 

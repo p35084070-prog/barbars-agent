@@ -36,24 +36,58 @@
     "enabled": true,
     "name": "Мифический дракон",
     "url": "https://barbars.ru/game/dragonDungeon",
-    "check_interval_min": 5,
+    "check_interval_min": 1,
     "repeat_min": 30,
     "stay_sec": 780,
-    "min_party": 2,
+    "min_party": 3,
     "can_start": false,
     "max_fights_per_day": 10,
-    "max_turns": 70,
-    "lone_wait_sec": 300
+    "max_turns": 400,
+    "lone_wait_sec": 300,
+    "leader": "keis",
+    "party": [
+      {
+        "account": "keis",
+        "names": [
+          "Кейс",
+          "KACE",
+          "keis"
+        ],
+        "role": "medic",
+        "id": "905853"
+      },
+      {
+        "account": "firewhite",
+        "names": [
+          "Firewall",
+          "firewhite"
+        ],
+        "role": "warrior",
+        "id": "31389504"
+      },
+      {
+        "account": "ok",
+        "names": [
+          "Лагиджан",
+          "WG",
+          "vagojan"
+        ],
+        "role": "warrior",
+        "id": "1286381"
+      }
+    ],
+    "assembly_sec": 600,
+    "room_check_sec": 8
   },
   "tower_farm": {
     "enabled": true,
     "max_level": 0,
-    "rounds": 2,
-    "fatigue_skip": -15
+    "rounds": 1,
+    "fatigue_skip": 0
   },
   "tire": {
     "enabled": true,
-    "check_interval_min": 30
+    "check_interval_min": 5
   },
   "altar": {
     "enabled": true,
@@ -76,10 +110,13 @@
       "keep_iron": 500000
     },
     "buy_iron": {
-      "enabled": false,
-      "max_gold": 40,
-      "min_iron": 10000,
-      "keep_iron": 10000
+      "enabled": true,
+      "max_gold": 1,
+      "min_iron": 1,
+      "keep_iron": 10000,
+      "max_gold_per_day": 1,
+      "max_silver": 50,
+      "repair_only": true
     }
   },
   "market": {
@@ -110,7 +147,8 @@
     "max_per_day": 3,
     "keep_iron": 0,
     "min_iron": 5000,
-    "check_interval_min": 30
+    "check_interval_min": 30,
+    "buy_with_gold": false
   },
   "well": {
     "gift_enabled": true,
@@ -200,7 +238,7 @@
     "Сила баланса"
   ],
   "llm": {
-    "enabled": true,
+    "enabled": false,
     "model": "claude-sonnet-4-5",
     "api_key_env": "ANTHROPIC_API_KEY",
     "max_calls_per_hour": 60,
@@ -211,16 +249,17 @@
   "gear": {
     "enabled": true,
     "keep_bag": 2,
-    "max_equip": 8,
+    "max_equip": 0,
     "crack": true,
     "crack_limit": 15,
     "crack_chest": true,
     "crack_chest_limit": 15,
     "keep_mythic": true,
-    "sell_store": true,
+    "sell_store": false,
     "sell_limit": 3,
     "pause_min": 10,
-    "overflow_crack": "autoCrackUncommonLink"
+    "overflow_crack": "autoCrackUncommonLink",
+    "auto_equip": false
   },
   "upgrade": {
     "enabled": true,
@@ -284,7 +323,8 @@
     "enabled": true,
     "check_interval_min": 10,
     "only_free": true,
-    "limit": 5
+    "limit": 5,
+    "mode": "discard"
   },
   "mail": {
     "enabled": true,
@@ -298,5 +338,8 @@
     "check_interval_min": 60,
     "keep_iron": 20000
   },
-  "daily_file": "state/firewhite/daily.json"
+  "daily_file": "state/firewhite/daily.json",
+  "trade_market": {
+    "enabled": false
+  }
 }

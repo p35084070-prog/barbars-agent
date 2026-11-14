@@ -38,7 +38,7 @@ _HOMOGLYPHS = str.maketrans(
 
 def normalize_ru(text: str) -> str:
     """Латинские омоглифы -> кириллица (для сравнения строк игры)."""
-    return text.translate(_HOMOGLYPHS).lower()
+    return text.lower().translate(_HOMOGLYPHS)
 
 
 def parse_amount(raw: str | None) -> int:
@@ -741,8 +741,6 @@ class Game:
                 life_values.append(value)
         if len(life_values) >= 2:
             cs.enemy_hp = life_values[1]
-        elif life_values:
-            cs.enemy_hp = life_values[0]
 
         # Имя противника — текст ссылки удара вида "Бить <имя>".
         for link in self.p.locator("a").all():
@@ -756,18 +754,20 @@ class Game:
             if "abilityCombatPanel" in href:
                 continue  # это умение, его разбираем отдельно
             flat = text.split("\n")[0].strip()
-            if text.startswith(("Бить", "Атаковать", "Ударить", "Напасть", "Жечь")):
+            low = normalize_ru(text)
+            if low.startswith(("бить", "атаковать", "ударить", "напасть", "жечь")):
                 # «Жечь энергию врагам» — тоже боевое действие (осада башни),
                 # без него агент не понимает, что бой продолжается
                 cs.attack_links.append(flat)
                 if text.startswith("Бить"):
                     cs.enemy_name = flat[len("Бить") :].strip()
-            elif text.startswith("Лечить"):
+            elif low.startswith("лечить"):
                 cs.heal_links.append(flat)
             elif text.startswith("Сбежать") or text.startswith("Отступить") or text.startswith("Убежать"):
                 cs.flee_links.append(flat)
-            elif "бутылочк" in text.lower() or "зелье" in text.lower() or "выпить" in text.lower():
-                cs.potion_links.append(flat)
+            elif low.startswith(("пить бутылочк", "выпить", "использовать зелье")):
+                if not self._near_paid(link):
+                    cs.potion_links.append(flat)
 
         # Умения: ссылки с abilityCombatPanel в href — их видно на любой боевой странице.
         for link in self.p.locator("a[href*='abilityCombatPanel']").all():
@@ -804,9 +804,6 @@ class Game:
             cs.victory = False
         elif re.search(r"Победа|ты победил|побеждён", tail, re.IGNORECASE):
             cs.victory = True
-        elif not cs.attack_links and not cs.abilities and cs.log_lines:
-            # боевых кнопок нет — бой закончился
-            cs.finished = True
         return cs
 
     def fight_limits(self) -> dict[str, int]:
@@ -860,6 +857,8 @@ class Game:
             if locator.count() == 0:
                 break
             try:
+                if self._near_paid(locator.first):
+                    break
                 locator.first.scroll_into_view_if_needed(timeout=3000)
                 locator.first.click(timeout=8000)
             except Exception:
@@ -1342,7 +1341,7 @@ class Game:
             )
         return out
 
-    def hero_fatigue(self) -> int:
+    def hero_fatigue(self) -> int | None:
         """Усталость героя в процентах: 0 — нет, -30 — минус треть добычи.
 
         Страница героя `/user`: «усталость: -30%». По справке (/user/tire)
@@ -1355,7 +1354,11 @@ class Game:
         self.goto("https://barbars.ru/user")
         text = pages.cyr_normalize(self.body_text())
         m = re.search(r"усталость\s*:\s*(-?\d+)\s*%", text)
-        return int(m.group(1)) if m else 0
+        if m:
+            return int(m.group(1))
+        if "нет усталости" in text or "усталость отсутствует" in text:
+            return 0
+        return None
 
     def battlefields_state(self) -> dict[str, Any]:
         """Состояние «Полей сражений» (/game/bg): когда следующий бой и счёт."""
@@ -1391,7 +1394,7 @@ class Game:
         зала (`/game/dragonDungeon`) отдаёт боевую панель участнику — достаточно
         её перезагрузить. Поэтому зал проверяем последним, если указан.
         """
-        if "Покинуть бой" in self.body_text():
+        if self.combat().attack_links or self.combat().heal_links:
             return True
         for url in ("https://barbars.ru/game/dungeons", "https://barbars.ru/"):
             self.goto(url)
@@ -1400,12 +1403,13 @@ class Game:
             if not self.click_text("Вернуться в бой"):
                 continue
             self._settle()
-            if "Покинуть бой" in self.body_text():
+            cs = self.combat()
+            if cs.attack_links or cs.heal_links:
                 return True
         if lair_url:
             self.goto(lair_url)
             text = self.body_text()
-            if "Бить дракона" in text or "Лечить союзников" in text:
+            if "бить дракона" in normalize_ru(text) or "лечить союзников" in normalize_ru(text):
                 return True
         return False
 
@@ -1523,6 +1527,55 @@ class Game:
                 except Exception:
                     continue
         return out
+
+    def open_loot_chests(self, limit: int = 3) -> int:
+        """Open only explicit free chest actions; never buy a key or use gold."""
+        candidates = []
+        for url in ("https://barbars.ru/user/rack", "https://barbars.ru/user/store"):
+            self.goto(url)
+            for chunk, _ in self._item_blocks(self.p.content()):
+                match = NAME_BLOCK_RE.search(chunk)
+                if match and "сундук" in normalize_ru(match.group(2)):
+                    candidates.append(match.group(1))
+        opened = 0
+        for item_id in dict.fromkeys(candidates):
+            if opened >= limit:
+                break
+            self.goto(f"https://barbars.ru/item/id/{item_id}")
+            if "сундук" not in normalize_ru(self.body_text()):
+                continue
+            for link in self.p.locator("a").all():
+                label = normalize_ru(" ".join((link.inner_text() or "").split()))
+                if label not in {"открыть", "открыть сундук"} or self._near_paid(link):
+                    continue
+                link.click(timeout=8000)
+                self._settle()
+                # No generic confirmation: an unexpected purchase prompt is left untouched.
+                text = normalize_ru(self.body_text())
+                if "получил" in text or "сундук открыт" in text:
+                    opened += 1
+                break
+        return opened
+
+    def discard_scroll(self, item_id: str) -> bool:
+        self.goto(f"https://barbars.ru/item/id/{item_id}")
+        text = normalize_ru(self.body_text())
+        if "свиток" not in text or "bonusdarkiron" in self.p.content() or "мифическ" in text:
+            return False
+        for link in self.p.locator("a").all():
+            label = normalize_ru(" ".join((link.inner_text() or "").split()))
+            if label in {"выбросить", "выкинуть"} and not self._near_paid(link):
+                link.click(timeout=8000)
+                self._settle()
+                after = normalize_ru(self.body_text())
+                # Only a discard-specific confirmation is acceptable.
+                if "хочешь выбросить" in after or "выбросить эту вещь" in after:
+                    if not self.click_text("Да, подтверждаю"):
+                        return False
+                    self._settle()
+                    after = normalize_ru(self.body_text())
+                return "выброшен" in after or "вещь удалена" in after or "свиток" not in after
+        return False
 
     def activate_scroll(self, item_id: str, only_free: bool = True) -> tuple[bool, str]:
         """Активировать свиток (или прочитать книгу).
@@ -1784,6 +1837,13 @@ class Game:
             price_html = m.group(2)
             gold = re.search(r"money_gold[^>]*>\s*<span>(\d+)</span>", price_html)
             silver = re.search(r"money_silver[^>]*>\s*<span>(\d+)</span>", price_html)
+            if not (gold or silver):
+                continue
+            icons = set(re.findall(r"icons/([\w]+)\.png", price_html))
+            if icons - {"money_gold", "money_silver"}:
+                continue
+            if ("money_gold" in price_html and not gold) or ("money_silver" in price_html and not silver):
+                continue
             out.append(
                 {
                     "qty": int(m.group(1)),
@@ -1801,42 +1861,44 @@ class Game:
         = 40 зол). Покупаем самый дешёвый по «золото на 1000 железа», если он
         укладывается в лимит золота, и только если железа реально не хватает.
         """
-        result: dict[str, Any] = {"ok": False, "message": "", "qty": 0, "gold": 0}
-        lots = self.iron_lots()
+        result = {"ok": False, "not_submitted": True, "message": "no verified repair offer"}
+        before = self.status()
+        if before.iron != 0 or before.gold is None or before.silver is None:
+            return result
+        max_gold = min(1, max_gold, before.gold)
+        lots = [lot for lot in self.iron_lots() if (
+            0 <= lot["gold"] <= max_gold and 0 <= lot["silver"] <= min(50, before.silver)
+            and lot["qty"] >= min_iron and (lot["gold"] or lot["silver"])
+        )]
         if not lots:
-            result["message"] = "лоты железа не найдены"
             return result
-
-        def score(lot: dict[str, Any]) -> float:
-            return (lot["gold"] * 1000 + lot["silver"] * 20) / max(1, lot["qty"])
-
-        affordable = [lot for lot in lots if lot["gold"] <= max_gold and lot["qty"] >= min_iron]
-        if not affordable:
-            result["message"] = (
-                f"нет лотов железа под лимит {max_gold} зол "
-                f"(минимум {min_iron} железа); доступно {len(lots)} лотов"
-            )
+        # No invented exchange rate between currencies; prefer silver-only lots.
+        best = min(lots, key=lambda lot: (lot["gold"], lot["silver"], -lot["qty"]))
+        self.goto(best["href"])
+        html = self.p.content()
+        qty = re.search(r"([\d\s]+)\s*(?:</span>\s*<span>)?жлз", html)
+        gold = re.findall(r"money_gold[^>]*>\s*<span>(\d+)</span>", html)
+        silver = re.findall(r"money_silver[^>]*>\s*<span>(\d+)</span>", html)
+        # Confirmation can contain wallet figures too: ambiguous prices deny buying.
+        if (not qty or int(re.sub(r"\s", "", qty.group(1))) != best["qty"]
+                or gold != ([str(best["gold"])] if best["gold"] else [])
+                or silver != ([str(best["silver"])] if best["silver"] else [])
+                or "Да, подтверждаю" not in self.body_text()):
+            result["message"] = "confirmation price/currency is ambiguous"
             return result
-        best = min(affordable, key=score)
-        url = best["href"]
-        if not url.startswith("http"):
-            url = f"https://barbars.ru/{url.lstrip('./').lstrip('/')}"
-        self.goto(url)
-        # страница подтверждения: «Подтверди, что ты хочешь купить: N жлз по цене G»
-        text = " ".join(self.body_text().split())
-        if "Да, подтверждаю" not in text:
-            result["message"] = "страница подтверждения не открылась"
-            return result
+        result["not_submitted"] = False
         if not self.click_text("Да, подтверждаю"):
-            result["message"] = "не удалось подтвердить покупку"
+            result["message"] = "purchase submission outcome unknown"
             return result
         self._settle()
-        result["ok"] = True
-        result["qty"] = best["qty"]
-        result["gold"] = best["gold"]
-        result["message"] = (
-            f"куплено {best['qty']} железа за {best['gold']} зол + {best['silver']} сер"
-        )
+        after = self.status()
+        result.update(qty=best["qty"], gold=best["gold"], silver=best["silver"])
+        if (after.iron is not None and after.iron >= before.iron + best["qty"]
+                and after.gold == before.gold - best["gold"]
+                and after.silver == before.silver - best["silver"]):
+            result.update(ok=True, message="purchase confirmed by resource and wallet changes")
+        else:
+            result["message"] = "purchase result unknown; reservation remains blocked"
         return result
 
     def sell_resource(
@@ -2071,35 +2133,8 @@ class Game:
 
         Также подтягиваем «Лучше» из сундука: там тоже лежат вещи сильнее надетых.
         """
-        worn = 0
-        for _ in range(limit):
-            self.goto("https://barbars.ru/user/rack")
-            html = self.p.content()
-            target = None
-            for chunk, index in self._item_blocks(html):
-                if "Лучше" in chunk and f"items:{index}:wearLink" in chunk:
-                    target = index
-                    break
-            if target is None:
-                # ищем «Лучше» в сундуке и переносим в рюкзак
-                self.goto("https://barbars.ru/user/store")
-                store_html = self.p.content()
-                store_target = None
-                for chunk, index in self._item_blocks(store_html):
-                    if "Лучше" in chunk and f"items:{index}:toRackLink" in chunk:
-                        store_target = index
-                        break
-                if store_target is None:
-                    break
-                if not self.click_href(f"items:{store_target}:toRackLink"):
-                    break
-                continue
-            if not self.click_href(f"items:{target}:wearLink"):
-                break
-            # игра спрашивает подтверждение («вещь станет личной»)
-            self.confirm_if_needed()
-            worn += 1
-        return worn
+        # The user manages equipment manually, including loot from mail/shop.
+        return 0
 
     @staticmethod
     def _is_scroll_or_book(chunk: str) -> bool:
@@ -2137,7 +2172,7 @@ class Game:
             for chunk, index in self._item_blocks(html):
                 if keep_better and "Лучше" in chunk:
                     continue
-                if keep_mythic and "bonusdarkiron" in chunk:
+                if "bonusdarkiron" in chunk or "мифическ" in normalize_ru(chunk):
                     continue  # мифические вещи не ломаем
                 if self._is_scroll_or_book(chunk):
                     continue  # свитки и книги не разбираем
@@ -2174,6 +2209,9 @@ class Game:
         снаряжение: обычный аукцион — только для ресурсов.
         """
         self.goto(f"https://barbars.ru/item/id/{item_id}")
+        html = self.p.content()
+        if "bonusdarkiron" in html or "мифическ" in normalize_ru(html):
+            return False
         return self.click_href("toPublicStoreLink")
 
     def sell_extra_items(self, limit: int = 3) -> int:
@@ -2211,6 +2249,8 @@ class Game:
         """Разобрать вещь со страницы самой вещи (`/item/id/<id>`)."""
         self.goto(f"https://barbars.ru/item/id/{item_id}")
         html = self.p.content()
+        if "bonusdarkiron" in html or "мифическ" in normalize_ru(html):
+            return False
         if "crackIronPanel:crackLink" not in html:
             return False
         return self.click_href("crackIronPanel:crackLink")
@@ -2240,7 +2280,7 @@ class Game:
             for chunk, index in self._item_blocks(html):
                 if keep_better and "Лучше" in chunk:
                     continue
-                if keep_mythic and "bonusdarkiron" in chunk:
+                if "bonusdarkiron" in chunk or "мифическ" in normalize_ru(chunk):
                     continue
                 if self._is_scroll_or_book(chunk):
                     continue  # свитки и книги не разбираем
@@ -2258,8 +2298,8 @@ class Game:
 
     def crack_all_items(self) -> bool:
         """«Разобрать всё на железо» — аварийный вариант для полного рюкзака."""
-        self.goto("https://barbars.ru/user/rack")
-        return self.click_href("crackAllIronLink")
+        # Bulk destruction cannot prove that mythical items are excluded.
+        return False
 
     def master_state(self) -> dict[str, Any]:
         """Одна загрузка /user/master: варианты параметров и цена мастерства.
@@ -2486,7 +2526,7 @@ class Game:
                 }"""
             )
         except Exception:
-            return False
+            return True  # unreadable price context cannot authorize a click
         text = str(info or "").lower()
         return any(mark.lower() in text for mark in marks)
 

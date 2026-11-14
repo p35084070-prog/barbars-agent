@@ -78,7 +78,7 @@ class GameState:
     autocrack_set_today: bool = False
     autocrack_kind: str = ""
     # усталость героя: 0 — нет, -30 — минус треть добычи в башнях
-    tire: int = 0
+    tire: int | None = None
     # предохранитель: железо упало аномально — траты железа заблокированы
     spend_blocked: bool = False
     # рюкзак: шаг «рюкзак» не дал эффекта (сундук полон, надеть нечего)
@@ -325,16 +325,6 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     target = _pick_target(state, config)
     if target is not None:
         return Decision("fight", target=target.title, params={"href": target.href}, reason="используем бесплатный бой")
-    if spend.get("allow_gold_fights") and target is None:
-        paid = [t for t in state.targets if t.kind in {"dungeon", "duel"}]
-        if paid:
-            return Decision(
-                "fight",
-                target=paid[0].title,
-                params={"href": paid[0].href, "paid": True},
-                reason="платный бой за золото разрешён",
-            )
-
     # 7. Опыт у мудреца — платим железом (золото не трогаем).
     exp_cfg = config.get("exp", {})
     if (exp_cfg.get("enabled", True)
@@ -634,25 +624,18 @@ def _pick_shop(state: GameState, config: dict[str, Any]) -> Decision | None:
 
 
 def _pick_buy_iron(state: GameState, config: dict[str, Any]) -> Decision | None:
-    """Купить железо на аукционе ресурсов за золото.
-
-    Нужно, когда золото уже зачислено герою (например, игрок сам закинул
-    его vagojan), а железа не хватает на ремонт снаряжения или прокачку.
-    Лоты железа на аукционе выставлены в золоте и серебре: 2 000 000 железа
-    = 40 зол. Лимит золота задаётся конфигом `spend.buy_iron.max_gold`.
-    """
+    """Emergency repair only. Reserve and verify money at execution time."""
     cfg = config.get("spend", {}).get("buy_iron", {}) or {}
     if not cfg.get("enabled"):
         return None
-    max_gold = int(cfg.get("max_gold", 0))
-    gold = int(state.gold or 0)
-    if max_gold <= 0 or gold <= 0:
+    # Exception is for emergency repairs only; unknown resources deny spending.
+    if not state.needs_repair or state.iron != 0 or not state.repair_cost:
         return None
-    # лот нельзя купить, если золота в кассе не хватает: ограничиваем лимит
-    max_gold = min(max_gold, gold)
-    min_iron = int(cfg.get("min_iron", 10_000))
-    if int(state.iron or 0) >= int(cfg.get("keep_iron", min_iron)):
+    max_gold = min(1, int(cfg.get("max_gold", 1)), int(state.gold or 0))
+    if max_gold < 0 or (max_gold == 0 and not state.silver):
         return None
+    min_iron = int(state.repair_cost)
+
     return Decision(
         "buy_iron",
         target="железо",
@@ -888,7 +871,7 @@ def _pick_ability(state: GameState, config: dict[str, Any]) -> Decision | None:
 
 
 def _pick_scrolls(state: GameState, config: dict[str, Any]) -> Decision | None:
-    """Активация свитков (бесплатно при премиуме) и чтение книг."""
+    """Discard scrolls without activating them."""
     cfg = config.get("scrolls", {})
     if not cfg.get("enabled"):
         return None
@@ -898,7 +881,7 @@ def _pick_scrolls(state: GameState, config: dict[str, Any]) -> Decision | None:
         "scrolls",
         target="свитки",
         params={"only_free": bool(cfg.get("only_free", True)), "limit": int(cfg.get("limit", 5))},
-        reason=f"активируем свитки: {len(state.scrolls)} шт.",
+        reason=f"выбрасываем свитки: {len(state.scrolls)} шт.",
     )
 
 
@@ -919,8 +902,7 @@ def _pick_tower(state: GameState, config: dict[str, Any]) -> Decision | None:
     max_level = int(cfg.get("max_level", 0) or 0)
     if max_level and (state.level or 0) > max_level:
         return None
-    skip = int(cfg.get("fatigue_skip", 0) or 0)
-    if skip and (state.tire or 0) <= skip:
+    if state.tire != 0:
         return None
     return Decision(
         "tower",
@@ -1049,7 +1031,7 @@ def _pick_target(state: GameState, config: dict[str, Any]) -> pages.FightTarget 
             continue
         if kind == "dungeon" and state.free_dungeon <= 0:
             continue
-        if kind == "tower" and state.free_dungeon <= 0:
+        if kind == "tower" and (state.free_dungeon <= 0 or state.tire != 0):
             continue
         options.sort(key=lambda t: (t.fights_left is None, -(t.fights_left or 0)))
         return options[0]
@@ -1083,6 +1065,9 @@ class CombatPolicy:
         # Зелье при низком здоровье.
         if cs.potion_links and hp_ratio * 100 < self.potion_below:
             return Decision("potion", params={"text": cs.potion_links[0]}, reason="хилка на низком HP")
+
+        if force and self.prefer_heal and cs.heal_links:
+            return Decision("heal", params={"text": cs.heal_links[0]}, reason="медик лечит отряд")
 
         # Умения: сначала «увеличивает урон» перед ударом, затем защита.
         boost = next((a for a in cs.abilities if a["ready"] and "увеличивает урон" in a.get("desc", "")), None)
