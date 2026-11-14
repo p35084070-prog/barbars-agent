@@ -13,7 +13,7 @@ from typing import Any
 from . import pages, rules
 from .driver import Game
 from .llm import ClaudeAdvisor
-from .safety import RepairBudget, atomic_json, party_ready, raid_window, respawn_seconds
+from .safety import RepairBudget, SpawnWitness, atomic_json, party_ready, raid_window, respawn_seconds
 from .raid_evidence import record_sample
 
 
@@ -25,6 +25,8 @@ class Agent:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         # имя аккаунта: чтобы логи и дневные счётчики разных аккаунтов не смешивались
         self.account = str(config.get("account", "default"))
+        self.spawn_witness = SpawnWitness(Path(config.get("_root", ".")), self.account,
+            [p["account"] for p in config.get("raid", {}).get("party", []) if p.get("account") and p["account"] != self.account])
         suffix = f"-{self.account}" if self.account and self.account != "default" else ""
         self.log_path = self.log_dir / f"agent{suffix}-{datetime.now():%Y%m%d}.log"
         self.advisor = ClaudeAdvisor(config)
@@ -924,6 +926,16 @@ class Agent:
         self.runtime["raid_next_check_at"] = now + delay
         self.runtime["raid_guard_until"] = now + (seconds + 30 if seconds is not None and seconds <= lead else (30 if seconds is None else 0))
         self.runtime["raid_reopen_at"] = now + seconds if seconds is not None else None
+        if info.get("closed") and seconds is not None:
+            reopen = now + seconds
+            if (abs(reopen - self.runtime.get("raid_published_reopen_at", 0)) > 60
+                    and now - getattr(self, "spawn_publish_tried_at", 0) >= 60):
+                self.spawn_publish_tried_at = now
+                try:
+                    self.spawn_witness.publish(now, reopen)
+                    self.runtime["raid_published_reopen_at"] = reopen
+                except Exception:
+                    self.log("рейд: общее свидетельство отката не сохранено; локальное состояние сохранено", "WARN")
         self._save_runtime()
 
     def _do_respawn_raid(self) -> None:
@@ -983,8 +995,20 @@ class Agent:
                     self._schedule_respawn_check(info)
                     self.log(f"рейд: ждём возрождения, таймер сервера {info.get('reopen_in') or 'неизвестен'}")
                     return
+                if (self.runtime.get("raid_wait_for_closed") and info.get("hp") is not None and info["hp"] > 0
+                        and time.time() - getattr(self, "spawn_peer_checked_at", 0) >= 60):
+                    self.spawn_peer_checked_at = time.time()
+                    witness = self.spawn_witness.reopened_since(self.runtime.get("last_raid", {}).get("started_at", 0), time.time())
+                    if witness:
+                        self.runtime["raid_wait_for_closed"] = False
+                        self.runtime["raid_spawn_witness"] = witness
+                        self._save_runtime()
+                        self.log("рейд: пропущенный откат подтверждён другим героем " + json.dumps(witness, ensure_ascii=False))
                 if self.runtime.get("raid_wait_for_closed") or info.get("hp") is None or info.get("hp") <= 0:
                     self._schedule_respawn_check({})
+                    if self.runtime.get("raid_wait_for_closed"):
+                        self.runtime["raid_guard_until"] = 0
+                        self._save_runtime()
                     self.log("рейд: ждём подтверждённого нового возрождения")
                     return
                 if self.deadline and time.time() >= self.deadline - 360:

@@ -152,3 +152,74 @@ class RepairBudget:
         elif result.get("not_submitted"):
             data["status"] = "not_submitted"
         self._save(data)
+
+
+class SpawnWitness:
+    """Share real server cooldown observations across independent runners.
+
+    Each hero owns one small file. A missed short closed period can be
+    recovered from a peer's observation; wall-clock passage alone never unlocks.
+    """
+    def __init__(self, root: Path, account: str, peers: list[str]):
+        self.root, self.account, self.peers = root, account, peers
+        self.remote = os.environ.get("GITHUB_ACTIONS") == "true"
+
+    def _read(self, account: str, name: str) -> tuple[dict, str | None]:
+        if not self.remote:
+            path = self.root / "state" / account / name
+            return (json.loads(path.read_text(encoding="utf8")) if path.exists() else {}, None)
+        repo = os.environ["GITHUB_REPOSITORY"]
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        if not token:
+            raise RuntimeError("spawn witness requires GitHub token")
+        url = f"https://api.github.com/repos/{repo}/contents/state/{account}/{name}"
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.load(response)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return {}, None
+            raise
+        return json.loads(base64.b64decode(data["content"])), data["sha"]
+
+    def publish(self, observed_at: float, reopen_at: float) -> None:
+        value = {"account": self.account, "closed_observed_at": observed_at, "reopen_at": reopen_at,
+                 "source": "server closed cave and readable countdown"}
+        if not self.remote:
+            atomic_json(self.root / "state" / self.account / "dragon-spawn.json", value)
+            return
+        _, sha = self._read(self.account, "dragon-spawn.json")
+        body = {"message": f"state({self.account}): observed dragon cooldown",
+                "content": base64.b64encode(json.dumps(value).encode()).decode()}
+        if sha:
+            body["sha"] = sha
+        repo = os.environ["GITHUB_REPOSITORY"]
+        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+        req = urllib.request.Request(f"https://api.github.com/repos/{repo}/contents/state/{self.account}/dragon-spawn.json",
+            method="PUT", data=json.dumps(body).encode(),
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json", "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            json.load(response)
+
+    def reopened_since(self, attempt_start: float, now: float) -> dict | None:
+        if not attempt_start:
+            return None
+        for peer in self.peers:
+            try:
+                data, _ = self._read(peer, "dragon-spawn.json")
+                if data:
+                    closed, reopen = data.get("closed_observed_at"), data.get("reopen_at")
+                    if (type(closed) in (int, float) and type(reopen) in (int, float)
+                            and attempt_start < closed <= reopen <= now):
+                        return {"account": peer, "closed_observed_at": closed, "reopen_at": reopen}
+                else:
+                    # Migration: old agents already persisted the server-derived
+                    # reopen time in runtime, but only committed at session end.
+                    old, _ = self._read(peer, "runtime.json")
+                    reopen = old.get("raid_reopen_at")
+                    if type(reopen) in (int, float) and attempt_start + 60 < reopen <= now:
+                        return {"account": peer, "reopen_at": reopen, "source": "persisted server cooldown"}
+            except Exception:
+                continue  # unknown peer state never grants a start
+        return None

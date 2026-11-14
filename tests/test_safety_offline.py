@@ -123,6 +123,37 @@ def test_clan_counter_increase_is_not_blindly_attributed_to_our_party(tmp_path):
     assert a.runtime['last_raid']['outcome'] == 'результат не подтверждён'
 
 
+def test_peer_cooldown_recovers_missed_closed_period_after_restart(tmp_path):
+    from barbars.safety import SpawnWitness
+    peer = SpawnWitness(tmp_path, 'ok', ['keis'])
+    peer.publish(1100, 1200)
+    leader = SpawnWitness(tmp_path, 'keis', ['ok'])
+    assert leader.reopened_since(1000, 1300)['account'] == 'ok'
+    assert leader.reopened_since(1000, 1199) is None
+    assert leader.reopened_since(1250, 1300) is None
+    assert leader.reopened_since(0, 1300) is None
+
+
+def test_saved_old_server_countdown_migrates_but_not_local_clock(tmp_path):
+    from barbars.safety import SpawnWitness, atomic_json
+    leader = SpawnWitness(tmp_path, 'keis', ['ok'])
+    atomic_json(tmp_path / 'state/ok/runtime.json', {'raid_reopen_at': 1200})
+    assert leader.reopened_since(1000, 1300)['source'] == 'persisted server cooldown'
+    atomic_json(tmp_path / 'state/ok/runtime.json', {'raid_next_check_at': 1200})
+    assert leader.reopened_since(1000, 1300) is None
+
+
+def test_peer_unlock_still_requires_full_party_and_live_dragon(tmp_path):
+    a = respawn_agent(tmp_path)
+    a.runtime.update(raid_wait_for_closed=True, last_raid={'started_at': 1000})
+    a.spawn_witness.reopened_since = Mock(return_value={'account': 'ok', 'reopen_at': 1200})
+    a.game.raid_room.side_effect = [open_dragon(), open_dragon(), open_dragon()]
+    a._raid_fight = Mock()
+    a._do_respawn_raid()
+    a.game.raid_start.assert_called_once()
+    assert not a.runtime['raid_wait_for_closed']
+
+
 @pytest.fixture(autouse=True)
 def no_live_network(monkeypatch):
     monkeypatch.setenv("GITHUB_ACTIONS", "false")
