@@ -1001,6 +1001,7 @@ class Agent:
                     # A real server transition unlocks the next attempt. A local
                     # timer or process restart alone cannot do so.
                     self.runtime["raid_wait_for_closed"] = False
+                    self.runtime["raid_wait_for_closed_since"] = 0
                     self.runtime["raid_roster"] = []
                     self._schedule_respawn_check(info)
                     self.log(f"рейд: ждём возрождения, таймер сервера {info.get('reopen_in') or 'неизвестен'}")
@@ -1011,16 +1012,47 @@ class Agent:
                     witness = self.spawn_witness.reopened_since(self.runtime.get("last_raid", {}).get("started_at", 0), time.time())
                     if witness:
                         self.runtime["raid_wait_for_closed"] = False
+                        self.runtime["raid_wait_for_closed_since"] = 0
                         self.runtime["raid_spawn_witness"] = witness
                         self._save_runtime()
                         self.log("рейд: пропущенный откат подтверждён другим героем " + json.dumps(witness, ensure_ascii=False))
                 if self.runtime.get("raid_wait_for_closed") or info.get("hp") is None or info.get("hp") <= 0:
-                    self._schedule_respawn_check({})
-                    if self.runtime.get("raid_wait_for_closed"):
-                        self.runtime["raid_guard_until"] = 0
+                    # Страховка от «попытки без результата»: после боя ждём
+                    # отката и следующего открытия. Но если сервер держит
+                    # пещеру открытой и предлагает бой дольше отката — значит
+                    # наша прошлая попытка просто не началась. Тогда ожидание
+                    # снимаем, иначе отряд собирается вечно и рейд не идёт.
+                    grace = int(cfg.get("stuck_grace_sec", 900))
+                    # У состояния, набранного до этой правки, отметки времени
+                    # нет — берём время последней попытки.
+                    since = float(self.runtime.get("raid_wait_for_closed_since") or 0)
+                    if not since:
+                        since = float((self.runtime.get("last_raid") or {}).get("started_at") or 0)
+                    server_offers_fight = (
+                        info.get("valid")
+                        and not info.get("closed")
+                        and not info.get("locked_out")
+                        and info.get("can_start")
+                        and info.get("hp") is not None
+                        and info["hp"] > 0
+                    )
+                    if (self.runtime.get("raid_wait_for_closed") and server_offers_fight
+                            and since and time.time() - since > grace):
+                        self.runtime["raid_wait_for_closed"] = False
+                        self.runtime["raid_wait_for_closed_since"] = 0
+                        self.runtime["raid_roster"] = []
                         self._save_runtime()
-                    self.log("рейд: ждём подтверждённого нового возрождения")
-                    return
+                        self.log(
+                            f"рейд: пещера открыта и дракон доступен дольше {grace} с — "
+                            "прошлая попытка не началась, собираемся заново",
+                        )
+                    else:
+                        self._schedule_respawn_check({})
+                        if self.runtime.get("raid_wait_for_closed"):
+                            self.runtime["raid_guard_until"] = 0
+                            self._save_runtime()
+                        self.log("рейд: ждём подтверждённого нового возрождения")
+                        return
                 if self.deadline and time.time() >= self.deadline - 360:
                     self.game.click_text("Покинуть бой")
                     return
@@ -1078,8 +1110,22 @@ class Agent:
             elif outcome == "результат не подтверждён" and before == kills and type(kills) is int:
                 active["confirmation"] = "счётчик убийств клана не вырос; победа не зафиксирована"
         if self.config.get("raid", {}).get("every_respawn"):
-            self.runtime["raid_wait_for_closed"] = True
-            self.runtime["raid_next_check_at"] = time.time() + 5
+            fought = bool(active.get("observed_combat")) or bool(active.get("death_observed"))
+            hp_seen = active.get("boss_last_hp_pct")
+            if type(hp_seen) is int and hp_seen < 100:
+                fought = True
+            if fought:
+                # Бой был — сервер сейчас закрывает пещеру на откат. Ждём
+                # подтверждённого открытия, но с предельным ожиданием.
+                self.runtime["raid_wait_for_closed"] = True
+                self.runtime["raid_wait_for_closed_since"] = time.time()
+                self.runtime["raid_next_check_at"] = time.time() + 5
+            else:
+                # Бой не начался (сервер не принял старт) — отката не будет,
+                # ждать нечего: повторяем через пару минут.
+                self.runtime["raid_wait_for_closed"] = False
+                self.runtime["raid_wait_for_closed_since"] = 0
+                self.runtime["raid_next_check_at"] = time.time() + 120
         active.pop("observed_log_entries", None)
         active.update(outcome=outcome, boss_hp=0 if outcome == "победа" else None,
                       boss_hp_pct=0 if outcome == "победа" else (hp if hp is not None else active.get("boss_last_hp_pct")),

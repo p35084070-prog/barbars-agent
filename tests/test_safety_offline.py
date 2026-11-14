@@ -659,6 +659,35 @@ def open_dragon():
     return info
 
 
+def test_open_dragon_after_long_wait_unblocks_the_party(tmp_path):
+    # Пещера открыта и предлагает бой дольше отката — значит прошлая попытка
+    # не началась. Ожидание «подтверждённого возрождения» не должно блокировать
+    # отряд навсегда.
+    a = respawn_agent(tmp_path)
+    a.config["raid"]["stuck_grace_sec"] = 600
+    a.runtime.update(raid_wait_for_closed=True, raid_wait_for_closed_since=1000,
+                     last_raid={"started_at": 900, "party": []})
+    a.game.raid_room.side_effect = ([open_dragon()] * 8
+                                    + [{"valid": True, "closed": True, "reopen_in": "00:10:00"}])
+    a._raid_fight = Mock()
+    with patch("barbars.loop.time.time", return_value=1601), patch("barbars.loop.time.sleep"):
+        a._do_respawn_raid()
+    assert a.runtime["raid_wait_for_closed"] is False
+    assert a.game.raid_ready.called
+
+
+def test_fresh_wait_for_closed_keeps_guarding(tmp_path):
+    # Пока откат не прошёл, новую попытку не разрешаем.
+    a = respawn_agent(tmp_path)
+    a.config["raid"]["stuck_grace_sec"] = 600
+    a.runtime.update(raid_wait_for_closed=True, raid_wait_for_closed_since=1500)
+    a.game.raid_room.return_value = open_dragon()
+    with patch("barbars.loop.time.time", return_value=1601), patch("barbars.loop.time.sleep"):
+        a._do_respawn_raid()
+    assert a.runtime["raid_wait_for_closed"] is True
+    a.game.raid_ready.assert_not_called()
+
+
 def test_respawn_mode_ignores_half_hour_windows(tmp_path):
     a = respawn_agent(tmp_path)
     a._do_respawn_raid = Mock()
