@@ -39,7 +39,7 @@
     "check_interval_min": 1,
     "repeat_min": 30,
     "stay_sec": 780,
-    "min_party": 3,
+    "min_party": 4,
     "can_start": false,
     "max_fights_per_day": 0,
     "max_turns": 400,
@@ -74,6 +74,16 @@
         ],
         "role": "warrior",
         "id": "1286381"
+      },
+      {
+        "account": "ok2",
+        "names": [
+          "qdal",
+          "Qdle",
+          "кьюдл"
+        ],
+        "role": "warrior",
+        "id": "1596900"
       }
     ],
     "assembly_sec": 600,

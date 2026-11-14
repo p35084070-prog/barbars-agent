@@ -148,6 +148,8 @@ def main() -> int:
     ap.add_argument("--out", default="logs/ok-phone")
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--android", action="store_true", help="Android UA вместо iPhone")
+    ap.add_argument("--desktop", action="store_true",
+                    help="десктопный UA и окно: форма входа ОК работает надёжнее")
     ap.add_argument("--skip-login", action="store_true")
     ap.add_argument("--login-timeout", type=int, default=900)
     ap.add_argument("--watch", type=int, default=12, help="пауза на каждой странице, сек")
@@ -161,14 +163,27 @@ def main() -> int:
     profile = ROOT / args.profile
     ua = ANDROID_UA if args.android else IPHONE_UA
 
-    log(f"профиль: {profile.name} | UA: {'Android' if args.android else 'iPhone'} | "
-        f"headless={args.headless} | прошлый вход: {has_session.__name__}")
-
-    net_log: list[dict] = []
-    report: dict = {"time": stamp, "pages": []}
-
-    with sync_playwright() as pw:
-        ctx = pw.chromium.launch_persistent_context(
+    if args.desktop:
+        # Десктопный режим: форма входа ОК работает надёжнее без мобильной эмуляции.
+        # Cookies (domain_sid / sid) одинаковы для мобильного и десктопного ОК.
+        DESKTOP_UA = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
+        log(f"профиль: {profile.name} | UA: Desktop | headless={args.headless}")
+        ctx_kwargs: dict = dict(
+            user_data_dir=str(profile),
+            headless=args.headless,
+            viewport={"width": 1280, "height": 800},
+            user_agent=DESKTOP_UA,
+            locale="ru-RU",
+            timezone_id="Europe/Moscow",
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+    else:
+        log(f"профиль: {profile.name} | UA: {'Android' if args.android else 'iPhone'} | "
+            f"headless={args.headless}")
+        ctx_kwargs = dict(
             user_data_dir=str(profile),
             headless=args.headless,
             viewport={"width": args.width, "height": args.height},
@@ -181,6 +196,12 @@ def main() -> int:
             extra_http_headers=MOBILE_HEADERS,
             args=["--disable-blink-features=AutomationControlled", "--touch-events=enabled"],
         )
+
+    net_log: list[dict] = []
+    report: dict = {"time": stamp, "pages": []}
+
+    with sync_playwright() as pw:
+        ctx = pw.chromium.launch_persistent_context(**ctx_kwargs)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
 
         def on_request(req) -> None:
@@ -193,7 +214,7 @@ def main() -> int:
         ctx.on("request", on_request)
 
         # 1. Открываем ОК и ждём входа.
-        start_url = args.url or "https://m.ok.ru/"
+        start_url = args.url or ("https://ok.ru/" if args.desktop else "https://m.ok.ru/")
         log(f"открываю {start_url}")
         try:
             page.goto(start_url, wait_until="domcontentloaded", timeout=60_000)
@@ -201,15 +222,16 @@ def main() -> int:
             log(f"ошибка перехода: {exc}")
 
         if not args.skip_login:
-            if has_session(page):
-                log("сессия уже есть — вход не требуется")
-            else:
-                log("НУЖНА АВТОРИЗАЦИЯ: войдите в ОК в открывшемся окне браузера.")
-                deadline = time.time() + args.login_timeout
-                while time.time() < deadline and not has_session(page):
-                    time.sleep(2)
-                log("авторизация получена" if has_session(page)
-                    else "ВХОД НЕ ЗАВЕРШЁН — продолжаю в анонимном режиме")
+            # Старые cookie из профиля дают ложный has_session, поэтому вход
+            # подтверждает пользователь вручную: окно не закрывается до Enter.
+            log("НУЖНА АВТОРИЗАЦИЯ: войдите в ОК в открывшемся окне браузера "
+                "(логин и пароль), дождитесь страницы игры и нажмите Enter здесь.")
+            try:
+                input()
+            except EOFError:
+                pass
+            log("вход подтверждён вручную" if has_session(page)
+                else "ВНИМАНИЕ: cookie входа не найдены — проверьте окно")
 
         # 2. Обходим страницы.
         for name, url in PAGES:

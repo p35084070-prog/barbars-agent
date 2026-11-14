@@ -1746,13 +1746,22 @@ class Game:
         if amount <= 0:
             result["message"] = "нечего отправлять"
             return result
-        type_value = {"iron": "2", "mifril": "3", "bottles": "1"}.get(resource)
-        if type_value is None:
+        resource_label = {"iron": "железо", "mifril": "мифрил", "bottles": "бутылочки"}.get(resource)
+        if resource_label is None:
             result["message"] = f"неизвестный ресурс: {resource}"
             return result
         self.goto(f"https://barbars.ru/user/mail/send/id/{recipient_id}")
         if not self.click_href("sendMessageForm:mailGoodsLink"):
             result["message"] = "вкладка «Ресурсы» не открылась"
+            return result
+        type_value = None
+        for option in self.p.locator("select[name='type'] option").all():
+            if (normalize_ru(option.inner_text().strip()) == resource_label
+                    and option.get_attribute("disabled") is None):
+                type_value = option.get_attribute("value")
+                break
+        if type_value is None:
+            result["message"] = f"передача ресурса «{resource_label}» недоступна в текущей форме"
             return result
         try:
             self.p.select_option("select[name='type']", type_value, timeout=8000)

@@ -13,7 +13,7 @@ from barbars.loop import Agent
 from barbars.safety import RepairBudget, party_ready, raid_window
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIGS = ["deploy/config-actions-keis.json", "deploy/config-actions-firewhite.json", "config-ok.json"]
+CONFIGS = ["deploy/config-actions-keis.json", "deploy/config-actions-firewhite.json", "config-ok.json", "config-ok2.json"]
 
 
 def dragon_panel(pct="73%", warriors=2, medics=1, events=(), extra=""):
@@ -66,6 +66,83 @@ def test_all_dead_but_dragon_alive_confirms_team_loss():
 def test_empty_waiting_roster_is_not_a_loss():
     from barbars.raid_evidence import parse_dragon_evidence
     assert parse_dragon_evidence(dragon_panel(warriors=0, medics=0))['terminal'] is None
+
+
+def test_missing_fourth_hero_cannot_be_replaced_by_a_stranger():
+    cfg = config()['raid']
+    assert not party_ready(room(('905853', '31389504', '1286381', '999')), cfg)
+    assert not party_ready(room(('31389504', '1286381', '1596900', '999')), cfg)
+
+
+def test_ok2_has_isolated_cloud_state_and_session():
+    first, second = config(CONFIGS[2]), config(CONFIGS[3])
+    assert second['account'] == 'ok2'
+    for key in ('profile_dir', 'state_dir', 'daily_file'):
+        assert first[key] != second[key]
+    assert second['ok_channel']['session_env'] == 'OK2_SESSION_B64'
+    assert second['ok_channel']['session_file'] != first['ok_channel']['session_file']
+    workflow = (ROOT / '.github/workflows/agent-ok2.yml').read_text(encoding='utf8')
+    assert '${{ secrets.OK2_LOGIN }}' in workflow and '${{ secrets.OK2_PASSWORD }}' in workflow
+    assert 'group: agent-ok2' in workflow and 'agent-ok2.yml/dispatches' in workflow
+    assert 'python -m pytest tests/test_safety_offline.py -q' in workflow
+    assert 'state/ok2/daily.json' in workflow and 'state/ok2/runtime.json' in workflow
+    assert '${{ secrets.OK_SESSION_B64 }}' not in workflow
+
+
+@pytest.mark.parametrize('hero_id,klass,guild,valid', [('1596900','воин',16675,True), ('1286381','воин',16675,False),
+                                                    ('1596900','медик',16675,False), ('1596900','воин',1,False)])
+def test_new_account_identity_guard(hero_id, klass, guild, valid):
+    from run import verify_expected_hero
+    from barbars.driver import GameError
+    game = Mock(hero_id=hero_id)
+    game.hero.return_value = SimpleNamespace(klass=klass, guild_id=guild)
+    if valid:
+        verify_expected_hero(game, config(CONFIGS[3])['expected_hero'])
+    else:
+        with pytest.raises(GameError):
+            verify_expected_hero(game, config(CONFIGS[3])['expected_hero'])
+
+
+def test_only_mithril_in_real_keis_mail_form_denies_iron_without_submit():
+    game = Game({}, '.')
+    game.goto = Mock()
+    game.click_href = Mock(return_value=True)
+    option = Mock()
+    option.inner_text.return_value = 'Мифрил'
+    option.get_attribute.side_effect = lambda key: '3' if key == 'value' else None
+    game.page = Mock()
+    game.page.locator.return_value.all.return_value = [option]
+    result = game.send_resources_to('31389504', 'iron', 10000)
+    assert result['ok'] is False and 'недоступна' in result['message']
+    game.page.select_option.assert_not_called()
+    game.page.click.assert_not_called()
+
+
+def test_ok_compromised_profile_notice_is_a_protection_barrier():
+    from tools.ok_auto_login import challenge_on_page
+    page = Mock()
+    page.inner_text.return_value = 'Мы заметили, что этот профиль мог попасть к злоумышленникам. Необходимо проверить данные.'
+    assert challenge_on_page(page) == 'попасть к злоумышленникам'
+
+
+def test_ok_login_prefers_exact_button_and_verifies_filled_values():
+    from tools.ok_auto_login import do_login
+    page = Mock()
+    def locator(selector):
+        value = 'test-login' if 'st.email' in selector else 'test-password'
+        return SimpleNamespace(first=SimpleNamespace(input_value=lambda: value))
+    page.locator.side_effect = locator
+    assert do_login(page, 'test-login', 'test-password') == ''
+    page.get_by_role.assert_called_once_with('button', name='Войти', exact=True)
+    page.get_by_role.return_value.click.assert_called_once()
+
+
+def test_ok_login_denies_submission_when_reactive_form_erases_login():
+    from tools.ok_auto_login import do_login
+    page = Mock()
+    page.locator.return_value.first.input_value.return_value = ''
+    assert 'запрещена' in do_login(page, 'test-login', 'test-password')
+    page.get_by_role.assert_not_called()
 
 
 def test_real_no_warriors_end_panel_confirms_failed_raid():
@@ -232,8 +309,8 @@ def agent(tmp_path, name=CONFIGS[0]):
     return Agent(game, cfg, tmp_path / "logs")
 
 
-def room(ids=("905853", "31389504", "1286381"), ready=True):
-    names = {"905853": "keis", "31389504": "firewhite", "1286381": "vagojan"}
+def room(ids=("905853", "31389504", "1286381", "1596900"), ready=True):
+    names = {"905853": "keis", "31389504": "firewhite", "1286381": "vagojan", "1596900": "qdal"}
     rows = "".join(f'<div><a href="../user/id/{i};jsessionid=REMOVED"><span>{names.get(i, "stranger")}</span></a>'
                    + ('<img src="/images/icons/check_green.png">' if ready else "")
                    + ('<img src="blue_healer.png">' if i == "905853" else '<img src="blue_warrior.png">') + "</div>" for i in ids)
@@ -243,10 +320,10 @@ def room(ids=("905853", "31389504", "1286381"), ready=True):
 @pytest.mark.parametrize("name", CONFIGS)
 def test_cloud_policies(name):
     c = config(name)
-    assert c["raid"]["min_party"] == 3
+    assert c["raid"]["min_party"] == 4
     assert c["raid"]["can_start"] == (c["account"] == "keis")
     assert c["raid"]["leader"] == "keis"
-    assert {p["id"] for p in c["raid"]["party"]} == {"905853", "31389504", "1286381"}
+    assert {p["id"] for p in c["raid"]["party"]} == {"905853", "31389504", "1286381", "1596900"}
     assert c["gear"]["keep_mythic"] and not c["gear"]["sell_store"] and not c["gear"]["auto_equip"]
     assert c["scrolls"]["mode"] == "discard"
     assert c["spend"]["buy_iron"]["max_gold"] == 1
@@ -255,7 +332,8 @@ def test_cloud_policies(name):
 
 
 @pytest.mark.parametrize("ids,allowed", [
-    (("905853", "31389504", "1286381"), True),
+    (("905853", "31389504", "1286381", "1596900"), True),
+    (("905853", "31389504", "1286381"), False),
     (("905853", "31389504"), False),
     (("31389504", "1286381", "999"), False),
     (("905853", "31389504", "999"), False),
@@ -401,7 +479,7 @@ def test_confirmed_result_counted_once(tmp_path):
     assert agent(tmp_path).runtime["last_raid"]["outcome"] == "победа"
 
 
-@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False)])
+@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False), (CONFIGS[3], False)])
 def test_only_leader_starts_with_actual_party(tmp_path, name, starts):
     a = agent(tmp_path, name)
     info = room()
@@ -590,7 +668,7 @@ def test_respawn_mode_ignores_half_hour_windows(tmp_path):
     collect.assert_not_called()
 
 
-@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False)])
+@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False), (CONFIGS[3], False)])
 def test_every_respawn_has_only_one_leader(tmp_path, name, starts):
     a = respawn_agent(tmp_path, name)
     a.game.raid_room.side_effect = [open_dragon(), open_dragon()] + ([open_dragon()] if starts else []) + [{"valid": True, "closed": True, "reopen_in": "00:10:00"}]
