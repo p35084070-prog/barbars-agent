@@ -16,6 +16,113 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = ["deploy/config-actions-keis.json", "deploy/config-actions-firewhite.json", "config-ok.json"]
 
 
+def dragon_panel(pct="73%", warriors=2, medics=1, events=(), extra=""):
+    # Minimal structure retained from the project's captured real raid pages.
+    icons = f'<div><img src="/images/icons/dragon_mif.png"><span>{pct}</span>'
+    icons += f'<img src="/images/icons/blue_warrior.png"><span>{warriors}</span>'
+    icons += f'<img src="/images/icons/blue_healer.png"><span>{medics}</span>'
+    icons += '<img src="/images/icons/clock.png"><span>08:17</span></div>'
+    return icons + ''.join(f'<div><img src="/images/icons/clock2.png">{e}</div>' for e in events) + extra
+
+
+def test_dragon_percent_uses_dragon_icon_not_hero_hp():
+    from barbars.raid_evidence import parse_dragon_evidence
+    e = parse_dragon_evidence('<img src="life.png"><span>8084</span><span>25%</span>' + dragon_panel())
+    assert e['boss_hp_pct'] == 73
+    assert e['warriors_alive'] == 2 and e['medics_alive'] == 1
+    assert e['combat_clock'] == '08:17'
+
+
+@pytest.mark.parametrize('extra', ['<div>Ты погиб</div>', '<div>Поражение</div>', '<form><div>Дракон повержен</div></form>', '<div class="guildChat"><div>Победа</div></div>'])
+def test_personal_death_and_chat_are_not_team_loss_or_win(extra):
+    from barbars.raid_evidence import parse_dragon_evidence
+    assert parse_dragon_evidence(dragon_panel(extra=extra))['terminal'] is None
+
+
+@pytest.mark.parametrize('label,outcome', [('Дракон повержен', 'победа'), ('Ваш отряд погиб', 'поражение')])
+def test_team_result_above_long_footer(label, outcome):
+    from barbars.raid_evidence import parse_dragon_evidence
+    e = parse_dragon_evidence(dragon_panel(extra=f'<h2>{label}</h2>') + '<footer>' + '<div>Ссылка</div>' * 30 + '</footer>')
+    assert e['terminal'] == outcome
+
+
+def test_zero_percent_rounding_is_not_victory():
+    from barbars.raid_evidence import parse_dragon_evidence
+    assert parse_dragon_evidence(dragon_panel(pct='0%'))['terminal'] is None
+
+
+def test_all_dead_with_explicit_defeat():
+    from barbars.raid_evidence import parse_dragon_evidence
+    assert parse_dragon_evidence(dragon_panel(warriors=0, medics=0, extra='<h2>Поражение</h2>'))['terminal'] == 'поражение'
+
+
+def test_all_dead_but_dragon_alive_confirms_team_loss():
+    from barbars.raid_evidence import parse_dragon_evidence
+    e = parse_dragon_evidence(dragon_panel(pct='23%', warriors=0, medics=0, events=['Ты погиб']))
+    assert e['terminal'] == 'поражение'
+    assert e['boss_hp_pct'] == 23
+
+
+def test_empty_waiting_roster_is_not_a_loss():
+    from barbars.raid_evidence import parse_dragon_evidence
+    assert parse_dragon_evidence(dragon_panel(warriors=0, medics=0))['terminal'] is None
+
+
+def test_event_overlap_keeps_repeated_hits_and_restart_without_double_count():
+    from barbars.raid_evidence import parse_dragon_evidence, record_sample
+    a = 'Ты ударил дракона на 357'
+    b = 'Ты ударил дракона на 500 крит'
+    active = {}
+    record_sample(active, parse_dragon_evidence(dragon_panel(events=[a, b])), 1)
+    active = json.loads(json.dumps(active))
+    record_sample(active, parse_dragon_evidence(dragon_panel(events=[b, a])), 2)
+    assert active['damage_lower_bound'] == 1214
+    record_sample(active, parse_dragon_evidence(dragon_panel(events=[b, a])), 3)
+    assert active['damage_lower_bound'] == 1214
+    assert active['event_totals_exact'] is False
+
+
+def test_heal_requests_are_not_actual_healing(tmp_path):
+    from barbars.raid_evidence import parse_dragon_evidence, record_sample
+    active = {'healing_requests': 49}
+    record_sample(active, parse_dragon_evidence(dragon_panel(events=['Ты начал бой'])), 1)
+    assert active.get('healing_lower_bound', 0) == 0
+    record_sample(active, parse_dragon_evidence(dragon_panel(events=['Ты вылечил союзника на 280'])), 2)
+    assert active['healing_lower_bound'] == 280
+
+
+def test_raid_turn_limit_is_unconfirmed_and_preserved(tmp_path):
+    a = agent(tmp_path)
+    a.runtime['raid_active'] = {'started_at': 1}
+    a.game.combat.return_value = CombatState(attack_links=['Бить дракона'], our_hp=100, our_energy=100)
+    a.game.status.return_value = Status(hp=100, energy=100)
+    with patch('barbars.loop.time.sleep'):
+        assert a._fight_loop(force=True, max_turns=1) == 'лимит ходов'
+    a._fight_loop = Mock(return_value='лимит ходов')
+    a._raid_fight()
+    assert a.runtime['raid_active']
+    a.game.click_text.assert_not_called()
+
+
+def test_evidence_persists_progress_and_separates_units(tmp_path):
+    from barbars.raid_evidence import parse_dragon_evidence
+    a = agent(tmp_path)
+    a.runtime['raid_active'] = {'started_at': 1}
+    a._record_raid_evidence(CombatState(raid_evidence=parse_dragon_evidence(dragon_panel(pct='19%'))))
+    recovered = agent(tmp_path).runtime['raid_active']
+    assert recovered['boss_last_hp_pct'] == 19
+    assert recovered['latest_evidence']['warriors_alive'] == 2
+
+
+def test_clan_counter_increase_is_not_blindly_attributed_to_our_party(tmp_path):
+    a = agent(tmp_path)
+    a.runtime['raid_active'] = {'started_at': 1, 'clan_kills_before': 7}
+    a.game.raid_clan_kills.return_value = 8
+    a._finish_raid('результат не подтверждён')
+    assert a.runtime['last_raid']['clan_kill_confirmed'] is True
+    assert a.runtime['last_raid']['outcome'] == 'результат не подтверждён'
+
+
 @pytest.fixture(autouse=True)
 def no_live_network(monkeypatch):
     monkeypatch.setenv("GITHUB_ACTIONS", "false")
@@ -256,7 +363,8 @@ def test_medic_parser_does_not_finish_while_heal_button_exists():
     link.get_attribute.return_value = "?actionPanel:healRandomFriendLink"
     def locator(selector):
         return SimpleNamespace(all=lambda: [link] if selector == "a" else [])
-    g.page = SimpleNamespace(title=lambda: "Мифический дракон", locator=locator)
+    g.page = SimpleNamespace(title=lambda: "Мифический дракон", locator=locator,
+                             content=lambda: dragon_panel(events=['Ты вылечил союзников на 200']))
     g.status = Mock(return_value=Status(hp=400, energy=0))
     g.body_text = Mock(return_value="Ты вылечил союзников на 200\nЛечить союзников\nПокинуть бой")
     cs = g.combat()
@@ -398,7 +506,7 @@ def test_respawn_mode_ignores_half_hour_windows(tmp_path):
 @pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False)])
 def test_every_respawn_has_only_one_leader(tmp_path, name, starts):
     a = respawn_agent(tmp_path, name)
-    a.game.raid_room.side_effect = [open_dragon(), open_dragon(), {"valid": True, "closed": True, "reopen_in": "00:10:00"}]
+    a.game.raid_room.side_effect = [open_dragon(), open_dragon()] + ([open_dragon()] if starts else []) + [{"valid": True, "closed": True, "reopen_in": "00:10:00"}]
     a._raid_fight = Mock()
     with patch("barbars.loop.time.time", return_value=18900), patch("barbars.loop.time.sleep"):
         a._do_respawn_raid()
@@ -431,7 +539,7 @@ def test_same_spawn_is_not_started_twice_after_restart(tmp_path):
     a.game.raid_room.return_value = {"valid": True, "closed": True, "reopen_in": "00:02:00"}
     a._do_respawn_raid()
     assert not a.runtime["raid_wait_for_closed"]
-    a.game.raid_room.side_effect = [open_dragon(), open_dragon()]
+    a.game.raid_room.side_effect = [open_dragon(), open_dragon(), open_dragon()]
     a._raid_fight = Mock()
     a._do_respawn_raid()
     a.game.raid_start.assert_called_once()
