@@ -1,3 +1,139 @@
 {
-  "tower_paused": true
+  "tower_paused": true,
+  "raid_roster": [
+    {
+      "id": "1286381",
+      "name": "vagojan",
+      "role": "warrior"
+    },
+    {
+      "id": "31389504",
+      "name": "fire white ii",
+      "role": "warrior"
+    }
+  ],
+  "raid_next_check_at": 1794648351.492447,
+  "raid_wait_for_closed": false,
+  "raid_history": [
+    {
+      "started_at": 1794632330.7480876,
+      "party": [
+        {
+          "id": "905853",
+          "name": "keis",
+          "role": "medic"
+        },
+        {
+          "id": "1286381",
+          "name": "vagojan",
+          "role": "warrior"
+        },
+        {
+          "id": "31389504",
+          "name": "fire white ii",
+          "role": "warrior"
+        }
+      ],
+      "expected_party": [
+        {
+          "account": "keis",
+          "names": [
+            "Кейс",
+            "KACE",
+            "keis"
+          ],
+          "role": "medic",
+          "id": "905853"
+        },
+        {
+          "account": "firewhite",
+          "names": [
+            "Firewall",
+            "firewhite"
+          ],
+          "role": "warrior",
+          "id": "31389504"
+        },
+        {
+          "account": "ok",
+          "names": [
+            "Лагиджан",
+            "WG",
+            "vagojan"
+          ],
+          "role": "warrior",
+          "id": "1286381"
+        }
+      ],
+      "mode": "every_respawn",
+      "observed_combat": true,
+      "death_observed": true,
+      "observed_damage": 67546,
+      "observed_healing": 0,
+      "boss_hp": null,
+      "outcome": "результат не подтверждён",
+      "telemetry": "observed log entries; totals may be incomplete"
+    }
+  ],
+  "last_raid": {
+    "started_at": 1794632330.7480876,
+    "party": [
+      {
+        "id": "905853",
+        "name": "keis",
+        "role": "medic"
+      },
+      {
+        "id": "1286381",
+        "name": "vagojan",
+        "role": "warrior"
+      },
+      {
+        "id": "31389504",
+        "name": "fire white ii",
+        "role": "warrior"
+      }
+    ],
+    "expected_party": [
+      {
+        "account": "keis",
+        "names": [
+          "Кейс",
+          "KACE",
+          "keis"
+        ],
+        "role": "medic",
+        "id": "905853"
+      },
+      {
+        "account": "firewhite",
+        "names": [
+          "Firewall",
+          "firewhite"
+        ],
+        "role": "warrior",
+        "id": "31389504"
+      },
+      {
+        "account": "ok",
+        "names": [
+          "Лагиджан",
+          "WG",
+          "vagojan"
+        ],
+        "role": "warrior",
+        "id": "1286381"
+      }
+    ],
+    "mode": "every_respawn",
+    "observed_combat": true,
+    "death_observed": true,
+    "observed_damage": 67546,
+    "observed_healing": 0,
+    "boss_hp": null,
+    "outcome": "результат не подтверждён",
+    "telemetry": "observed log entries; totals may be incomplete"
+  },
+  "raid_guard_until": 1794633148.564233,
+  "raid_reopen_at": 1794633118.564233
 }
