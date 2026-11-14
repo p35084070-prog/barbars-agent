@@ -63,7 +63,9 @@ jobs:
             exit 0
           fi
           mkdir -p state logs
-          python -u tools/ok_auto_login.py --out state/ok2 --profile profile-ok2-autologin --timeout 120
+          # Неудачный автовход не должен валить job: шаг ниже возьмёт сессию из секрета.
+          python -u tools/ok_auto_login.py --out state/ok2 --profile profile-ok2-autologin --timeout 120 \
+            || echo 'автовход не прошёл — берём сессию из OK2_SESSION_B64'
           echo "::add-mask::$(printf '%s' "$OK_PASSWORD" | head -c 2)"
 
       - name: Восстановить сессию ОК
