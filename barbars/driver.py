@@ -170,6 +170,7 @@ class CombatState:
     log_lines: list[str] = field(default_factory=list)
     finished: bool = False
     victory: bool | None = None
+    raid_evidence: dict[str, Any] = field(default_factory=dict)
 
 
 class GameError(RuntimeError):
@@ -804,6 +805,16 @@ class Game:
             cs.victory = False
         elif re.search(r"Победа|ты победил|побеждён", tail, re.IGNORECASE):
             cs.victory = True
+        html = self.p.content()
+        if "dragon_mif.png" in html or "дракон" in normalize_ru(cs.title):
+            from .raid_evidence import parse_dragon_evidence
+            cs.raid_evidence = parse_dragon_evidence(html)
+            cs.raid_evidence.update(our_hp=cs.our_hp, our_energy=cs.our_energy)
+            # Ordinary-fight loss detection includes personal death, which
+            # must never end the team's dragon attempt.
+            terminal = cs.raid_evidence.get("terminal")
+            cs.victory = True if terminal == "победа" else False if terminal == "поражение" else None
+            cs.finished = cs.victory is not None
         return cs
 
     def fight_limits(self) -> dict[str, int]:
@@ -1419,6 +1430,38 @@ class Game:
 
         self.goto(url)
         return pages.parse_raid_room(self.p.content(), self.body_text())
+
+    def raid_clan_kills(self) -> int | None:
+        """Read the clan kill counter in a separate tab, preserving combat.
+
+        The OK frame adapter has no independent Page context; that channel
+        uses the combat evidence instead. Only an integer leaves this method.
+        """
+        tab = None
+        try:
+            from urllib.parse import urlsplit
+            origin = urlsplit(self.p.url)
+            if origin.hostname != "barbars.ru":
+                return None
+            guild_id = self.guild_id
+            if not guild_id:
+                for link in self.p.locator("a[href*='guild/']").all():
+                    match = re.search(r"(?:^|/)guild/(\d+)(?:[;/#?]|$)", link.get_attribute("href") or "")
+                    if match:
+                        guild_id = int(match[1])
+                        break
+            if not guild_id:
+                return None
+            tab = self.p.context.new_page()
+            tab.goto(f"https://barbars.ru/guild/achievements/0/{guild_id}", wait_until="domcontentloaded", timeout=15000)
+            text = normalize_ru(tab.locator("body").inner_text())
+            match = re.search(r"убито\s+драконов\s*:?\s*(\d[\d ]*)", text)
+            return int(match[1].replace(" ", "")) if match else None
+        except Exception:
+            return None
+        finally:
+            if tab:
+                tab.close()
 
     def raid_ready(self) -> bool:
         """Отметить готовность к бою — «Я готов!».

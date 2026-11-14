@@ -14,6 +14,7 @@ from . import pages, rules
 from .driver import Game
 from .llm import ClaudeAdvisor
 from .safety import RepairBudget, atomic_json, party_ready, raid_window, respawn_seconds
+from .raid_evidence import record_sample
 
 
 class Agent:
@@ -933,6 +934,18 @@ class Agent:
         deadline = time.time() + int(cfg.get("assembly_sec", 600))
         self.in_long_op = True
         try:
+            if self.runtime.get("raid_active"):
+                # Preserve the last battle response before visiting the room:
+                # navigation can replace a transient result with a cooldown.
+                cs = self.game.combat()
+                self._record_raid_evidence(cs)
+                if cs.victory is not None:
+                    self._raid_fight()
+                    return
+            elif cfg.get("leader") == self.account and not getattr(self, "raid_counter_checked", False):
+                kills = self.game.raid_clan_kills()
+                self.raid_counter_checked = True
+                self.log("рейд: счётчик убитых драконов кланом " + (str(kills) if type(kills) is int else "не прочитан"))
             while time.time() < deadline:
                 info = self.game.raid_room(url)
                 active = self.runtime.get("raid_active")
@@ -990,7 +1003,15 @@ class Agent:
                 if (cfg.get("leader") == self.account and cfg.get("can_start")
                         and info.get("can_start") and info.get("hp") is not None
                         and info["hp"] > 0 and party_ready(info, cfg)):
-                    self.runtime["raid_active"] = {"started_at": time.time(), "party": info["ready"], "mode": "every_respawn"}
+                    kills_before = self.game.raid_clan_kills()
+                    # Revalidate the party after the read-only counter request.
+                    info = self.game.raid_room(url)
+                    if not (info.get("can_start") and not info.get("closed") and not info.get("locked_out")
+                            and info.get("hp") is not None and info["hp"] > 0 and party_ready(info, cfg)):
+                        continue
+                    self.runtime["raid_active"] = {"started_at": time.time(), "party": info["ready"], "expected_party": cfg.get("party", []), "mode": "every_respawn",
+                                                   "boss_initial_hp_pct": info["hp"], "initiator": self.account,
+                                                   "clan_kills_before": kills_before if type(kills_before) is int else None}
                     self._save_runtime()
                     if self.game.raid_start():
                         self.log("рейд: вся тройка готова после возрождения — начинаем")
@@ -1011,12 +1032,30 @@ class Agent:
         active = self.runtime.pop("raid_active", None)
         if not active:
             return
+        # A server achievement delta can confirm a kill even when the transient
+        # victory panel has already disappeared. Never use an old baseline.
+        if self.config.get("raid", {}).get("leader") == self.account:
+            kills = self.game.raid_clan_kills()
+            active["clan_kills_after"] = kills if type(kills) is int else None
+            before = active.get("clan_kills_before")
+            if type(before) is int and type(kills) is int and kills == before + 1:
+                active["clan_kill_confirmed"] = True
+                active["confirmation"] = "счётчик убийств дракона кланом вырос на 1; принадлежность нашей попытке проверяется по боевому экрану"
+            elif outcome == "результат не подтверждён" and before == kills and type(kills) is int:
+                active["confirmation"] = "счётчик убийств клана не вырос; победа не зафиксирована"
         if self.config.get("raid", {}).get("every_respawn"):
             self.runtime["raid_wait_for_closed"] = True
             self.runtime["raid_next_check_at"] = time.time() + 5
         active.pop("observed_log_entries", None)
-        active.update(outcome=outcome, boss_hp=0 if outcome == "победа" else hp,
-                      telemetry="observed log entries; totals may be incomplete")
+        active.update(outcome=outcome, boss_hp=0 if outcome == "победа" else None,
+                      boss_hp_pct=0 if outcome == "победа" else (hp if hp is not None else active.get("boss_last_hp_pct")),
+                      telemetry="percent HP from dragon icon; damage/healing are lower bounds; clicks are not healing")
+        if outcome == "победа":
+            active["strength_assessment"] = "победа подтверждена"
+        elif outcome == "поражение":
+            active["strength_assessment"] = "эта попытка проиграна; проверьте лечение и участие перед выводом о силе"
+        else:
+            active["strength_assessment"] = "недостаточно данных об исходе"
         history = self.runtime.setdefault("raid_history", [])
         history.append(active)
         del history[:-20]
@@ -1028,12 +1067,31 @@ class Agent:
 
     def _raid_fight(self) -> None:
         outcome = self._fight_loop(force=True, max_turns=int(self.config.get("raid", {}).get("max_turns", 400)))
-        if outcome in {"победа", "поражение", "окончен"}:
+        if outcome in {"победа", "поражение"}:
             self.fights_done += 1
             self._finish_raid(outcome, getattr(self, "last_boss_hp", None))
             self.game.click_text("Покинуть бой")
         else:
             self.log(f"рейд: {outcome}; бой не покидаем, состояние сохранено", "WARN")
+
+    def _record_raid_evidence(self, cs) -> None:
+        active = self.runtime.get("raid_active")
+        evidence = getattr(cs, "raid_evidence", {})
+        if not active or not isinstance(evidence, dict) or not evidence:
+            return
+        now = time.time()
+        sample = record_sample(active, evidence, now)
+        signature = [sample.get(k) for k in ("boss_hp_pct", "warriors_alive", "medics_alive", "terminal", "personal_dead")]
+        if (signature != active.get("sample_signature") or now - active.get("sample_logged_at", 0) >= 15):
+            active["sample_signature"] = signature
+            active["sample_logged_at"] = now
+            active.setdefault("samples", []).append(sample)
+            active["samples"] = active["samples"][-120:]
+            sample = dict(sample, damage_lower_bound=active.get("damage_lower_bound", 0),
+                          healing_lower_bound=active.get("healing_lower_bound", 0),
+                          healing_requests=active.get("healing_requests", 0))
+            self.log("рейд: замер " + json.dumps(sample, ensure_ascii=False))
+            self._save_runtime()
 
     def _do_scrolls(self, decision: rules.Decision, state: rules.GameState) -> None:
         """Активируем свитки (бесплатно при премиуме) и читаем книги."""
@@ -1827,6 +1885,8 @@ class Agent:
                 self.log("  выходим по лимиту времени")
                 return done("время вышло")
             cs = self.game.combat()
+            if force:
+                self._record_raid_evidence(cs)
             if force and active and (cs.attack_links or cs.heal_links) and not active.get("observed_combat"):
                 active["observed_combat"] = True
                 self._save_runtime()
@@ -1850,13 +1910,13 @@ class Agent:
                         healing += int(m.group(1))
             if cs.victory is not None:
                 return done("победа" if cs.victory else "поражение")
-            if force and cs.enemy_hp is not None and cs.enemy_hp != target_hp:
+            if force and not cs.raid_evidence and cs.enemy_hp is not None and cs.enemy_hp != target_hp:
                 # в шапке боевой панели — HP цели: следим за изменением
                 target_hp = cs.enemy_hp
                 self.log(f"  HP цели: {target_hp}")
             if cs.finished and not cs.attack_links and not cs.heal_links:
                 self.log("  бой окончен")
-                return done("окончен")
+                return done("исход неизвестен" if force else "окончен")
             status = self.game.status()
             base = getattr(self, "last_state", None) or rules.GameState()
             state = rules.GameState(
@@ -1889,6 +1949,8 @@ class Agent:
             elif decision.action == "heal":
                 turns += 1
                 if self.game.click_text(decision.params.get("text", "")):
+                    if force and active:
+                        active["healing_requests"] = active.get("healing_requests", 0) + 1
                     self.log("  лечение: действие отправлено")
                 else:
                     self.game.reload()
@@ -1922,7 +1984,7 @@ class Agent:
                 self.log("  нет доступных действий в бою — ждём")
                 self.game.reload()
                 time.sleep(2)
-        return done("таймаут")
+        return done("лимит ходов" if force else "таймаут")
 
     def _do_donate(self, decision: rules.Decision) -> None:
         if not self.game.guild_id:
