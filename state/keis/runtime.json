@@ -6,10 +6,75 @@
       "role": "medic"
     },
     {
+      "id": "1286381",
+      "name": "vagojan",
+      "role": "warrior"
+    },
+    {
       "id": "31389504",
       "name": "fire white ii",
       "role": "warrior"
     }
   ],
-  "raid_window": 997017
+  "raid_window": 997017,
+  "raid_next_check_at": 1794648477.258066,
+  "raid_wait_for_closed": true,
+  "raid_history": [
+    {
+      "started_at": 1794632317.0721993,
+      "party": [
+        {
+          "id": "905853",
+          "name": "keis",
+          "role": "medic"
+        },
+        {
+          "id": "1286381",
+          "name": "vagojan",
+          "role": "warrior"
+        },
+        {
+          "id": "31389504",
+          "name": "fire white ii",
+          "role": "warrior"
+        }
+      ],
+      "mode": "every_respawn",
+      "observed_combat": true,
+      "observed_damage": 0,
+      "observed_healing": 49,
+      "boss_hp": null,
+      "outcome": "результат не подтверждён",
+      "telemetry": "observed log entries; totals may be incomplete"
+    }
+  ],
+  "last_raid": {
+    "started_at": 1794632317.0721993,
+    "party": [
+      {
+        "id": "905853",
+        "name": "keis",
+        "role": "medic"
+      },
+      {
+        "id": "1286381",
+        "name": "vagojan",
+        "role": "warrior"
+      },
+      {
+        "id": "31389504",
+        "name": "fire white ii",
+        "role": "warrior"
+      }
+    ],
+    "mode": "every_respawn",
+    "observed_combat": true,
+    "observed_damage": 0,
+    "observed_healing": 49,
+    "boss_hp": null,
+    "outcome": "результат не подтверждён",
+    "telemetry": "observed log entries; totals may be incomplete"
+  },
+  "raid_guard_until": 1794648492.258066,
+  "raid_reopen_at": null
 }
