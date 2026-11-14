@@ -13,7 +13,7 @@ from typing import Any
 from . import pages, rules
 from .driver import Game
 from .llm import ClaudeAdvisor
-from .safety import RepairBudget, atomic_json, party_ready, raid_window
+from .safety import RepairBudget, atomic_json, party_ready, raid_window, respawn_seconds
 
 
 class Agent:
@@ -246,11 +246,15 @@ class Agent:
         now = time.time()
         cfg = self.config.get("raid", {})
         window, _, due = raid_window(cfg, now)
-        if cfg.get("enabled") and (self.runtime.get("raid_active") or (
-                due and self.runtime.get("raid_window") != window)):
+        every_respawn = cfg.get("every_respawn", False)
+        raid_due = now >= float(self.runtime.get("raid_next_check_at", 0)) if every_respawn else (due and self.runtime.get("raid_window") != window)
+        if cfg.get("enabled") and (self.runtime.get("raid_active") or raid_due):
             decision = rules.Decision("raid", params={"url": cfg.get("url", "https://barbars.ru/game/dragonDungeon")})
             self._do_raid(decision, rules.GameState())
             return decision
+        if cfg.get("enabled") and every_respawn and float(self.runtime.get("raid_guard_until", 0)) > now:
+            # Do not begin a slow inventory scan or another battle near respawn.
+            return rules.Decision("wait", params={"sleep_sec": 5}, reason="ждём возрождения дракона")
         state = rules.collect_state(self.game, self.config)
         self.last_state = state
         if self.talent_blocked_until > time.time():
@@ -373,7 +377,7 @@ class Agent:
                 break
             if decision.action == "wait":
                 long_wait = bool(decision.params.get("long"))
-                seconds = self.long_idle_sleep if long_wait else self.idle_sleep
+                seconds = float(decision.params.get("sleep_sec", self.long_idle_sleep if long_wait else self.idle_sleep))
                 if deadline:
                     remaining = deadline - time.time()
                     if remaining <= 5:
@@ -821,6 +825,9 @@ class Agent:
 
     def _do_raid(self, decision: rules.Decision, state: rules.GameState) -> None:
         cfg = self.config.get("raid", {})
+        if cfg.get("every_respawn"):
+            self._do_respawn_raid()
+            return
         url = str(cfg.get("url", "https://barbars.ru/game/dragonDungeon"))
         window, end, due = raid_window(cfg)
         if not due and not self.runtime.get("raid_active"):
@@ -905,10 +912,108 @@ class Agent:
             self._save_runtime()
             self.in_long_op = False
 
+    def _schedule_respawn_check(self, info: dict) -> None:
+        cfg = self.config.get("raid", {})
+        now = time.time()
+        seconds = respawn_seconds(str(info.get("reopen_in", "")))
+        lead = max(60, int(cfg.get("respawn_lead_sec", 300)))
+        # Long cooldowns leave time for farming; near respawn all heroes wait
+        # and re-read the server instead of disappearing into other activities.
+        delay = min(300, max(5, seconds - lead)) if seconds is not None else 15
+        self.runtime["raid_next_check_at"] = now + delay
+        self.runtime["raid_guard_until"] = now + (seconds + 30 if seconds is not None and seconds <= lead else (30 if seconds is None else 0))
+        self.runtime["raid_reopen_at"] = now + seconds if seconds is not None else None
+        self._save_runtime()
+
+    def _do_respawn_raid(self) -> None:
+        """Follow actual closed/open transitions, without a wall-clock quota."""
+        cfg = self.config.get("raid", {})
+        url = str(cfg.get("url", "https://barbars.ru/game/dragonDungeon"))
+        check = max(2, int(cfg.get("room_check_sec", 8)))
+        deadline = time.time() + int(cfg.get("assembly_sec", 600))
+        self.in_long_op = True
+        try:
+            while time.time() < deadline:
+                info = self.game.raid_room(url)
+                active = self.runtime.get("raid_active")
+                if info.get("in_fight"):
+                    if not active:
+                        self.runtime["raid_active"] = {
+                            "started_at": time.time(), "party": self.runtime.get("raid_roster", []),
+                            "expected_party": cfg.get("party", []), "mode": "every_respawn"}
+                        self._save_runtime()
+                    self._raid_fight()
+                    return
+                if active:
+                    cs = self.game.combat()
+                    if cs.victory is not None:
+                        self._raid_fight()
+                    elif info.get("valid") and time.time() - active.get("started_at", time.time()) > 600:
+                        self._finish_raid("результат не подтверждён", info.get("hp"))
+                    else:
+                        self.runtime["raid_next_check_at"] = time.time() + check
+                        self._save_runtime()
+                        if not info.get("valid"):
+                            self.game.ensure_login(timeout_sec=60)
+                        time.sleep(check)
+                    return
+                if not info.get("valid"):
+                    self.log("рейд: состояние пещеры неизвестно — старт запрещён", "WARN")
+                    self.game.ensure_login(timeout_sec=60)
+                    self._schedule_respawn_check({})
+                    return
+                if info.get("closed") or info.get("locked_out"):
+                    # A real server transition unlocks the next attempt. A local
+                    # timer or process restart alone cannot do so.
+                    self.runtime["raid_wait_for_closed"] = False
+                    self.runtime["raid_roster"] = []
+                    self._schedule_respawn_check(info)
+                    self.log(f"рейд: ждём возрождения, таймер сервера {info.get('reopen_in') or 'неизвестен'}")
+                    return
+                if self.runtime.get("raid_wait_for_closed") or info.get("hp") is None or info.get("hp") <= 0:
+                    self._schedule_respawn_check({})
+                    self.log("рейд: ждём подтверждённого нового возрождения")
+                    return
+                if self.deadline and time.time() >= self.deadline - 360:
+                    self.game.click_text("Покинуть бой")
+                    return
+                self.game.raid_ready()
+                info = self.game.raid_room(url)
+                if info.get("in_fight"):
+                    continue
+                if not info.get("valid") or info.get("closed") or info.get("locked_out"):
+                    continue
+                if self.runtime.get("raid_roster") != info.get("ready", []):
+                    self.runtime["raid_roster"] = info.get("ready", [])
+                    self._save_runtime()
+                    self.log("рейд: после возрождения готовые: " + ", ".join(p.get("name", "?") for p in info.get("ready", [])))
+                if (cfg.get("leader") == self.account and cfg.get("can_start")
+                        and info.get("can_start") and info.get("hp") is not None
+                        and info["hp"] > 0 and party_ready(info, cfg)):
+                    self.runtime["raid_active"] = {"started_at": time.time(), "party": info["ready"], "mode": "every_respawn"}
+                    self._save_runtime()
+                    if self.game.raid_start():
+                        self.log("рейд: вся тройка готова после возрождения — начинаем")
+                        self._raid_fight()
+                    else:
+                        self.log("рейд: исход нажатия старта неизвестен, повтор запрещён", "WARN")
+                    return
+                time.sleep(check)
+            # Stay ready across assembly slices. The next slice checks the
+            # battle panel before any farming; no follower leaves by its own clock.
+            self.runtime["raid_next_check_at"] = time.time()
+            self._save_runtime()
+            self.log("рейд: тройка ещё не готова — продолжаем сбор без выхода")
+        finally:
+            self.in_long_op = False
+
     def _finish_raid(self, outcome: str, hp: int | None = None) -> None:
         active = self.runtime.pop("raid_active", None)
         if not active:
             return
+        if self.config.get("raid", {}).get("every_respawn"):
+            self.runtime["raid_wait_for_closed"] = True
+            self.runtime["raid_next_check_at"] = time.time() + 5
         active.pop("observed_log_entries", None)
         active.update(outcome=outcome, boss_hp=0 if outcome == "победа" else hp,
                       telemetry="observed log entries; totals may be incomplete")

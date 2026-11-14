@@ -30,6 +30,7 @@ def config(name=CONFIGS[0]):
 
 def agent(tmp_path, name=CONFIGS[0]):
     cfg = config(name)
+    cfg["raid"]["every_respawn"] = False
     cfg["_root"] = str(tmp_path)
     game = Mock()
     game.body_text.return_value = ""
@@ -365,3 +366,110 @@ def test_real_cloud_config_paths(name):
     credentials = cfg.get("auth", {}).get("credentials_file")
     if credentials:
         assert (Path(cfg["_root"]) / credentials).relative_to(ROOT).parts[0] == "credentials"
+
+
+@pytest.mark.parametrize("raw,expected", [("00:05:20", 320), ("01:02:03", 3723), ("05:20", 320), ("", None), ("unknown", None), ("00:99:20", None)])
+def test_server_respawn_timer(raw, expected):
+    from barbars.safety import respawn_seconds
+    assert respawn_seconds(raw) == expected
+
+
+def respawn_agent(tmp_path, name=CONFIGS[0]):
+    a = agent(tmp_path, name)
+    a.config["raid"]["every_respawn"] = True
+    return a
+
+
+def open_dragon():
+    info = room()
+    info["hp"] = 100
+    return info
+
+
+def test_respawn_mode_ignores_half_hour_windows(tmp_path):
+    a = respawn_agent(tmp_path)
+    a._do_respawn_raid = Mock()
+    with patch("barbars.loop.time.time", return_value=18900), patch("barbars.loop.rules.collect_state") as collect:
+        assert a._run_once_inner().action == "raid"
+    a._do_respawn_raid.assert_called_once()
+    collect.assert_not_called()
+
+
+@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False)])
+def test_every_respawn_has_only_one_leader(tmp_path, name, starts):
+    a = respawn_agent(tmp_path, name)
+    a.game.raid_room.side_effect = [open_dragon(), open_dragon(), {"valid": True, "closed": True, "reopen_in": "00:10:00"}]
+    a._raid_fight = Mock()
+    with patch("barbars.loop.time.time", return_value=18900), patch("barbars.loop.time.sleep"):
+        a._do_respawn_raid()
+    assert a.game.raid_start.called == starts
+
+
+def test_cooldown_gives_time_for_farming_and_reserves_pre_spawn(tmp_path):
+    a = respawn_agent(tmp_path)
+    with patch("barbars.loop.time.time", return_value=1000):
+        a._schedule_respawn_check({"reopen_in": "00:20:00"})
+        assert a.runtime["raid_next_check_at"] == 1300
+        assert a.runtime["raid_guard_until"] == 1000
+        a._schedule_respawn_check({"reopen_in": "00:02:00"})
+        assert a.runtime["raid_next_check_at"] == 1005
+        assert a.runtime["raid_guard_until"] == 1150
+    with patch("barbars.loop.time.time", return_value=1001), patch("barbars.loop.rules.collect_state") as collect:
+        decision = a._run_once_inner()
+    assert decision.action == "wait" and decision.params["sleep_sec"] == 5
+    collect.assert_not_called()
+
+
+def test_same_spawn_is_not_started_twice_after_restart(tmp_path):
+    a = respawn_agent(tmp_path)
+    a.runtime["raid_wait_for_closed"] = True
+    a._save_runtime()
+    a = respawn_agent(tmp_path)
+    a.game.raid_room.return_value = open_dragon()
+    a._do_respawn_raid()
+    a.game.raid_start.assert_not_called()
+    a.game.raid_room.return_value = {"valid": True, "closed": True, "reopen_in": "00:02:00"}
+    a._do_respawn_raid()
+    assert not a.runtime["raid_wait_for_closed"]
+    a.game.raid_room.side_effect = [open_dragon(), open_dragon()]
+    a._raid_fight = Mock()
+    a._do_respawn_raid()
+    a.game.raid_start.assert_called_once()
+
+
+@pytest.mark.parametrize("hp", [0, None])
+def test_dead_or_unknown_dragon_never_starts(tmp_path, hp):
+    a = respawn_agent(tmp_path)
+    info = open_dragon()
+    info["hp"] = hp
+    a.game.raid_room.return_value = info
+    a._do_respawn_raid()
+    a.game.raid_start.assert_not_called()
+    a.game.raid_ready.assert_not_called()
+
+
+def test_unknown_respawn_page_denies_ready_and_start(tmp_path):
+    a = respawn_agent(tmp_path)
+    a.game.raid_room.return_value = {"valid": False}
+    a._do_respawn_raid()
+    a.game.raid_ready.assert_not_called()
+    a.game.raid_start.assert_not_called()
+
+
+def test_respawn_mode_restores_active_battle(tmp_path):
+    a = respawn_agent(tmp_path)
+    a.runtime["raid_active"] = {"started_at": 1, "observed_combat": True}
+    a._save_runtime()
+    a = respawn_agent(tmp_path)
+    a.game.raid_room.return_value = {"valid": True, "in_fight": True}
+    a._raid_fight = Mock()
+    a._do_respawn_raid()
+    a._raid_fight.assert_called_once()
+    a.game.raid_start.assert_not_called()
+
+
+@pytest.mark.parametrize("name", CONFIGS)
+def test_all_live_configs_use_respawn_mode(name):
+    cfg = config(name)
+    assert cfg["raid"]["every_respawn"]
+    assert cfg["raid"]["max_fights_per_day"] == 0

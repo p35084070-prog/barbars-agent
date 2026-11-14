@@ -38,7 +38,7 @@
     "stay_sec": 780,
     "min_party": 3,
     "can_start": true,
-    "max_fights_per_day": 10,
+    "max_fights_per_day": 0,
     "max_turns": 400,
     "lone_wait_sec": 300,
     "leader": "keis",
@@ -74,7 +74,9 @@
       }
     ],
     "assembly_sec": 600,
-    "room_check_sec": 8
+    "room_check_sec": 8,
+    "every_respawn": true,
+    "respawn_lead_sec": 300
   },
   "tower_farm": {
     "enabled": true,

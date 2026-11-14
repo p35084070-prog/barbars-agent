@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import tempfile
 import time
 import urllib.error
@@ -18,6 +19,16 @@ def raid_window(cfg: dict, now: float | None = None) -> tuple[int, float, bool]:
     window = int(now // period)
     end = window * period + min(period - 60, int(cfg.get("assembly_sec", 600)))
     return window, end, now < end
+
+
+def respawn_seconds(value: str) -> int | None:
+    """Server countdown only. An unreadable timer never means 'already open'."""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{1,3}:\d{2}(?::\d{2})?", value.strip()):
+        return None
+    parts = [int(p) for p in value.strip().split(":")]
+    if any(p >= 60 for p in parts[1:]):
+        return None
+    return (parts[0] * 60 + parts[1]) if len(parts) == 2 else (parts[0] * 3600 + parts[1] * 60 + parts[2])
 
 
 def party_ready(info: dict, cfg: dict) -> bool:
