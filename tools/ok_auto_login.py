@@ -114,10 +114,27 @@ def do_login(page, login: str, password: str) -> str:
     try:
         page.fill("input[name='st.email']", login, timeout=15000)
         page.fill("input[name='st.password']", password, timeout=15000)
+        page.press("input[name='st.password']", "Tab", timeout=5000)
+        # A React hydration can replace the first form just after fill().
+        # Verify both fields before submitting; never print their values.
+        for _ in range(2):
+            if (page.locator("input[name='st.email']").first.input_value() == login
+                    and page.locator("input[name='st.password']").first.input_value() == password):
+                break
+            page.fill("input[name='st.email']", login, timeout=5000)
+            page.fill("input[name='st.password']", password, timeout=5000)
+            page.press("input[name='st.password']", "Tab", timeout=5000)
+        else:
+            return "форма сбросила введённые поля; отправка запрещена"
     except Exception as exc:  # noqa: BLE001
         return f"не удалось заполнить форму: {str(exc).splitlines()[0]}"
 
     errors: list[str] = []
+    try:
+        page.get_by_role("button", name="Войти", exact=True).click(timeout=8000)
+        return ""
+    except Exception as exc:
+        errors.append("точная кнопка Войти: " + str(exc).splitlines()[0])
     for sel in ("button[type='submit']", "input[type='submit']", "button:has-text('Войти')"):
         try:
             page.locator(sel).first.click(timeout=8000)
