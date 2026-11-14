@@ -116,7 +116,7 @@ def parse_dragon_evidence(html):
         if re.search(r"\bты (?:погиб|м[её]ртв|убит)\b", low):
             result["personal_dead"] = True
         win = bool(re.fullmatch(r"(?:победа[!.]?|(?:мифический )?дракон (?:повержен|побежд[её]н|убит)[!.]?|(?:ваш |твой )?отряд победил(?: дракона)?[!.]?)", low))
-        loss = bool(re.fullmatch(r"(?:(?:ваш |твой )?отряд (?:погиб|уничтожен|проиграл)[!.]?|все (?:герои|участники|союзники) погибли[!.]?)", low))
+        loss = bool(re.fullmatch(r"(?:(?:ваш |твой )?отряд (?:погиб|уничтожен|проиграл)[!.]?|все (?:герои|участники|союзники) погибли[!.]?|все воины убиты[!.]?)", low))
         if re.fullmatch(r"поражение[!.]?", low):
             # A personal loss panel can coexist with surviving allies.
             loss = result["warriors_alive"] == 0 and result["medics_alive"] == 0
@@ -127,6 +127,11 @@ def parse_dragon_evidence(html):
                 result["terminal"] = "противоречивые данные"
             else:
                 result["terminal"] = value
+    if not result["events"]:
+        # Some live combat responses omit clock2 icons. Keep the recognised
+        # server event rows already isolated above, preserving their order.
+        result["events"] = [row for row in result["notices"] if re.search(
+            r"^(?:ты (?:ударил|полечил|вылечил|исцелил|погиб|начал)\b|дракон ударил\b|.{1,60} полечил тебя\b)", normalize_ru(row))]
     if (result["terminal"] is None and result["personal_dead"]
             and result["warriors_alive"] == 0 and result["medics_alive"] == 0
             and result["boss_hp_pct"] is not None and result["boss_hp_pct"] > 0
@@ -163,9 +168,12 @@ def record_sample(active, evidence, now):
         m = re.search(r"ты\s+ударил\s+дракона\s+на\s+(\d[\d\s]*)", low)
         if m:
             active["damage_lower_bound"] = active.get("damage_lower_bound", 0) + int(re.sub(r"\D", "", m[1]))
-        m = re.search(r"ты\s+(?:вылечил|исцелил)\b.*?\bна\s+(\d[\d\s]*)", low)
+        m = re.search(r"ты\s+(?:полечил|вылечил|исцелил)\b.*?\bна\s+(\d[\d\s]*)", low)
         if m:
             active["healing_lower_bound"] = active.get("healing_lower_bound", 0) + int(re.sub(r"\D", "", m[1]))
+        m = re.search(r"^.{1,60}\s+полечил тебя\s+на\s+(\d[\d\s]*)", low)
+        if m:
+            active["healing_received_lower_bound"] = active.get("healing_received_lower_bound", 0) + int(re.sub(r"\D", "", m[1]))
         if len(active.setdefault("recent_events", [])) < 100:
             active["recent_events"].append(row)
     sample = {k: evidence.get(k) for k in ("boss_hp_pct", "warriors_alive", "medics_alive", "combat_clock", "our_hp", "our_energy", "terminal", "personal_dead", "terminal_evidence", "notices")}
