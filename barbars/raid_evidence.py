@@ -116,7 +116,7 @@ def parse_dragon_evidence(html):
         if re.search(r"\bты (?:погиб|м[её]ртв|убит)\b", low):
             result["personal_dead"] = True
         win = bool(re.fullmatch(r"(?:победа[!.]?|(?:мифический )?дракон (?:повержен|побежд[её]н|убит)[!.]?|(?:ваш |твой )?отряд победил(?: дракона)?[!.]?)", low))
-        loss = bool(re.fullmatch(r"(?:(?:ваш |твой )?отряд (?:погиб|уничтожен|проиграл)[!.]?|все (?:герои|участники|союзники) погибли[!.]?)", low))
+        loss = bool(re.fullmatch(r"(?:(?:ваш |твой )?отряд (?:погиб|уничтожен|проиграл)[!.]?|все (?:герои|участники|союзники) погибли[!.]?|все воины убиты[!.]?)", low))
         if re.fullmatch(r"поражение[!.]?", low):
             # A personal loss panel can coexist with surviving allies.
             loss = result["warriors_alive"] == 0 and result["medics_alive"] == 0

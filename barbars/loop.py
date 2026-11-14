@@ -260,6 +260,10 @@ class Agent:
             return rules.Decision("wait", params={"sleep_sec": 5}, reason="ждём возрождения дракона")
         state = rules.collect_state(self.game, self.config)
         self.last_state = state
+        maxima = {k: getattr(state, k) for k in ("max_hp", "max_energy") if isinstance(getattr(state, k), (int, float)) and getattr(state, k) > 0}
+        if maxima and maxima != self.runtime.get("hero_maxima"):
+            self.runtime["hero_maxima"] = maxima
+            self._save_runtime()
         if self.talent_blocked_until > time.time():
             state.talent_points = 0
         if self.repair_skip_until > time.time():
@@ -1087,7 +1091,15 @@ class Agent:
         self._save_runtime()
         if active.get("observed_combat") or outcome in {"победа", "поражение", "окончен"}:
             self._bump("raid")
-        self.log("рейд: результат " + json.dumps(active, ensure_ascii=False))
+        # Keep the result at the start and below the live log UI line limit.
+        # Full snapshots remain in runtime rather than hiding the outcome
+        # behind a multi-kilobyte roster/sample dump.
+        summary = {k: active.get(k) for k in ("outcome", "boss_hp_pct", "boss_last_hp_pct", "clan_kills_before", "clan_kills_after",
+                   "damage_lower_bound", "healing_lower_bound", "healing_received_lower_bound", "healing_requests", "personal_death_confirmed")}
+        summary["started_at"] = active.get("started_at")
+        summary["party_ids"] = [p.get("id") for p in active.get("party", [])]
+        summary["terminal_evidence"] = active.get("latest_evidence", {}).get("terminal_evidence", [])
+        self.log("рейд: результат " + json.dumps(summary, ensure_ascii=False))
 
     def _raid_fight(self) -> None:
         outcome = self._fight_loop(force=True, max_turns=int(self.config.get("raid", {}).get("max_turns", 400)))
@@ -1944,9 +1956,16 @@ class Agent:
                 return done("исход неизвестен" if force else "окончен")
             status = self.game.status()
             base = getattr(self, "last_state", None) or rules.GameState()
+            saved_maxima = self.runtime.get("hero_maxima", {})
+            if force and active:
+                # The raid runs before collect_state on a new process. Keep
+                # its initial/peak charge as a ceiling rather than treating
+                # each depleted current-energy value as a new maximum.
+                active["energy_ceiling"] = max(active.get("energy_ceiling", 0), cs.our_energy or 0)
+                active["hp_ceiling"] = max(active.get("hp_ceiling", 0), cs.our_hp or 0)
             state = rules.GameState(
-                max_hp=base.max_hp or cs.our_hp or status.hp,
-                max_energy=base.max_energy or cs.our_energy or status.energy,
+                max_hp=base.max_hp or saved_maxima.get("max_hp") or active.get("hp_ceiling") or cs.our_hp or status.hp,
+                max_energy=base.max_energy or saved_maxima.get("max_energy") or active.get("energy_ceiling") or cs.our_energy or status.energy,
             )
             decision = self.policy.choose(cs, status, state, force=force)
             if decision.action != "wait":

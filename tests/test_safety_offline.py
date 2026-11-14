@@ -68,6 +68,52 @@ def test_empty_waiting_roster_is_not_a_loss():
     assert parse_dragon_evidence(dragon_panel(warriors=0, medics=0))['terminal'] is None
 
 
+def test_real_no_warriors_end_panel_confirms_failed_raid():
+    from barbars.raid_evidence import parse_dragon_evidence
+    e = parse_dragon_evidence('<div>Лечить некого</div><div>Все воины убиты</div><div>fire white ii погиб от удара дракона</div>')
+    assert e['terminal'] == 'поражение'
+    assert e['boss_hp_pct'] is None
+
+
+def test_result_log_starts_with_outcome_and_fits_live_ui(tmp_path):
+    a = agent(tmp_path)
+    a.log = Mock()
+    a.runtime['raid_active'] = {'started_at': 1, 'party': config()['raid']['party'], 'samples': [{'notices': ['x' * 100]}] * 120,
+                              'boss_last_hp_pct': 66, 'latest_evidence': {'terminal_evidence': ['Все воины убиты']}}
+    a._finish_raid('поражение')
+    message = a.log.call_args.args[0]
+    assert '"outcome": "поражение"' in message
+    assert len(message) < 1000
+    assert a.runtime['last_raid']['boss_hp_pct'] == 66
+
+
+def test_raid_keeps_initial_energy_ceiling_before_first_state_collection(tmp_path):
+    a = agent(tmp_path, CONFIGS[1])
+    a.runtime['raid_active'] = {'started_at': 1}
+    a.game.combat.side_effect = [CombatState(attack_links=['Бить дракона'], our_hp=100, our_energy=1000),
+                               CombatState(attack_links=['Бить дракона'], our_hp=100, our_energy=100),
+                               CombatState(victory=True)]
+    a.game.status.return_value = Status(hp=100, energy=100)
+    with patch('barbars.loop.time.sleep'):
+        assert a._fight_loop(force=True, max_turns=5) == 'победа'
+    a.game.click_attack.assert_called_once()
+    a.game.reload.assert_called_once()
+    assert a.runtime['raid_active']['energy_ceiling'] == 1000
+
+
+def test_saved_maximum_survives_partial_charge_at_restart(tmp_path):
+    a = agent(tmp_path, CONFIGS[1])
+    a.runtime.update(hero_maxima={'max_energy': 3000}, raid_active={'started_at': 1})
+    a._save_runtime()
+    a = agent(tmp_path, CONFIGS[1])
+    a.game.combat.side_effect = [CombatState(attack_links=['Бить дракона'], our_hp=100, our_energy=700), CombatState(victory=True)]
+    a.game.status.return_value = Status(hp=100, energy=700)
+    with patch('barbars.loop.time.sleep'):
+        a._fight_loop(force=True, max_turns=5)
+    a.game.click_attack.assert_not_called()
+    a.game.reload.assert_called_once()
+
+
 def test_live_combat_rows_without_clock2_and_actual_polechil_word():
     from barbars.raid_evidence import parse_dragon_evidence, record_sample
     e = parse_dragon_evidence(dragon_panel(extra='<div>Ты ударил дракона на 357</div><div>keis полечил тебя на 2518</div><div>Ты полечил себя на 3296 крит</div>'))
