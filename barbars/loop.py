@@ -13,6 +13,7 @@ from typing import Any
 from . import pages, rules
 from .driver import Game
 from .llm import ClaudeAdvisor
+from .safety import RepairBudget, atomic_json, party_ready, raid_window
 
 
 class Agent:
@@ -59,7 +60,7 @@ class Agent:
         self.well_cache: dict[str, Any] = {}
         self.well_checked_at: float = 0.0
         # усталость героя (процент штрафа) — тоже кэш
-        self.tire_cache: int = 0
+        self.tire_cache: int | None = None
         self.tire_checked_at: float = 0.0
         self.exp_cache: list[dict[str, Any]] = []
         self.exp_checked_at: float = 0.0
@@ -106,6 +107,12 @@ class Agent:
         # не перебираем их каждый цикл — блокируем шаг на час
         self.scrolls_blocked_until: float = 0.0
         self.daily = self._load_daily()
+        self.runtime_path = self.daily_path().with_name("runtime.json")
+        self.runtime = json.loads(self.runtime_path.read_text(encoding="utf-8")) if self.runtime_path.exists() else {}
+        self.repair_budget = RepairBudget(self.daily_path().with_name("repair-budget.json"), self.account)
+
+    def _save_runtime(self) -> None:
+        atomic_json(self.runtime_path, self.runtime)
 
     # ------------------------------------------------------------------ логи
 
@@ -167,13 +174,7 @@ class Agent:
         return data
 
     def _save_daily(self, data: dict[str, Any] | None = None) -> None:
-        data = data or self.daily
-        try:
-            self.daily_path().write_text(
-                json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-        except Exception:
-            pass
+        atomic_json(self.daily_path(), self.daily if data is None else data)
 
     def _bump(self, key: str, value: Any = 1) -> None:
         self.daily = self._load_daily()
@@ -225,6 +226,9 @@ class Agent:
         цикле, а там всё равно ничего нового не появилось.
         """
         cfg = dict(self.config)
+        cfg["raid"] = {**cfg.get("raid", {}), "enabled": False}  # handled before navigation
+        if getattr(self, "buy_iron_blocked_until", 0) > now:
+            cfg["spend"] = {**cfg.get("spend", {}), "buy_iron": {"enabled": False}}
         shop_cfg = dict(cfg.get("shop", {}) or {})
         interval = float(shop_cfg.get("check_interval_min", 30)) * 60
         if (now - self.shop_checked_at) < interval:
@@ -240,6 +244,13 @@ class Agent:
                 time.sleep(30)
                 return rules.Decision("wait", reason="браузер недоступен")
         now = time.time()
+        cfg = self.config.get("raid", {})
+        window, _, due = raid_window(cfg, now)
+        if cfg.get("enabled") and (self.runtime.get("raid_active") or (
+                due and self.runtime.get("raid_window") != window)):
+            decision = rules.Decision("raid", params={"url": cfg.get("url", "https://barbars.ru/game/dragonDungeon")})
+            self._do_raid(decision, rules.GameState())
+            return decision
         state = rules.collect_state(self.game, self.config)
         self.last_state = state
         if self.talent_blocked_until > time.time():
@@ -380,6 +391,9 @@ class Agent:
     # ------------------------------------------------------------------ действия
 
     def _execute(self, decision: rules.Decision, state: rules.GameState) -> None:
+        if decision.action in {"shop", "auction", "trade_market", "share_money", "share_gear"}:
+            self.log("операция покупки/пересылки отключена политикой сохранения ресурсов")
+            return
         if decision.action == "repair":
             self._do_repair()
         elif decision.action == "altar":
@@ -487,8 +501,9 @@ class Agent:
         keep = int(decision.params.get("keep_bag", 4))
         max_equip = int(decision.params.get("max_equip", 8))
         crack = bool(decision.params.get("crack", True))
-        sell_store = bool(decision.params.get("sell_store", True))
+        sell_store = False  # mythical items are kept, including duplicates
         gear_cfg = self.config.get("gear", {})
+        self.game.open_loot_chests(limit=3)
         worn = self.game.equip_better_items(limit=max_equip)
         cracked = 0
         moved = 0
@@ -498,14 +513,14 @@ class Agent:
             cracked = self.game.crack_items(
                 limit=int(gear_cfg.get("crack_limit", 10)),
                 keep_better=True,
-                keep_mythic=bool(gear_cfg.get("keep_mythic", True)),
+                keep_mythic=True,
             )
             # сундук: там копится старый хлам (1-11 ур), разбираем его со
             # страницы вещи — иначе место для нового дропа закончится
             if bool(gear_cfg.get("crack_chest", True)):
                 chest_cracked = self.game.crack_chest_items(
                     limit=int(gear_cfg.get("crack_chest_limit", 15)),
-                    keep_mythic=bool(gear_cfg.get("keep_mythic", True)),
+                    keep_mythic=True,
                     keep_better=True,
                 )
                 cracked += chest_cracked
@@ -800,157 +815,130 @@ class Agent:
             self.log("умения: подходящих вариантов за очки полей нет")
 
     def _check_raid(self, state: rules.GameState) -> None:
-        """Зал кланового босса: открыт ли вход, сколько HP у босса, кто в зале."""
-        cfg = self.config.get("raid", {}) or {}
-        if not cfg.get("enabled"):
-            return
-        now = time.time()
-        if (now - self.raid_checked_at) < float(cfg.get("check_interval_min", 5)) * 60:
-            state.raid = self.raid_cache
-            return
-        self.raid_checked_at = now
-        try:
-            info = self.game.raid_room(str(cfg.get("url", "https://barbars.ru/game/dragonDungeon")))
-        except Exception as exc:
-            self.log(f"рейд: не удалось проверить зал: {exc}", "WARN")
-            state.raid = self.raid_cache
-            return
-        self.raid_cache = info
-        state.raid = info
-        ready = len(info.get("ready") or [])
-        waiting = len(info.get("waiting") or [])
-        self.log(
-            "рейд: "
-            + (
-                f"вход закрыт, откроется через {info.get('reopen_in')}"
-                if info.get("closed")
-                else f"пещера открыта, HP босса {info.get('hp')}%"
-            )
-            + f", в зале {ready + waiting} (готовых {ready})"
-            + (" — в попытку не пустили" if info.get("locked_out") else "")
-        )
+        # Visiting the room places a hero in it. Only the coordinated raid path
+        # may navigate there; background checks must not disrupt the party.
+        state.raid = {}
 
     def _do_raid(self, decision: rules.Decision, state: rules.GameState) -> None:
-        """Рейд на кланового босса: собраться в зале, начать общий бой, бить.
-
-        Механика игры: зал общий на 10 героев. Кто нажал «Начать бой!» — тот
-        стартовал попытку, но в бой попадают все, кто стоял в зале готовым.
-        Во время попытки страница зала отдаёт участнику боевую панель
-        («Бить дракона» / «Лечить союзников»), поэтому достаточно перезагрузить
-        зал — отдельного входа не нужно.
-        """
-        url = str(decision.params.get("url", "https://barbars.ru/game/dragonDungeon"))
-        min_party = int(decision.params.get("min_party", 2))
-        stay_sec = int(decision.params.get("stay_sec", 600))
-        can_start = bool(decision.params.get("can_start", True))
-        check_sec = int(decision.params.get("room_check_sec", 8))
-        # заходим в зал не каждый цикл, а раз в repeat_min
-        self.raid_last_at = time.time()
-        self.daily["raid_last_at"] = self.raid_last_at
-        self._save_daily()
-
-        # уже в бою — просто бьём
-        if "Покинуть бой" in self.game.body_text():
-            self._raid_fight()
+        cfg = self.config.get("raid", {})
+        url = str(cfg.get("url", "https://barbars.ru/game/dragonDungeon"))
+        window, end, due = raid_window(cfg)
+        if not due and not self.runtime.get("raid_active"):
             return
-
-        deadline = time.time() + stay_sec
-        # если отряд не собрался, долго стоять в зале бессмысленно: герой
-        # не качает опыт и не фармит ресурсы. Ждём недолго и идём работать.
-        lone_wait = int(self.config.get("raid", {}).get("lone_wait_sec", 300))
-        lone_deadline = time.time() + lone_wait
-        closed_checks = 0
-        self.in_long_op = True  # сторож цикла не должен рвать браузер в рейде
+        self.in_long_op = True
         try:
-            while time.time() < deadline:
+            # Recover a fight after a restart before considering the next window.
+            if self.runtime.get("raid_active"):
                 info = self.game.raid_room(url)
                 if info.get("in_fight"):
-                    # во время попытки зал отдаёт участнику боевую панель
-                    self.log("рейд: мы в бою с боссом")
                     self._raid_fight()
-                    # после боя ждём отката и пробуем снова — цикл «откат → убили»
-                    continue
+                    return
+                cs = self.game.combat()
+                if cs.victory is not None:
+                    self._raid_fight()
+                    return
+                if not info.get("valid"):
+                    self.log("рейд: неизвестная страница/сессия — попытка сохранена", "WARN")
+                    self.game.ensure_login(timeout_sec=60)
+                    time.sleep(8)
+                    return
+                # Wait out transient missing buttons. A reopened room after the
+                # maximum fight duration can close recovery, without claiming a win.
+                age = time.time() - self.runtime["raid_active"].get("started_at", time.time())
+                if age > 600 and not info.get("in_fight"):
+                    self._finish_raid("результат не подтверждён", info.get("hp"))
+                else:
+                    time.sleep(8)
+                return
+            if not due:
+                return
+            self.log(f"рейд: общее окно {window}, руководитель {cfg.get('leader')}")
+            while time.time() < end and (not self.deadline or time.time() < self.deadline - 360):
+                info = self.game.raid_room(url)
+                if not info.get("valid"):
+                    self.log("рейд: неизвестная страница, старт запрещён", "WARN")
+                    self.game.ensure_login(timeout_sec=60)
+                    return
+                if info.get("in_fight"):
+                    self.runtime["raid_active"] = {"window": window, "started_at": time.time(), "party": self.runtime.get("raid_roster", []), "expected_party": cfg.get("party", [])}
+                    self._save_runtime()
+                    self._raid_fight()
+                    return
+                if info.get("locked_out"):
+                    self.log("рейд: участник не допущен в уже начавшийся бой")
+                    return
                 if info.get("closed"):
-                    # идёт попытка (или откат): зал нам боевую панель не отдал
-                    closed_checks += 1
-                    if closed_checks % 4 == 1 and self.game.join_current_fight(url):
-                        self.log("рейд: вошли в общий бой")
-                        self._raid_fight()
-                        continue
-                    time.sleep(check_sec)
+                    self.log("рейд: пещера закрыта/откат — ждём в общем окне")
+                    time.sleep(max(1, int(cfg.get("room_check_sec", 8))))
                     continue
-                closed_checks = 0
-                ready = len(info.get("ready") or [])
-                waiting = len(info.get("waiting") or [])
-                self.log(f"рейд: в зале {ready + waiting} (готовых {ready})")
-                # держим свою готовность: она сбрасывается, когда кто-то заходит
                 self.game.raid_ready()
-                if can_start and ready >= min_party and info.get("can_start"):
+                # Refresh after readiness changes and before checking identities.
+                info = self.game.raid_room(url)
+                if info.get("ready") and self.runtime.get("raid_roster") != info["ready"]:
+                    self.runtime["raid_roster"] = info["ready"]
+                    self._save_runtime()
+                self.log("рейд: готовые: " + ", ".join(p.get("name", "?") for p in info.get("ready", [])))
+                leader = cfg.get("leader") == self.account and cfg.get("can_start", False)
+                if leader and info.get("valid") and not info.get("closed") and not info.get("locked_out") and info.get("can_start") and party_ready(info, cfg):
+                    active = {"window": window, "started_at": time.time(), "party": info["ready"]}
+                    self.runtime["raid_active"] = active
+                    self._save_runtime()  # save before submitting, never click twice blindly
                     if self.game.raid_start():
-                        self.log("рейд: начали общий бой с боссом")
-                        time.sleep(2)
-                        if "Покинуть бой" not in self.game.body_text():
-                            self.game.join_current_fight(url)
+                        self.log("рейд: наша тройка готова, руководитель начал бой")
                         self._raid_fight()
-                        continue
-                if ready + waiting < min_party and time.time() > lone_deadline:
-                    self.log(
-                        "рейд: отряд не собрался — выходим из зала, идём фармить",
-                    )
-                    self.game.click_text("Покинуть бой")
-                    break
-                time.sleep(check_sec)
+                    else:
+                        self.log("рейд: результат старта неизвестен, проверим без повторного клика", "WARN")
+                    return
+                time.sleep(max(1, int(cfg.get("room_check_sec", 8))))
+            # Leaving the waiting room is allowed only after a fresh check that
+            # a leader has not started while this process was waiting.
+            info = self.game.raid_room(url)
+            if info.get("in_fight"):
+                self.runtime["raid_active"] = {"window": window, "started_at": time.time(), "party": self.runtime.get("raid_roster", []), "expected_party": cfg.get("party", [])}
+                self._save_runtime()
+                self._raid_fight()
+            elif info.get("valid") and not info.get("closed"):
+                self.game.click_text("Покинуть бой")
+                self.log("рейд: общее окно сбора завершено, продолжаем фарм")
         finally:
+            self.runtime["raid_window"] = window
+            self._save_runtime()
             self.in_long_op = False
-        self.log("рейд: окно вышло, ждём следующего")
+
+    def _finish_raid(self, outcome: str, hp: int | None = None) -> None:
+        active = self.runtime.pop("raid_active", None)
+        if not active:
+            return
+        active.pop("observed_log_entries", None)
+        active.update(outcome=outcome, boss_hp=0 if outcome == "победа" else hp,
+                      telemetry="observed log entries; totals may be incomplete")
+        history = self.runtime.setdefault("raid_history", [])
+        history.append(active)
+        del history[:-20]
+        self.runtime["last_raid"] = active
+        self._save_runtime()
+        if active.get("observed_combat") or outcome in {"победа", "поражение", "окончен"}:
+            self._bump("raid")
+        self.log("рейд: результат " + json.dumps(active, ensure_ascii=False))
 
     def _raid_fight(self) -> None:
-        """Бой с боссом: воин бьёт, медик лечит.
-
-        Лимит ходов тут свой: попытка длится около пяти минут, а обычного
-        лимита боёв (40 ходов в облаке) не хватает — воин успевал сделать
-        только 40 ударов и выходил из боя, не дожидаясь конца попытки.
-        """
-        limit = int(self.config.get("raid", {}).get("max_turns", 70))
-        outcome = self._fight_loop(force=True, max_turns=limit)
-        self.fights_done += 1
-        self._bump("raid")
-        self.log(
-            f"рейд: бой с боссом завершён — {outcome}, нанесли урона {self.last_damage}"
-        )
-        self.game.click_text("Покинуть бой")
+        outcome = self._fight_loop(force=True, max_turns=int(self.config.get("raid", {}).get("max_turns", 400)))
+        if outcome in {"победа", "поражение", "окончен"}:
+            self.fights_done += 1
+            self._finish_raid(outcome, getattr(self, "last_boss_hp", None))
+            self.game.click_text("Покинуть бой")
+        else:
+            self.log(f"рейд: {outcome}; бой не покидаем, состояние сохранено", "WARN")
 
     def _do_scrolls(self, decision: rules.Decision, state: rules.GameState) -> None:
         """Активируем свитки (бесплатно при премиуме) и читаем книги."""
-        params = decision.params
-        only_free = bool(params.get("only_free", True))
-        limit = int(params.get("limit", 5))
-        cfg = self.config.get("scrolls", {}) or {}
-        block_min = int(cfg.get("paid_block_min", 60))
-        done = 0
-        paid = 0
+        limit = int(decision.params.get("limit", 5))
         for item in state.scrolls[:limit]:
-            item_id = str(item.get("item_id", ""))
             name = str(item.get("name", ""))
-            if not item_id:
+            if "свиток" not in pages.cyr_normalize(name):
                 continue
-            ok, message = self.game.activate_scroll(item_id, only_free=only_free)
-            if ok:
-                done += 1
-                self.log(f"свитки: «{name}» — {message}")
-            else:
-                self.log(f"свитки: «{name}» — {message}")
-                if "золот" in message or "зол." in message:
-                    paid += 1
-        if done:
-            self.log(f"свитки: активировано {done}")
-        if done == 0 and paid:
-            # все свитки платные — золото не тратим, значит повторять бессмысленно
-            self.scrolls_blocked_until = time.time() + block_min * 60
-            self.log(
-                f"свитки: все платные (золото не тратим) — не проверяем ещё {block_min} мин",
-                "WARN",
-            )
+            ok = self.game.discard_scroll(str(item.get("item_id", "")))
+            self.log(f"свитки: {name} — {'выброшен' if ok else 'выбросить не удалось'}")
 
     def _do_shop(self, decision: rules.Decision, state: rules.GameState) -> None:
         """Закупка снаряжения 25+ уровня в «Магазине снаряжения».
@@ -1195,15 +1183,20 @@ class Agent:
         = 40 зол), поэтому золото можно тратить на железо — это разрешено
         только явно (конфиг `spend.buy_iron`).
         """
-        params = decision.params
-        result = self.game.buy_iron_with_gold(
-            min_iron=int(params.get("min_iron", 10_000)),
-            max_gold=int(params.get("max_gold", 0)),
-        )
-        if result.get("ok"):
+        state = getattr(self, "last_state", None)
+        if not state or not state.needs_repair or state.iron != 0 or not state.repair_cost:
+            return
+        self.buy_iron_blocked_until = time.time() + 3600
+        try:
+            reservation = self.repair_budget.reserve()
+            if reservation is None:
+                self.log("железо: дневной лимит или незавершённая покупка — пропуск", "WARN")
+                return
+            result = self.game.buy_iron_with_gold(min_iron=state.repair_cost, max_gold=1)
+            self.repair_budget.finish(reservation, result)
             self.log(f"железо: {result.get('message')}")
-        else:
-            self.log(f"железо: купить не удалось — {result.get('message')}", "WARN")
+        except Exception as exc:
+            self.log(f"железо: покупка заблокирована, {type(exc).__name__}", "WARN")
 
     def _do_upgrade_mastery(self, decision: rules.Decision) -> None:
         """Повышение уровня мастерства: железо + мифрил (постоянный бонус)."""
@@ -1235,7 +1228,21 @@ class Agent:
 
     def _do_tower(self, decision: rules.Decision) -> None:
         """Фарм башни: бесплатный бой, капает опыт, железо, бутылочки и вещи."""
-        rounds = int(decision.params.get("rounds", 3))
+        if not self.config.get("tower_farm", {}).get("enabled"):
+            return
+        try:
+            fatigue = self.game.hero_fatigue()
+        except Exception:
+            fatigue = None
+        self.tire_cache = fatigue
+        paused = fatigue != 0
+        if self.runtime.get("tower_paused") != paused:
+            self.runtime["tower_paused"] = paused
+            self._save_runtime()
+        if paused:
+            self.log(f"башня: пауза до полного сброса усталости (сейчас {fatigue})")
+            return
+        rounds = 1  # no repeated entries without another fatigue check
         name = self.game.open_tower()
         if not name:
             self.log("башня: не удалось открыть локацию", "WARN")
@@ -1367,6 +1374,8 @@ class Agent:
         try:
             self.tire_cache = self.game.hero_fatigue()
         except Exception as exc:
+            self.tire_cache = None
+            state.tire = None
             self.log(f"усталость: не удалось проверить: {exc}", "WARN")
             return
         self.tire_checked_at = now
@@ -1416,12 +1425,7 @@ class Agent:
         currency = str(decision.params.get("currency", "iron"))
         percent = decision.params.get("percent")
         if currency == "gold":
-            result = self.game.buy_exp_with_gold(amount)
-            if result.get("ok"):
-                self._bump("exp")
-                self.log(f"мудрец: куплен опыт за {amount} золота ({percent}% прокачки)")
-            else:
-                self.log(f"мудрец: покупка опыта за золото не удалась — {result.get('message')}", "WARN")
+            self.log("мудрец: покупка за золото запрещена", "WARN")
             return
         self.expected_spend = amount
         result = self.game.buy_exp_with_iron(amount)
@@ -1596,6 +1600,8 @@ class Agent:
     def _do_altar(self, decision: rules.Decision) -> None:
         """Пожертвование в алтарь клана — бонус ко всем параметрам."""
         resource = decision.target or "iron"
+        if resource != "iron":
+            return
         amount = decision.params.get("amount")
         if resource == "iron":
             self.expected_spend = int(amount or 0)
@@ -1673,6 +1679,9 @@ class Agent:
         if not href:
             self.log("нет ссылки на бой")
             return
+        if ("/towers" in href or "башн" in pages.cyr_normalize(decision.target)) and self.game.hero_fatigue() != 0:
+            self.log("башня: вход через обычный бой заблокирован усталостью")
+            return
         self.game.goto(href)
         result = self._fight_loop()
         self.fights_done += 1
@@ -1690,12 +1699,22 @@ class Agent:
         stalls = 0
         last_energy = None
         damage = 0
-        seen_logs: set[str] = set()
-        target_hp: int | None = None
+        healing = 0
+        active = self.runtime.get("raid_active", {}) if force else {}
+        seen_logs: set[str] = set(active.get("observed_log_entries", []))
+        target_hp: int | None = active.get("boss_hp")
 
         def done(text: str) -> str:
             """Выход из боя: запоминаем, сколько урона нанесли."""
             self.last_damage = damage
+            self.last_healing = healing
+            self.last_boss_hp = target_hp
+            if force and active:
+                active["observed_damage"] = active.get("observed_damage", 0) + damage
+                active["observed_healing"] = active.get("observed_healing", 0) + healing
+                active["observed_log_entries"] = list(seen_logs)[-300:]
+                active["boss_hp"] = target_hp
+                self._save_runtime()
             return text
 
         while turns < limit:
@@ -1703,6 +1722,11 @@ class Agent:
                 self.log("  выходим по лимиту времени")
                 return done("время вышло")
             cs = self.game.combat()
+            if force and active and (cs.attack_links or cs.heal_links) and not active.get("observed_combat"):
+                active["observed_combat"] = True
+                self._save_runtime()
+            if force and active and cs.our_hp == 0:
+                active["death_observed"] = True
             if cs.log_lines:
                 new_log = cs.log_lines[-1]
                 if new_log != last_log:
@@ -1713,20 +1737,23 @@ class Agent:
                     if line in seen_logs:
                         continue
                     seen_logs.add(line)
-                    m = re.search(r"дракона\s+на\s+(\d+)", line)
+                    m = re.search(r"ты ударил дракона\s+на\s+(\d+)", pages.cyr_normalize(line))
                     if m:
                         damage += int(m.group(1))
+                    m = re.search(r"ты (?:вылечил|исцелил).*?на\s+(\d+)", pages.cyr_normalize(line))
+                    if m:
+                        healing += int(m.group(1))
             if cs.victory is not None:
                 return done("победа" if cs.victory else "поражение")
-            if force and cs.enemy_hp and cs.enemy_hp != target_hp:
+            if force and cs.enemy_hp is not None and cs.enemy_hp != target_hp:
                 # в шапке боевой панели — HP цели: следим за изменением
                 target_hp = cs.enemy_hp
                 self.log(f"  HP цели: {target_hp}")
-            if cs.finished and not cs.attack_links:
+            if cs.finished and not cs.attack_links and not cs.heal_links:
                 self.log("  бой окончен")
                 return done("окончен")
             status = self.game.status()
-            base = self.last_state or rules.GameState()
+            base = getattr(self, "last_state", None) or rules.GameState()
             state = rules.GameState(
                 max_hp=base.max_hp or cs.our_hp or status.hp,
                 max_energy=base.max_energy or cs.our_energy or status.energy,
@@ -1756,8 +1783,10 @@ class Agent:
                 self.log("  выпили зелье")
             elif decision.action == "heal":
                 turns += 1
-                self.game.click_text(decision.params.get("text", ""))
-                self.log("  вылечил союзника")
+                if self.game.click_text(decision.params.get("text", "")):
+                    self.log("  лечение: действие отправлено")
+                else:
+                    self.game.reload()
             elif decision.action == "flee":
                 self.game.click_text(decision.params.get("text", ""))
                 self.log("  отступил")
@@ -1786,6 +1815,7 @@ class Agent:
                     self.log("  в бою нет доступных действий — выходим")
                     return done("нет действий")
                 self.log("  нет доступных действий в бою — ждём")
+                self.game.reload()
                 time.sleep(2)
         return done("таймаут")
 
