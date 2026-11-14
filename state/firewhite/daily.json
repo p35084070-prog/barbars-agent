@@ -3,7 +3,7 @@
   "sold": 0,
   "exp": 0,
   "gift": false,
-  "autocrack": false,
+  "autocrack": true,
   "award": false,
   "auction": 0,
   "market": 0,
@@ -11,5 +11,5 @@
   "shop_buy_ids": [],
   "shop_slots": [],
   "shop_bought": [],
-  "raid": 1
+  "raid": 4
 }
