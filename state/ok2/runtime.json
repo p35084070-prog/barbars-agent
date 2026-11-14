@@ -1,0 +1,14 @@
+{
+  "hero_maxima": {
+    "max_hp": 2102,
+    "max_energy": 2173
+  },
+  "raid_roster": [
+    {
+      "id": "1596900",
+      "name": "qdal",
+      "role": "warrior"
+    }
+  ],
+  "raid_next_check_at": 1794692465.671713
+}
