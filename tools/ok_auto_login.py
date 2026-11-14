@@ -60,6 +60,7 @@ CHALLENGE_MARKERS = (
     "смс-код",
     "отправьте код",
     "подтверждение",
+    "попасть к злоумышленникам",
 )
 
 
@@ -113,10 +114,27 @@ def do_login(page, login: str, password: str) -> str:
     try:
         page.fill("input[name='st.email']", login, timeout=15000)
         page.fill("input[name='st.password']", password, timeout=15000)
+        page.press("input[name='st.password']", "Tab", timeout=5000)
+        # A React hydration can replace the first form just after fill().
+        # Verify both fields before submitting; never print their values.
+        for _ in range(2):
+            if (page.locator("input[name='st.email']").first.input_value() == login
+                    and page.locator("input[name='st.password']").first.input_value() == password):
+                break
+            page.fill("input[name='st.email']", login, timeout=5000)
+            page.fill("input[name='st.password']", password, timeout=5000)
+            page.press("input[name='st.password']", "Tab", timeout=5000)
+        else:
+            return "форма сбросила введённые поля; отправка запрещена"
     except Exception as exc:  # noqa: BLE001
         return f"не удалось заполнить форму: {str(exc).splitlines()[0]}"
 
     errors: list[str] = []
+    try:
+        page.get_by_role("button", name="Войти", exact=True).click(timeout=8000)
+        return ""
+    except Exception as exc:
+        errors.append("точная кнопка Войти: " + str(exc).splitlines()[0])
     for sel in ("button[type='submit']", "input[type='submit']", "button:has-text('Войти')"):
         try:
             page.locator(sel).first.click(timeout=8000)
@@ -210,6 +228,9 @@ def main() -> int:
                     if challenge:
                         log(f"⚠️ ОК требует подтверждения («{challenge}») — нужен ручной вход")
                         try:
+                            barrier = " ".join(page.inner_text("body").split()).replace(args.login, "[логин скрыт]").replace(args.password, "[пароль скрыт]")
+                            barrier = re.sub(r"https?://\S+|\+?\d[\d ()-]{8,}\d", "[скрыто]", barrier)
+                            log("защитный экран: " + barrier[:1600])
                             page.screenshot(path=str(ROOT / "logs" / "ok-autologin-challenge.png"))
                         except Exception:  # noqa: BLE001
                             pass
@@ -219,7 +240,8 @@ def main() -> int:
                     log("вход не завершился за отведённое время")
                     try:
                         text = " ".join(page.inner_text("body").split())
-                        log(f"страница: {text[:300]}")
+                        safe_text = text.replace(args.login, "[логин скрыт]").replace(args.password, "[пароль скрыт]")
+                        log(f"страница: {safe_text[:1600]}")
                         (ROOT / "logs").mkdir(parents=True, exist_ok=True)
                         (ROOT / "logs" / "ok-autologin-lastpage.html").write_text(
                             page.content(), encoding="utf-8")

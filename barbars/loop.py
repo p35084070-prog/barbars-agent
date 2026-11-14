@@ -112,6 +112,8 @@ class Agent:
         self.daily = self._load_daily()
         self.runtime_path = self.daily_path().with_name("runtime.json")
         self.runtime = json.loads(self.runtime_path.read_text(encoding="utf-8")) if self.runtime_path.exists() else {}
+        if config.get("_verified_hero_maxima"):
+            self.runtime["hero_maxima"] = dict(config["_verified_hero_maxima"])
         self.repair_budget = RepairBudget(self.daily_path().with_name("repair-budget.json"), self.account)
 
     def _save_runtime(self) -> None:
@@ -898,7 +900,7 @@ class Agent:
                     self.runtime["raid_active"] = active
                     self._save_runtime()  # save before submitting, never click twice blindly
                     if self.game.raid_start():
-                        self.log("рейд: наша тройка готова, руководитель начал бой")
+                        self.log("рейд: весь отряд готов, руководитель начал бой")
                         self._raid_fight()
                     else:
                         self.log("рейд: результат старта неизвестен, проверим без повторного клика", "WARN")
@@ -1042,7 +1044,7 @@ class Agent:
                                                    "clan_kills_before": kills_before if type(kills_before) is int else None}
                     self._save_runtime()
                     if self.game.raid_start():
-                        self.log("рейд: вся тройка готова после возрождения — начинаем")
+                        self.log("рейд: весь отряд готов после возрождения — начинаем")
                         self._raid_fight()
                     else:
                         self.log("рейд: исход нажатия старта неизвестен, повтор запрещён", "WARN")
@@ -1052,7 +1054,7 @@ class Agent:
             # battle panel before any farming; no follower leaves by its own clock.
             self.runtime["raid_next_check_at"] = time.time()
             self._save_runtime()
-            self.log("рейд: тройка ещё не готова — продолжаем сбор без выхода")
+            self.log("рейд: отряд ещё не готов — продолжаем сбор без выхода")
         finally:
             self.in_long_op = False
 
