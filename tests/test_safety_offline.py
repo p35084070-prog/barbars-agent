@@ -688,6 +688,23 @@ def test_fresh_wait_for_closed_keeps_guarding(tmp_path):
     a.game.raid_ready.assert_not_called()
 
 
+def test_assembly_gives_up_and_returns_to_farming(tmp_path):
+    # Если полный отряд не собрался за assembly_max_sec, герой выходит из
+    # зала: иначе протухшая сессия ОК блокирует ему весь день.
+    a = respawn_agent(tmp_path)
+    a.config["raid"]["assembly_sec"] = 0
+    a.config["raid"]["assembly_max_sec"] = 600
+    a.config["raid"]["assembly_return_sec"] = 300
+    a.runtime["raid_assembly_since"] = 1000
+    a.game.raid_room.return_value = open_dragon()
+    a.game.click_text = Mock()
+    with patch("barbars.loop.time.time", return_value=1700), patch("barbars.loop.time.sleep"):
+        a._do_respawn_raid()
+    assert a.runtime["raid_assembly_since"] == 0
+    assert a.runtime["raid_next_check_at"] == 1700 + 300
+    a.game.click_text.assert_called_with("Покинуть бой")
+
+
 def test_respawn_mode_ignores_half_hour_windows(tmp_path):
     a = respawn_agent(tmp_path)
     a._do_respawn_raid = Mock()

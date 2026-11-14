@@ -1056,6 +1056,10 @@ class Agent:
                 if self.deadline and time.time() >= self.deadline - 360:
                     self.game.click_text("Покинуть бой")
                     return
+                if not self.runtime.get("raid_assembly_since"):
+                    # Пещера открыта, отряд собираем — считаем, сколько ждём.
+                    self.runtime["raid_assembly_since"] = time.time()
+                    self._save_runtime()
                 self.game.raid_ready()
                 info = self.game.raid_room(url)
                 if info.get("in_fight"):
@@ -1078,6 +1082,7 @@ class Agent:
                     self.runtime["raid_active"] = {"started_at": time.time(), "party": info["ready"], "expected_party": cfg.get("party", []), "mode": "every_respawn",
                                                    "boss_initial_hp_pct": info["hp"], "initiator": self.account,
                                                    "clan_kills_before": kills_before if type(kills_before) is int else None}
+                    self.runtime["raid_assembly_since"] = 0
                     self._save_runtime()
                     if self.game.raid_start():
                         self.log("рейд: весь отряд готов после возрождения — начинаем")
@@ -1086,11 +1091,27 @@ class Agent:
                         self.log("рейд: исход нажатия старта неизвестен, повтор запрещён", "WARN")
                     return
                 time.sleep(check)
-            # Stay ready across assembly slices. The next slice checks the
-            # battle panel before any farming; no follower leaves by its own clock.
-            self.runtime["raid_next_check_at"] = time.time()
-            self._save_runtime()
-            self.log("рейд: отряд ещё не готов — продолжаем сбор без выхода")
+            # Сбор продолжается следующим куском. Но если полный отряд не
+            # собрался за assembly_max_sec, герой выходит из зала и идёт
+            # фармить: иначе ожидание четвёрки (например, протухшая сессия ОК)
+            # заблокирует ему весь день. В зал возвращаемся по расписанию.
+            assembly_max = int(cfg.get("assembly_max_sec", 1800))
+            since = float(self.runtime.get("raid_assembly_since") or 0)
+            if assembly_max and since and time.time() - since > assembly_max:
+                self.game.click_text("Покинуть бой")
+                self.runtime["raid_assembly_since"] = 0
+                self.runtime["raid_next_check_at"] = time.time() + int(cfg.get("assembly_return_sec", 300))
+                self._save_runtime()
+                self.log(
+                    f"рейд: отряд не собрался за {assembly_max} с — выходим из зала, "
+                    "вернёмся позже",
+                )
+            else:
+                # Stay ready across assembly slices. The next slice checks the
+                # battle panel before any farming; no follower leaves by its own clock.
+                self.runtime["raid_next_check_at"] = time.time()
+                self._save_runtime()
+                self.log("рейд: отряд ещё не готов — продолжаем сбор без выхода")
         finally:
             self.in_long_op = False
 
@@ -1110,6 +1131,7 @@ class Agent:
             elif outcome == "результат не подтверждён" and before == kills and type(kills) is int:
                 active["confirmation"] = "счётчик убийств клана не вырос; победа не зафиксирована"
         if self.config.get("raid", {}).get("every_respawn"):
+            self.runtime["raid_assembly_since"] = 0
             fought = bool(active.get("observed_combat")) or bool(active.get("death_observed"))
             hp_seen = active.get("boss_last_hp_pct")
             if type(hp_seen) is int and hp_seen < 100:

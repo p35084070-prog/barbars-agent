@@ -98,7 +98,9 @@
     "room_check_sec": 8,
     "every_respawn": true,
     "respawn_lead_sec": 300,
-    "stuck_grace_sec": 600
+    "stuck_grace_sec": 600,
+    "assembly_max_sec": 1800,
+    "assembly_return_sec": 300
   },
   "tower_farm": {
     "enabled": true,
