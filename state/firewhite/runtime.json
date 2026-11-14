@@ -17,7 +17,7 @@
       "role": "warrior"
     }
   ],
-  "raid_next_check_at": 1794668699.8609385,
+  "raid_next_check_at": 1794688539.2372987,
   "raid_wait_for_closed": true,
   "raid_history": [
     {
@@ -3299,5 +3299,9 @@
   },
   "raid_guard_until": 0,
   "raid_reopen_at": null,
-  "raid_published_reopen_at": 1794650822.487488
+  "raid_published_reopen_at": 1794650822.487488,
+  "hero_maxima": {
+    "max_hp": 2332,
+    "max_energy": 2214
+  }
 }
