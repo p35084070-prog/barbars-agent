@@ -56,6 +56,19 @@ def main() -> int:
             pass
         links = sorted(set(re.findall(r"items:\d+:\w+", r.text)))
         print("--- item-action ссылки:", links[:40])
+    mail = s.get("https://barbars.ru/user/mail", timeout=25)
+    print("\n================ ПОЧТА ================")
+    print("текст:", text_of(mail.text)[:800])
+    parcels = re.findall(r'href="(?:\.\./)*user/mail/message/id/(\d+)"', mail.text)
+    print("посылки:", parcels[:20])
+    if parcels:
+        pid = parcels[0]
+        page = s.get(f"https://barbars.ru/user/mail/message/id/{pid}", timeout=25)
+        print(f"--- страница посылки {pid}: {page.status_code} {page.url}")
+        print("текст:", text_of(page.text)[:900])
+        print("--- все ссылки:")
+        for m in re.finditer(r'<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', page.text, re.S | re.I):
+            print(f"   {' '.join(re.sub('<[^>]+>', ' ', m.group(2)).split())[:45]:47} {m.group(1)[:110]}")
     return 0
 
 
