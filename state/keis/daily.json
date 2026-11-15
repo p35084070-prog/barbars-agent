@@ -1,8 +1,8 @@
 {
-  "date": "2026-11-14",
+  "date": "2026-11-15",
   "sold": 0,
   "exp": 0,
-  "gift": true,
+  "gift": false,
   "autocrack": false,
   "award": false,
   "auction": 0,
@@ -11,5 +11,5 @@
   "shop_buy_ids": [],
   "shop_slots": [],
   "shop_bought": [],
-  "raid": 6
+  "raid": 16
 }
