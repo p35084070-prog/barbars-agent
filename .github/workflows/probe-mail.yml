@@ -39,4 +39,7 @@ jobs:
 
       - name: Форма отправки — keis
         continue-on-error: true
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
         run: python -u tools/inspect_mail_options.py
