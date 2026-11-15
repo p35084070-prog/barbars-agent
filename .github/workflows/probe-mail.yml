@@ -1,0 +1,42 @@
+name: probe-mail
+
+# Разведка формы отправки почты: какие ресурсы и деньги игра вообще даёт передать.
+# Только чтение — ничего не отправляется.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-mail
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Учётные данные из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+        run: |
+          mkdir -p credentials
+
+      - name: Форма отправки — keis
+        continue-on-error: true
+        run: python -u tools/inspect_mail_options.py
