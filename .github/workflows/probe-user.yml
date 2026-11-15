@@ -1,0 +1,71 @@
+name: probe-user
+
+# Страница героя: как игра пишет усталость (нужно для сторожа башен) и
+# как выглядят Поля сражений. Только чтение.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-user
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Учётные данные из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          OK_SESSION_B64: ${{ secrets.OK_SESSION_B64 }}
+          OK2_SESSION_B64: ${{ secrets.OK2_SESSION_B64 }}
+        run: |
+          mkdir -p credentials state/ok2
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          chmod 600 credentials/*.txt
+          if [ -n "$OK_SESSION_B64" ]; then printf '%s' "$OK_SESSION_B64" > state/ok-session.b64; fi
+          if [ -n "$OK2_SESSION_B64" ]; then printf '%s' "$OK2_SESSION_B64" > state/ok2/ok-session.b64; fi
+
+      - name: Герой — fire white ii
+        continue-on-error: true
+        run: python -u tools/probe_user_page.py --config deploy/config-actions-firewhite.json --label fw --url '/user'
+
+      - name: Герой — keis
+        continue-on-error: true
+        run: python -u tools/probe_user_page.py --config deploy/config-actions-keis.json --label keis --url '/user'
+
+      - name: Герой — vagojan (ОК)
+        continue-on-error: true
+        run: python -u tools/probe_user_page.py --config config-ok.json --label ok --url '/user'
+
+      - name: Герой — qdal (ОК2)
+        continue-on-error: true
+        run: python -u tools/probe_user_page.py --config config-ok2.json --label ok2 --url '/user'
+
+      - name: Логи
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-user-${{ github.run_number }}
+          path: logs
+          retention-days: 7
