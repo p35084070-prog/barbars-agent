@@ -76,6 +76,25 @@ def main() -> int:
             game.goto("https://barbars.ru/user/mail")
             out["mail_text_after"] = " ".join(game.body_text().split())[:600]
             out["moved_to_bag"] = collect_new_items(game)
+            # если посылки остались — открываем одну и смотрим, что на ней
+            m = re.search(r'href="(?:\.\./)*user/mail/message/id/(\d+)"', game.p.content())
+            if m:
+                game.goto(f"https://barbars.ru/user/mail/message/id/{m.group(1)}")
+                out["parcel_text"] = " ".join(game.body_text().split())[:800]
+                out["parcel_links"] = [
+                    {
+                        "label": " ".join(re.sub("<[^>]+>", " ", mm.group(2)).split())[:50],
+                        "href": mm.group(1)[:120],
+                    }
+                    for mm in re.finditer(
+                        r'<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', game.p.content(), re.S | re.I
+                    )
+                    if re.search(
+                        "забр|рюкзак|надеть|get|take|rack",
+                        mm.group(1) + mm.group(2),
+                        re.I,
+                    )
+                ][:25]
             bag = game.bag_items()
             out["bag"] = [{"id": i["item_id"], "name": i["name"], "better": i["better"]} for i in bag if i["name"]]
             if args.equip:
