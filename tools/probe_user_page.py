@@ -27,6 +27,8 @@ def main() -> int:
     parser.add_argument("--config", required=True)
     parser.add_argument("--label", default="")
     parser.add_argument("--url", default="/user")
+    parser.add_argument("--click-location", action="store_true",
+                        help="перейти в локацию башни и снять страницу боя")
     args = parser.parse_args()
 
     config = load_config(ROOT / args.config)
@@ -48,6 +50,17 @@ def main() -> int:
                 print("PROBE_USER " + json.dumps(out, ensure_ascii=False), flush=True)
                 return 1
             game.goto("https://barbars.ru" + args.url)
+            if args.click_location:
+                loc = game.p.locator("a[href*='locationLink']")
+                if loc.count():
+                    try:
+                        loc.first.click(timeout=8000)
+                        game._settle()
+                        out["clicked_location"] = " ".join((loc.first.inner_text() or "").split())
+                    except Exception as exc:  # noqa: BLE001
+                        out["click_error"] = str(exc).splitlines()[0][:200]
+                else:
+                    out["click_error"] = "нет ссылок локаций"
             text = game.body_text()
             lines = [l.strip() for l in text.splitlines() if l.strip()]
             out["lines_matched"] = [l for l in lines if KEY.search(l)][:40]

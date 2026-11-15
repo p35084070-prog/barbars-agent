@@ -9,6 +9,9 @@ on:
       url:
         description: 'Страница для разведки'
         default: '/user'
+      location:
+        description: 'Перейти в локацию башни (true/false)'
+        default: 'false'
 
 permissions:
   contents: read
@@ -52,7 +55,7 @@ jobs:
 
       - name: Герой — fire white ii
         continue-on-error: true
-        run: python -u tools/probe_user_page.py --config deploy/config-actions-firewhite.json --label fw --url "${{ github.event.inputs.url || '/user' }}"
+        run: python -u tools/probe_user_page.py --config deploy/config-actions-firewhite.json --label fw --url "${{ github.event.inputs.url || '/user' }}" ${{ github.event.inputs.location == 'true' && '--click-location' || '' }}
 
       - name: Герой — keis
         continue-on-error: true
