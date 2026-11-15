@@ -1,5 +1,5 @@
 {
-  "tower_paused": true,
+  "tower_paused": false,
   "raid_roster": [
     {
       "id": "31389504",
@@ -27125,7 +27125,7 @@
   "raid_reopen_at": 1794740490.1873267,
   "raid_published_reopen_at": 1794740490.7058003,
   "hero_maxima": {
-    "max_hp": 1028,
+    "max_hp": 2350,
     "max_energy": 2234
   },
   "raid_wait_for_closed_since": 0,
