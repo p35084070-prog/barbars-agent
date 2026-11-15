@@ -70,6 +70,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--names", nargs="*", default=[])
+    ap.add_argument("--item-id", action="append", default=[])
     ap.add_argument("--send-to", default="")
     ap.add_argument("--label", default="")
     args = ap.parse_args()
@@ -93,9 +94,12 @@ def main() -> int:
             out["store"] = [s for s in store if s["name"]]
             if args.send_to:
                 wanted = [n.lower() for n in args.names]
+                wanted_ids = {str(i) for i in args.item_id}
                 picks = []
                 for item in bag:  # отправляем только из рюкзака
                     if not item["name"]:
+                        continue
+                    if wanted_ids and item["item_id"] not in wanted_ids:
                         continue
                     if wanted and not any(w in item["name"].lower() for w in wanted):
                         continue

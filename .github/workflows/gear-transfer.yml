@@ -9,6 +9,9 @@ on:
       names:
         description: 'Названия вещей через запятую (пусто = все найденные)'
         default: ''
+      item_ids:
+        description: 'ID вещей через запятую (точнее, чем названия)'
+        default: ''
       send_to:
         description: 'ID получателя (пусто = только посмотреть)'
         default: ''
@@ -49,11 +52,17 @@ jobs:
       - name: Сбор и отправка
         env:
           NAMES: ${{ github.event.inputs.names || '' }}
+          ITEM_IDS: ${{ github.event.inputs.item_ids || '' }}
           SEND_TO: ${{ github.event.inputs.send_to || '' }}
         run: |
           ARGS=""
+          if [ -n "$ITEM_IDS" ]; then
+            for id in $(echo "$ITEM_IDS" | tr ', ' '  '); do
+              [ -n "$id" ] && ARGS="$ARGS --item-id $id"
+            done
+          fi
           if [ -n "$NAMES" ]; then
-            ARGS="--names"
+            ARGS="$ARGS --names"
             for n in $(echo "$NAMES" | tr ',' ' '); do
               [ -n "$n" ] && ARGS="$ARGS \"$n\""
             done
