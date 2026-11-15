@@ -1,7 +1,18 @@
 {
   "tower_paused": true,
-  "raid_roster": [],
-  "raid_next_check_at": 1794713486.4935055,
+  "raid_roster": [
+    {
+      "id": "905853",
+      "name": "keis",
+      "role": "medic"
+    },
+    {
+      "id": "31389504",
+      "name": "fire white ii",
+      "role": "warrior"
+    }
+  ],
+  "raid_next_check_at": 1794732906.1334174,
   "raid_wait_for_closed": false,
   "raid_history": [
     {
@@ -29751,5 +29762,5 @@
     "closed_observed_at": 1794709691.4909406,
     "reopen_at": 1794709902.4909406
   },
-  "raid_assembly_since": 0
+  "raid_assembly_since": 1794731686.8403947
 }
