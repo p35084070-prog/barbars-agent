@@ -11,5 +11,6 @@
   "shop_buy_ids": [],
   "shop_slots": [],
   "shop_bought": [],
-  "raid": 25
+  "raid": 25,
+  "upgrade": 1
 }
