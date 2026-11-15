@@ -76,28 +76,19 @@ def main() -> int:
             game.goto("https://barbars.ru/user/mail")
             out["mail_text_after"] = " ".join(game.body_text().split())[:600]
             mail_html = game.p.content()
+            # каждую посылку надо открыть и забрать отдельной кнопкой
+            parcels = re.findall(r'href="(?:\.\./)*user/mail/message/id/(\d+)"', mail_html)
+            out["parcels"] = parcels[:30]
+            taken = []
+            for pid in parcels[:30]:
+                game.goto(f"https://barbars.ru/user/mail/message/id/{pid}")
+                ok = game.click_href("getLink")
+                game._settle()
+                taken.append({"id": pid, "ok": bool(ok)})
+            out["parcels_taken"] = taken
+            game.goto("https://barbars.ru/user/mail")
+            out["mail_text_final"] = " ".join(game.body_text().split())[:600]
             out["moved_to_bag"] = collect_new_items(game)
-            # если посылки остались — открываем одну и смотрим, что на ней
-            m = re.search(r'href="(?:\.\./)*user/mail/message/id/(\d+)"', mail_html)
-            if m:
-                game.goto(f"https://barbars.ru/user/mail/message/id/{m.group(1)}")
-                out["parcel_url"] = game.p.url
-                out["parcel_html"] = game.p.content()[:2500]
-                out["parcel_text"] = " ".join(game.body_text().split())[:800]
-                out["parcel_links"] = [
-                    {
-                        "label": " ".join(re.sub("<[^>]+>", " ", mm.group(2)).split())[:50],
-                        "href": mm.group(1)[:120],
-                    }
-                    for mm in re.finditer(
-                        r'<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', game.p.content(), re.S | re.I
-                    )
-                    if re.search(
-                        "забр|рюкзак|надеть|get|take|rack",
-                        mm.group(1) + mm.group(2),
-                        re.I,
-                    )
-                ][:25]
             bag = game.bag_items()
             out["bag"] = [{"id": i["item_id"], "name": i["name"], "better": i["better"]} for i in bag if i["name"]]
             if args.equip:
@@ -105,7 +96,8 @@ def main() -> int:
             game.goto(f"https://barbars.ru/user/body/id/{args.hero_id}")
             out["worn_text"] = " ".join(game.body_text().split())[:1200]
             st = game.status()
-            out["hero_level"] = st.level
+            out["hero_level"] = getattr(st, "level", None)
+            out["hero_text"] = " ".join(game.body_text().split())[:300]
         except Exception as exc:  # noqa: BLE001
             out["error"] = str(exc).splitlines()[0][:300]
         finally:
