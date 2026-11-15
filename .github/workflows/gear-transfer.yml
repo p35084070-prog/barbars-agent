@@ -1,0 +1,62 @@
+name: gear-transfer
+
+# Собрать купленные вещи из панели «новый предмет» в рюкзак и отправить
+# другому герою почтой (для пятого героя Steel Blue ii, id 31390082).
+
+on:
+  workflow_dispatch:
+    inputs:
+      names:
+        description: 'Названия вещей через запятую (пусто = все найденные)'
+        default: ''
+      send_to:
+        description: 'ID получателя (пусто = только посмотреть)'
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gear-transfer
+  cancel-in-progress: false
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Креды из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          chmod 600 credentials/*.txt
+
+      - name: Сбор и отправка
+        env:
+          NAMES: ${{ github.event.inputs.names || '' }}
+          SEND_TO: ${{ github.event.inputs.send_to || '' }}
+        run: |
+          ARGS=""
+          if [ -n "$NAMES" ]; then
+            ARGS="--names"
+            for n in $(echo "$NAMES" | tr ',' ' '); do
+              [ -n "$n" ] && ARGS="$ARGS \"$n\""
+            done
+          fi
+          if [ -n "$SEND_TO" ]; then ARGS="$ARGS --send-to $SEND_TO"; fi
+          python -u tools/gear_transfer.py --config deploy/config-actions-keis.json $ARGS
