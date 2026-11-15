@@ -75,9 +75,10 @@ def main() -> int:
             out["mail_taken"] = game.take_mail()
             game.goto("https://barbars.ru/user/mail")
             out["mail_text_after"] = " ".join(game.body_text().split())[:600]
+            mail_html = game.p.content()
             out["moved_to_bag"] = collect_new_items(game)
             # если посылки остались — открываем одну и смотрим, что на ней
-            m = re.search(r'href="(?:\.\./)*user/mail/message/id/(\d+)"', game.p.content())
+            m = re.search(r'href="(?:\.\./)*user/mail/message/id/(\d+)"', mail_html)
             if m:
                 game.goto(f"https://barbars.ru/user/mail/message/id/{m.group(1)}")
                 out["parcel_url"] = game.p.url
