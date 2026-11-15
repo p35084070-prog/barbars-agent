@@ -1,7 +1,18 @@
 {
   "tower_paused": true,
-  "raid_roster": [],
-  "raid_next_check_at": 1794713458.9217544,
+  "raid_roster": [
+    {
+      "id": "1286381",
+      "name": "vagojan",
+      "role": "warrior"
+    },
+    {
+      "id": "1596900",
+      "name": "qdal",
+      "role": "warrior"
+    }
+  ],
+  "raid_next_check_at": 1794733545.3634522,
   "raid_wait_for_closed": false,
   "raid_history": [
     {
@@ -36118,8 +36129,8 @@
     "telemetry": "percent HP from dragon icon; damage/healing are lower bounds; clicks are not healing",
     "strength_assessment": "эта попытка проиграна; проверьте лечение и участие перед выводом о силе"
   },
-  "raid_guard_until": 1794713514.9217544,
-  "raid_reopen_at": 1794713484.9217544,
+  "raid_guard_until": 1794733560.3634522,
+  "raid_reopen_at": null,
   "raid_published_reopen_at": 1794713485.224825,
   "raid_spawn_witness": {
     "account": "firewhite",
@@ -36127,8 +36138,8 @@
     "reopen_at": 1794650822.487488
   },
   "hero_maxima": {
-    "max_hp": 2844,
-    "max_energy": 3086
+    "max_hp": 3118,
+    "max_energy": 3359
   },
   "raid_wait_for_closed_since": 0,
   "raid_assembly_since": 0
