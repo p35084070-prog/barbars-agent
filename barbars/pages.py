@@ -470,6 +470,40 @@ def parse_price_text(text: str) -> tuple[int, int]:
     return gold, silver
 
 
+def parse_shop_price_html(html: str) -> tuple[int, int]:
+    """(золото, серебро) цены товара магазина — по HTML, с иконками валют.
+
+    На странице товара цена показана ссылкой «Купить за N», где N может быть
+    иконкой серебра, иконкой золота, либо обеими сразу («6 30» = 6 зол 30 сер).
+    Разбирать только текст нельзя: «Купить за 6 30» без иконок читается как
+    «6 серебра» — а это в 100 раз дешевле, чем на самом деле, и лимит по
+    золоту проскочил бы незаметно.
+    """
+    idx = html.find("buyoutLink")
+    if idx < 0:
+        idx = html.lower().find("купить")
+    if idx < 0:
+        return 0, 0
+    frag = html[idx : idx + 1500]
+    gold = silver = 0
+    pending: str | None = None
+    for token in re.finditer(
+        r"icons/(money_gold|money_silver)\.png|>\s*(\d[\d.,]*)\s*<", frag
+    ):
+        if token.group(1):
+            pending = token.group(1)
+            continue
+        if pending is None:
+            continue
+        value = parse_amount(token.group(2))
+        if pending == "money_gold":
+            gold = value
+        else:
+            silver = value
+        pending = None
+    return gold, silver
+
+
 def cyr_normalize(text: str) -> str:
     """Привести латинские «двойники» к кириллице.
 

@@ -1250,26 +1250,42 @@ class Game:
         return repaired
 
     def shop_item_price(self, item_id: str) -> tuple[int, int]:
-        """(золото, серебро) цены товара магазина — со страницы самого товара."""
+        """(золото, серебро) цены товара магазина — со страницы самого товара.
+
+        Цену читаем по HTML с иконками валют: в тексте «Купить за 6 30» не
+        видно, что это 6 зол 30 сер, а не 6 серебра.
+        """
         from . import pages
 
         self.goto(f"https://barbars.ru/trade/auction/shop/item/id/{item_id}")
+        gold, silver = pages.parse_shop_price_html(self.p.content())
+        if gold or silver:
+            return gold, silver
         return pages.parse_price_text(self.body_text())
 
     def buy_shop_item_capped(self, item_id: str, max_gold: int = 3) -> tuple[bool, str]:
         """Купить товар магазина, если золота на вещь не больше max_gold.
 
         Цена проверяется на странице товара («Купить за …»): покупать вслепую
-        нельзя — лимит игрока «не больше 3 золота на вещь».
+        нельзя — лимит игрока «не больше 3 золота на вещь». Считаем цену в
+        серебре (1 золото = 100 серебра), чтобы лимит соблюдался и для
+        комбинированных цен вида «6 зол 30 сер».
         """
         from . import pages
 
         self.goto(f"https://barbars.ru/trade/auction/shop/item/id/{item_id}")
-        gold, silver = pages.parse_price_text(self.body_text())
+        gold, silver = pages.parse_shop_price_html(self.p.content())
+        if not gold and not silver:
+            gold, silver = pages.parse_price_text(self.body_text())
         if gold <= 0 and silver <= 0:
             return False, "цену прочитать не удалось — покупать вслепую нельзя"
         if gold > max_gold:
             return False, f"цена {gold} зол. превышает лимит {max_gold} зол."
+        if gold * 100 + silver > max_gold * 100:
+            return False, (
+                f"цена {gold} зол. {silver} сер. превышает лимит "
+                f"{max_gold} зол. на вещь"
+            )
         if not self.click_href("border:buyoutLink"):
             return False, "кнопка покупки не найдена"
         self.confirm_if_needed()

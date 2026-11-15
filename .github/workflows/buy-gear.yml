@@ -1,0 +1,64 @@
+name: buy-gear
+
+# Разовая покупка снаряжения в «Магазине снаряжения» глазами keis
+# с жёстким лимитом «не дороже N золота за вещь» и печатью кошелька до/после.
+# Опционально — отправить купленное почтой другому герою.
+
+on:
+  workflow_dispatch:
+    inputs:
+      item_id:
+        description: 'ID товара (через запятую можно несколько)'
+        required: true
+      max_gold:
+        description: 'Лимит золота на вещь'
+        default: '1'
+      send_to:
+        description: 'ID получателя (почтой); пусто = не отправлять'
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buy-gear
+  cancel-in-progress: false
+
+jobs:
+  buy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Креды из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          chmod 600 credentials/*.txt
+
+      - name: Покупка
+        env:
+          ITEM_IDS: ${{ github.event.inputs.item_id }}
+          MAX_GOLD: ${{ github.event.inputs.max_gold || '1' }}
+          SEND_TO: ${{ github.event.inputs.send_to || '' }}
+        run: |
+          ARGS=""
+          for id in $(echo "$ITEM_IDS" | tr ', ' '  '); do
+            [ -n "$id" ] && ARGS="$ARGS --item-id $id"
+          done
+          python -u tools/buy_gear.py --config deploy/config-actions-keis.json \
+            --max-gold "$MAX_GOLD" $ARGS ${SEND_TO:+--send-to "$SEND_TO"}
