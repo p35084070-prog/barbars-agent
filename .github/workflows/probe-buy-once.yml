@@ -1,0 +1,50 @@
+name: probe-buy-once
+
+# Разбор одной покупки в «Магазине снаряжения»: куда игра девает купленную вещь.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hero_id:
+        description: 'ID героя (для просмотра надетого)'
+        default: '905853'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-buy-once
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Креды из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          chmod 600 credentials/*.txt
+
+      - name: Проба покупки
+        env:
+          HERO_ID: ${{ github.event.inputs.hero_id || '905853' }}
+        run: |
+          NICK=$(head -1 credentials/keis.txt); PW=$(sed -n 2p credentials/keis.txt)
+          python -u tools/probe_buy_once.py "$NICK" "$PW" "$HERO_ID"
