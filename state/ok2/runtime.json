@@ -1,16 +1,22 @@
 {
   "hero_maxima": {
-    "max_hp": 2102,
-    "max_energy": 2173
+    "max_hp": 2337,
+    "max_energy": 2399
   },
-  "raid_roster": [],
-  "raid_next_check_at": 1794713486.118645,
+  "raid_roster": [
+    {
+      "id": "1596900",
+      "name": "qdal",
+      "role": "warrior"
+    }
+  ],
+  "raid_next_check_at": 1794733848.747659,
   "raid_wait_for_closed": false,
   "raid_wait_for_closed_since": 0,
-  "raid_guard_until": 1794713515.118645,
-  "raid_reopen_at": 1794713485.118645,
+  "raid_guard_until": 1794733863.747659,
+  "raid_reopen_at": null,
   "raid_published_reopen_at": 1794713484.8810987,
-  "raid_assembly_since": 0,
+  "raid_assembly_since": 1794718416.7578762,
   "raid_history": [
     {
       "started_at": 1794696668.9945354,
