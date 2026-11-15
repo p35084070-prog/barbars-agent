@@ -63,6 +63,11 @@ def main() -> int:
                 out["error"] = "вход не подтверждён"
                 print("EQUIP_HERO " + json.dumps(out, ensure_ascii=False), flush=True)
                 return 1
+            game.goto("https://barbars.ru/user/rack")
+            out["rack_text"] = " ".join(game.body_text().split())[:200]
+            # освобождаем рюкзак: иначе посылки не влезают
+            out["stashed"] = game.stash_items(keep=2, limit=20)
+            out["cracked"] = game.crack_items(limit=20)
             game.goto("https://barbars.ru/user/mail")
             out["mail_text"] = " ".join(game.body_text().split())[:600]
             links = []
