@@ -37,7 +37,12 @@ def main() -> int:
         timeout=25,
         headers={"Referer": page.url},
     )
-    for path in ("/user", "/user/rack", "/user/store", "/user/public/store"):
+    for path in (
+        "/",
+        "/trade/auction/shop",
+        "/trade/auction/shop/item/id/40121857",
+        "/user",
+    ):
         r = s.get("https://barbars.ru" + path, timeout=25)
         print(f"\n================ {path} :: {r.status_code}")
         text = text_of(r.text)
