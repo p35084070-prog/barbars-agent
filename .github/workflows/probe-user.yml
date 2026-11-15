@@ -65,6 +65,10 @@ jobs:
         continue-on-error: true
         run: python -u tools/probe_user_page.py --config config-ok.json --label ok --url "${{ github.event.inputs.url || '/user' }}"
 
+      - name: Герой — steel blue ii
+        continue-on-error: true
+        run: python -u tools/probe_user_page.py --config deploy/config-actions-steelblue.json --label sb --url "${{ github.event.inputs.url || '/user' }}"
+
       - name: Герой — qdal (ОК2)
         continue-on-error: true
         run: python -u tools/probe_user_page.py --config config-ok2.json --label ok2 --url "${{ github.event.inputs.url || '/user' }}"
