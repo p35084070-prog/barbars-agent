@@ -33,7 +33,7 @@
     "enabled": true
   },
   "raid": {
-    "enabled": true,
+    "enabled": false,
     "name": "Мифический дракон",
     "url": "https://barbars.ru/game/dragonDungeon",
     "check_interval_min": 1,
@@ -88,7 +88,7 @@
     ],
     "assembly_sec": 600,
     "room_check_sec": 8,
-    "every_respawn": true,
+    "every_respawn": false,
     "respawn_lead_sec": 300,
     "stuck_grace_sec": 600,
     "assembly_max_sec": 1800,
