@@ -56,6 +56,26 @@ def main() -> int:
                 from barbars import pages
 
                 out["battlefields"] = pages.parse_battlefields(game.p.content(), text)
+                links = []
+                for link in game.p.locator("a").all():
+                    try:
+                        links.append({
+                            "text": " ".join((link.inner_text() or "").split())[:60],
+                            "href": (link.get_attribute("href") or "")[:90],
+                        })
+                    except Exception:  # noqa: BLE001
+                        continue
+                out["all_links"] = links
+                out["inputs"] = [
+                    {"name": el.get_attribute("name"), "type": el.get_attribute("type"),
+                     "value": (el.get_attribute("value") or "")[:40]}
+                    for el in game.p.locator("input").all()
+                ]
+                out["forms"] = [
+                    {"action": (f.get_attribute("action") or "")[:90],
+                     "method": f.get_attribute("method") or ""}
+                    for f in game.p.locator("form").all()
+                ]
             try:
                 out["fatigue_api"] = game.hero_fatigue()
             except Exception as exc:  # noqa: BLE001
