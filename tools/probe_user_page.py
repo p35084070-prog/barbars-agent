@@ -52,6 +52,10 @@ def main() -> int:
             lines = [l.strip() for l in text.splitlines() if l.strip()]
             out["lines_matched"] = [l for l in lines if KEY.search(l)][:40]
             out["head"] = lines[:12]
+            if "bg" in args.url:
+                from barbars import pages
+
+                out["battlefields"] = pages.parse_battlefields(game.p.content(), text)
             try:
                 out["fatigue_api"] = game.hero_fatigue()
             except Exception as exc:  # noqa: BLE001
