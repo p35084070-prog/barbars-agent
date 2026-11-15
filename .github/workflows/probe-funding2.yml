@@ -1,0 +1,64 @@
+name: probe-funding2
+
+# Точные цены магазина снаряжения (валюта и сумма по каждому товару)
+# плюс страницы «деньги» и «ресурсы».
+
+on:
+  workflow_dispatch:
+    inputs:
+      hero:
+        description: 'Герой магазина (keis / firewhite / steelblue)'
+        default: 'keis'
+      set:
+        description: 'Набор (пусто = берсерк)'
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-funding2
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Креды из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
+          chmod 600 credentials/*.txt
+
+      - name: Проба цен
+        env:
+          HERO: ${{ github.event.inputs.hero || 'keis' }}
+        run: |
+          case "$HERO" in
+            firewhite) F=credentials/firewhite.txt ;;
+            steelblue) F=credentials/steelblue.txt ;;
+            *) F=credentials/keis.txt ;;
+          esac
+          NICK=$(head -1 "$F"); PW=$(sed -n 2p "$F")
+          python -u tools/probe_funding2.py "$NICK" "$PW" "${{ github.event.inputs.set }}"
