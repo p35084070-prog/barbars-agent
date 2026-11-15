@@ -43,12 +43,15 @@ jobs:
           KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
           FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
           FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
           OK_SESSION_B64: ${{ secrets.OK_SESSION_B64 }}
           OK2_SESSION_B64: ${{ secrets.OK2_SESSION_B64 }}
         run: |
           mkdir -p credentials state/ok2
           printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
           printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
           chmod 600 credentials/*.txt
           if [ -n "$OK_SESSION_B64" ]; then printf '%s' "$OK_SESSION_B64" > state/ok-session.b64; fi
           if [ -n "$OK2_SESSION_B64" ]; then printf '%s' "$OK2_SESSION_B64" > state/ok2/ok-session.b64; fi
