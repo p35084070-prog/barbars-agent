@@ -1,0 +1,73 @@
+name: send-resource
+
+# Передача ресурса (железо/мифрил/бутылочки) другому герою почтой.
+# Форма: /user/mail/send/id/<id> -> вкладка «Ресурсы» -> тип -> количество -> «отправить».
+# Комиссия игры: 5 серебра за каждые 10 000 железа.
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient-id:
+        description: 'ID получателя (fire white ii = 31389504)'
+        default: '31389504'
+      amount:
+        description: 'Сколько отправить (железо)'
+        default: '20000'
+      resource:
+        description: 'Ресурс: iron | mifril | bottles'
+        default: 'iron'
+      dry-run:
+        description: 'Только показать форму, не отправлять (true/false)'
+        default: 'false'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: send-resource
+  cancel-in-progress: true
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Учётные данные из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          chmod 600 credentials/keis.txt
+
+      - name: Отправить ресурс
+        continue-on-error: true
+        run: |
+          python -u tools/send_resource.py \
+            --config deploy/config-actions-keis.json \
+            --label keis \
+            --recipient-id "${{ github.event.inputs.recipient-id }}" \
+            --resource "${{ github.event.inputs.resource }}" \
+            --amount ${{ github.event.inputs.amount }} \
+            ${{ github.event.inputs.dry-run == 'true' && '--dry-run' || '' }}
+
+      - name: Логи
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: send-resource-${{ github.run_number }}
+          path: logs
+          retention-days: 7
