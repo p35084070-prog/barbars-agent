@@ -271,7 +271,7 @@
     "sell_limit": 3,
     "pause_min": 10,
     "overflow_crack": "autoCrackUncommonLink",
-    "auto_equip": false
+    "auto_equip": true
   },
   "upgrade": {
     "enabled": true,

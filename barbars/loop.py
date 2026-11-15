@@ -1260,9 +1260,22 @@ class Agent:
         max_buys = int(decision.params.get("max_buys", 2))
         min_bonus = int(decision.params.get("min_bonus", 10))
         avoid_same_name = bool(decision.params.get("avoid_same_name", True))
+        # покупаем для другого героя: сравнивать с нашими надетыми вещами бессмысленно
+        share_with = str(self.config.get("shop", {}).get("share_with", "") or "")
+        if share_with:
+            min_bonus = 0
+            avoid_same_name = False
         min_level = int(self.config.get("shop", {}).get("min_level", 25))
+        keep_gold = int(self.config.get("shop", {}).get("keep_gold", 0))
+        max_buys_per_day = int(self.config.get("shop", {}).get("max_buys_per_day", 0))
         bought_slots = list(self.daily.get("shop_slots", []) or [])
         bought_today = set(self.daily.get("shop_buy_ids", []) or [])
+        if max_buys_per_day and len(bought_today) >= max_buys_per_day:
+            self.log(
+                f"магазин: дневной лимит покупок исчерпан "
+                f"({len(bought_today)}/{max_buys_per_day})"
+            )
+            return
         try:
             items: list[dict[str, Any]] = []
             for set_name in sets:
@@ -1279,7 +1292,7 @@ class Agent:
             bought_slots,
             # если вещи предназначены другому герою — берём лучшее по слоту
             # (у нас самих может быть всё уже лучше), без фильтра «дубль»
-            require_better=not bool(self.config.get("shop", {}).get("share_with")),
+            require_better=not bool(share_with),
             min_bonus=min_bonus,
             avoid_same_name=avoid_same_name,
             min_level=min_level,
@@ -1317,6 +1330,13 @@ class Agent:
             need = gold_need * 100 + silver_need
             if need + 100 > have:
                 self.log(f"магазин: «{name}» не по карману (нужно {need} сер.)")
+                continue
+            # не опускаем золото ниже keep_gold
+            if keep_gold and int(state.gold or 0) - gold_need < keep_gold:
+                self.log(
+                    f"магазин: «{name}» — золото опустится ниже keep_gold "
+                    f"({keep_gold}), пропускаем"
+                )
                 continue
             ok, message = self.game.buy_shop_item_capped(item_id, max_gold)
             if not ok:

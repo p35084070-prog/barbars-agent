@@ -1,0 +1,55 @@
+name: probe-shop
+
+# Проба «Магазина снаряжения»: список товаров и цены.
+# Нужна, чтобы понять, укладывается ли покупка комплекта 25 уровня
+# в лимит «не дороже 1 золота за вещь».
+
+on:
+  workflow_dispatch:
+    inputs:
+      nick:
+        description: 'Игровое имя (герой, у которого смотрим магазин)'
+        default: 'Steel Blue ii'
+      password:
+        description: 'Пароль'
+        default: ''
+      set:
+        description: 'Набор (пусто — все)'
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Учётные данные из секретов
+        env:
+          SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
+          chmod 600 credentials/steelblue.txt
+
+      - name: Проба магазина
+        run: |
+          if [ -n "${{ github.event.inputs.nick }}" ]; then
+            NICK="${{ github.event.inputs.nick }}"; PW="${{ github.event.inputs.password }}";
+          else
+            NICK=$(head -1 credentials/steelblue.txt); PW=$(sed -n 2p credentials/steelblue.txt);
+          fi
+          python -u tools/probe_shop.py "$NICK" "$PW" "${{ github.event.inputs.set }}"

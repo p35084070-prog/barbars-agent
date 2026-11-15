@@ -1,0 +1,39 @@
+name: probe-login
+
+# Проверка входа героя: печатает, работает ли логин/пароль, и страницу /user.
+# Используется после регистрации пятого героя и для диагностики.
+
+on:
+  workflow_dispatch:
+    inputs:
+      nick:
+        description: 'Игровое имя'
+        default: 'Steel Blue ii'
+      password:
+        description: 'Пароль'
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Проверка входа
+        env:
+          NICK: ${{ github.event.inputs.nick }}
+          PW: ${{ github.event.inputs.password }}
+        run: python -u tools/check_login.py "$NICK" "$PW"

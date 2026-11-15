@@ -38,7 +38,9 @@ KIND = sys.argv[2] if len(sys.argv) > 2 else "1"
 SIDE = sys.argv[3] if len(sys.argv) > 3 else "1"
 PASSWORD = sys.argv[4] if len(sys.argv) > 4 else ""
 if not PASSWORD:
-    PASSWORD = "Sb" + secrets.token_urlsafe(12)
+    # требование игры: не менее 6 символов, буквы + цифры
+    alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    PASSWORD = "Sb" + "".join(secrets.choice(alphabet) for _ in range(12))
 MAX_TRIES = int(sys.argv[5]) if len(sys.argv) > 5 else 200
 MAIL = f"steelblue{random.randint(1000, 9999)}@mailinator.com"
 CRED_FILE = ROOT / "credentials-steelblue.json"
@@ -98,6 +100,36 @@ def try_funnel(session: requests.Session):
     return None, None
 
 
+def set_password(session: requests.Session, resp, password: str) -> tuple[str, str]:
+    """Страница «Защита аккаунта»: после регистрации игра просит задать пароль.
+
+    Возвращает (текст страницы, url).
+    """
+    if "Защита аккаунта" not in resp.text and "Установи пароль" not in resp.text:
+        return "", ""
+    log("страница защиты аккаунта — задаём пароль")
+    action = re.search(r'<form[^>]*action="([^"]+)"[^>]*method="post"', resp.text)
+    if not action:
+        return text_of(resp.text)[:400], resp.url
+    hidden = {
+        n: v
+        for n, v in re.findall(
+            r'<input[^>]*type="hidden"[^>]*name="([^"]+)"[^>]*value="([^"]*)"', resp.text
+        )
+    }
+    fields = re.findall(r'<(?:input|select|textarea)[^>]*name="([^"]+)"', resp.text)
+    data = dict(hidden)
+    for name in fields:
+        low = name.lower()
+        if "pass" in low:
+            data[name] = password
+    target = "https://barbars.ru/" + action.group(1).lstrip("/")
+    res = session.post(target, data=data, timeout=25, headers={"Referer": resp.url})
+    log(f"пароль отправлен: {res.status_code} len={len(res.text)} url={res.url}")
+    log("текст: " + text_of(res.text)[:500])
+    return text_of(res.text)[:800], res.url
+
+
 def main() -> int:
     log(f"ник={NICK!r} класс={KIND} сторона={SIDE}")
     log(f"пароль={PASSWORD}")
@@ -133,6 +165,7 @@ def main() -> int:
         res = session.post(target, data=data, timeout=25, headers={"Referer": resp.url})
         log(f"ответ: {res.status_code} len={len(res.text)} url={res.url}")
         log("текст: " + text_of(res.text)[:600])
+        set_password(session, res, PASSWORD)
         (OUT / "registration-steelblue.html").write_text(res.text, encoding="utf-8")
         (OUT / "registration-steelblue-session.json").write_text(
             json.dumps({c.name: c.value for c in session.cookies}, ensure_ascii=False, indent=2),

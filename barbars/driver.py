@@ -2263,9 +2263,41 @@ class Game:
         """Надеть вещи, помеченные «Лучше (+N)» — герой становится сильнее.
 
         Также подтягиваем «Лучше» из сундука: там тоже лежат вещи сильнее надетых.
+
+        Экипировка по умолчанию выключена (снаряжением управляет игрок) и
+        включается флагом `gear.auto_equip` в конфиге героя.
         """
-        # The user manages equipment manually, including loot from mail/shop.
-        return 0
+        if not bool((self.config.get("gear", {}) or {}).get("auto_equip")):
+            return 0
+        worn = 0
+        for _ in range(limit):
+            self.goto("https://barbars.ru/user/rack")
+            html = self.p.content()
+            target = None
+            for chunk, index in self._item_blocks(html):
+                if "Лучше" in chunk and f"items:{index}:wearLink" in chunk:
+                    target = index
+                    break
+            if target is None:
+                # ищем «Лучше» в сундуке и переносим в рюкзак
+                self.goto("https://barbars.ru/user/store")
+                store_html = self.p.content()
+                store_target = None
+                for chunk, index in self._item_blocks(store_html):
+                    if "Лучше" in chunk and f"items:{index}:toRackLink" in chunk:
+                        store_target = index
+                        break
+                if store_target is None:
+                    break
+                if not self.click_href(f"items:{store_target}:toRackLink"):
+                    break
+                continue
+            if not self.click_href(f"items:{target}:wearLink"):
+                break
+            # игра спрашивает подтверждение («вещь станет личной»)
+            self.confirm_if_needed()
+            worn += 1
+        return worn
 
     @staticmethod
     def _is_scroll_or_book(chunk: str) -> bool:

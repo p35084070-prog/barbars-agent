@@ -1080,3 +1080,86 @@ def test_tower_attack_retries_when_link_is_stale():
     g.reload = Mock()
     assert g.click_attack() is True
     assert clicked
+
+
+def _shop_agent():
+    """Агент с включённым магазином снаряжения (без реальной игры)."""
+    cfg = json.loads(Path("deploy/config-actions-keis.json").read_text(encoding="utf-8"))
+    cfg["shop"].update({"enabled": True, "max_gold": 1, "max_silver": 0})
+    agent = Agent.__new__(Agent)
+    agent.config = cfg
+    agent.daily = {}
+    agent.game = Mock()
+    agent.log = Mock()
+    agent._load_daily = Mock(return_value={})
+    agent._save_daily = Mock()
+    return agent
+
+
+def test_shop_respects_daily_purchase_limit():
+    """Дневной лимит покупок: не покупаем сверх max_buys_per_day."""
+    agent = _shop_agent()
+    agent.config["shop"]["max_buys_per_day"] = 2
+    agent.daily = {"shop_buy_ids": ["a", "b"], "shop_slots": []}
+    agent._do_shop(rules.Decision("shop", params={"max_gold": 1, "max_buys": 5}), rules.GameState(gold=50))
+    agent.game.shop_gear.assert_not_called()
+
+
+def test_shop_keeps_gold_reserve():
+    """keep_gold: не опускаем золото ниже резерва."""
+    agent = _shop_agent()
+    agent.config["shop"]["keep_gold"] = 10
+    item = {
+        "item_id": "77", "name": "Шлем Воина", "level": 25, "bonus": 20,
+        "gold": 1, "silver": 0, "price_ok": True, "tier": "mythic",
+    }
+    agent.game.shop_gear.return_value = [item]
+    agent.game.worn_gear.return_value = []
+    agent.game.shop_item_price.return_value = (1, 0)
+    agent.game.buy_shop_item_capped.return_value = (True, "куплена")
+    # золота 11: покупка за 1 оставит 10 — ровно резерва, можно
+    agent._do_shop(rules.Decision("shop", params={"max_gold": 1, "max_buys": 1}), rules.GameState(gold=11))
+    assert agent.game.buy_shop_item_capped.call_count == 1
+    # золота 10: покупка опустит ниже резерва — нельзя
+    agent.game.buy_shop_item_capped.reset_mock()
+    agent._do_shop(rules.Decision("shop", params={"max_gold": 1, "max_buys": 1}), rules.GameState(gold=10))
+    assert agent.game.buy_shop_item_capped.call_count == 0
+
+
+def test_shop_for_other_hero_ignores_min_bonus_and_duplicate_names():
+    """Покупаем для другого героя: «Лучше» и «дубль» надетого не важны."""
+    agent = _shop_agent()
+    agent.config["shop"]["share_with"] = "31390082"
+    agent.config["shop"]["min_bonus"] = 10
+    agent.config["shop"]["avoid_same_name"] = True
+    item = {
+        "item_id": "77", "name": "Шлем Воина", "level": 25, "bonus": 0,
+        "gold": 1, "silver": 0, "price_ok": True, "tier": "mythic",
+    }
+    agent.game.shop_gear.return_value = [item]
+    agent.game.worn_gear.return_value = [{"name": "Шлем Воина", "slot": "шлем"}]
+    agent.game.shop_item_price.return_value = (1, 0)
+    agent.game.buy_shop_item_capped.return_value = (True, "куплена")
+    agent._do_shop(rules.Decision("shop", params={"max_gold": 1, "max_buys": 1}), rules.GameState(gold=50))
+    assert agent.game.buy_shop_item_capped.call_count == 1
+
+
+def test_auto_equip_requires_explicit_flag():
+    """Экипировка по умолчанию выключена — только под флагом gear.auto_equip."""
+    g = Game({"gear": {"auto_equip": False}}, ".")
+    g.goto = Mock()
+    g.page = Mock()
+    assert g.equip_better_items() == 0
+    g.goto.assert_not_called()
+
+
+def test_steelblue_config_is_valid_and_keeps_gold_rules():
+    """Конфиг пятого героя: золото не тратим, рейд и вклады выключены."""
+    cfg = json.loads(Path("deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
+    assert cfg["account"] == "steelblue"
+    assert cfg["raid"]["enabled"] is False
+    assert cfg["spend"]["clan_donate"]["enabled"] is False
+    assert cfg["altar"]["enabled"] is False
+    assert cfg["shop"]["enabled"] is False
+    assert cfg["shop"]["max_gold"] == 1
+    assert cfg["gear"]["auto_equip"] is True
