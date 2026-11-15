@@ -52,19 +52,19 @@ jobs:
 
       - name: Герой — fire white ii
         continue-on-error: true
-        run: python -u tools/probe_user_page.py --config deploy/config-actions-firewhite.json --label fw --url '/user'
+        run: python -u tools/probe_user_page.py --config deploy/config-actions-firewhite.json --label fw --url "${{ github.event.inputs.url || '/user' }}"
 
       - name: Герой — keis
         continue-on-error: true
-        run: python -u tools/probe_user_page.py --config deploy/config-actions-keis.json --label keis --url '/user'
+        run: python -u tools/probe_user_page.py --config deploy/config-actions-keis.json --label keis --url "${{ github.event.inputs.url || '/user' }}"
 
       - name: Герой — vagojan (ОК)
         continue-on-error: true
-        run: python -u tools/probe_user_page.py --config config-ok.json --label ok --url '/user'
+        run: python -u tools/probe_user_page.py --config config-ok.json --label ok --url "${{ github.event.inputs.url || '/user' }}"
 
       - name: Герой — qdal (ОК2)
         continue-on-error: true
-        run: python -u tools/probe_user_page.py --config config-ok2.json --label ok2 --url '/user'
+        run: python -u tools/probe_user_page.py --config config-ok2.json --label ok2 --url "${{ github.event.inputs.url || '/user' }}"
 
       - name: Логи
         if: always()
