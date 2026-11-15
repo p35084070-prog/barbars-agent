@@ -48,20 +48,19 @@ jobs:
 
       - name: Справка — fire white ii (низкий уровень)
         continue-on-error: true
-        run: |
-          python -u tools/probe_help_auction.py --config deploy/config-actions-firewhite.json --label firewhite \
-            --urls '/trade/auctions,/trade/auction,/help,/trade'
+        run: python -u tools/probe_help_auction.py --config deploy/config-actions-firewhite.json --label firewhite --urls '/trade/auctions,/trade/auction,/help,/trade'
 
       - name: Справка — keis (высокий уровень)
         continue-on-error: true
-        run: |
-          python -u tools/probe_help_auction.py --config deploy/config-actions-keis.json --label keis \
-            --urls '/trade/auctions,/trade/auction,/help,/trade'
+        run: python -u tools/probe_help_auction.py --config deploy/config-actions-keis.json --label keis --urls '/trade/auctions,/trade/auction,/help,/trade'
 
-      - name: Справка — qdal ОК2
+      - name: Справка — qdal ОК2 (60 ур.)
         continue-on-error: true
-        run: python -u tools/probe_help_auction.py --config config-ok2.json --label ok2 \
-          --urls '/trade/auctions,/trade/auction,/help,/trade'
+        run: python -u tools/probe_help_auction.py --config config-ok2.json --label ok2 --urls '/trade/auctions,/trade/auction,/help,/trade'
+
+      - name: Справка — vagojan ОК (64 ур.)
+        continue-on-error: true
+        run: python -u tools/probe_help_auction.py --config config-ok.json --label ok --urls '/trade/auctions,/trade/auction,/help,/trade'
 
       - name: Логи
         if: always()
