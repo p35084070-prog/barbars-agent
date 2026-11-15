@@ -51,7 +51,7 @@ def main() -> int:
         r2 = session.get("https://barbars.ru/" + m.group(1).lstrip("/"), timeout=25,
                          headers={"Referer": r.url})
         print("вкладка:", r2.status_code, r2.url, len(r2.text))
-        lots = pages.parse_auction_items(r2.text)
+        lots = pages.parse_market_lots(r2.text)
         print(f"  лотов аукциона вещей: {len(lots)}")
         for lot in lots[:40]:
             print(
