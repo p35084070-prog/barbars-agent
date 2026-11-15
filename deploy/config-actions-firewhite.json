@@ -316,8 +316,8 @@
   },
   "battlefields": {
     "enabled": true,
-    "check_interval_min": 5,
-    "max_fights_per_day": 5
+    "check_interval_min": 1,
+    "max_fights_per_day": 5, "join_lead_sec": 300, "wait_sec": 300
   },
   "ability": {
     "enabled": true,

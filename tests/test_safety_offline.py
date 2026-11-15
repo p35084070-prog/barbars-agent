@@ -940,3 +940,25 @@ def test_only_keis_donates_to_the_altar():
         if name == "deploy/config-actions-keis.json":
             continue
         assert config(name)["altar"]["enabled"] is False
+
+def test_altar_link_is_not_a_battlefields_join_link():
+    # На странице полей есть ссылка «Зайти в алтарь» (это алтарь клана).
+    # Раньше она считалась входом в бой — агент «вступал» не туда.
+    html = ('<a href="../guild/altar;jsessionid=ABC">Зайти в алтарь</a>'
+            '<a href="game/bg?join=1">Вступить в бой</a>')
+    info = pages.parse_battlefields(html, "Игра начнётся через 00:00:30")
+    assert [j["label"] for j in info["join"]] == ["Вступить в бой"]
+
+
+def test_battlefields_decision_when_countdown_is_near_even_without_button():
+    # Кнопка входа появляется только в момент старта: решаем идти по отсчёту.
+    cfg = {"battlefields": {"enabled": True, "join_lead_sec": 300}}
+    info = pages.parse_battlefields("<div>Игра начнётся через 00:02:10</div>", "Игра начнётся через 00:02:10 Мои очки полей: 5")
+    assert info["join"] == []
+    assert rules._pick_battlefields(rules.GameState(battlefields=info, bg_points=5), cfg) is not None
+
+
+def test_battlefields_no_decision_when_far_and_no_button():
+    cfg = {"battlefields": {"enabled": True, "join_lead_sec": 300}}
+    info = pages.parse_battlefields("<div>Игра начнётся через 00:34:34</div>", "Игра начнётся через 00:34:34 Мои очки полей: 0")
+    assert rules._pick_battlefields(rules.GameState(battlefields=info, bg_points=0), cfg) is None

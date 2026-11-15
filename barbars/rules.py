@@ -794,15 +794,12 @@ def _pick_battlefields(state: GameState, config: dict[str, Any]) -> Decision | N
         return None
     countdown = str(info.get("countdown", "") or "")
     join = info.get("join") or []
-    if countdown and countdown not in ("00:00:00", "0:00:00"):
-        # До боя есть отсчёт: вступать рано бессмысленно — игра отказывает.
-        # Вступаем только когда до старта осталось не больше join_lead_sec.
-        seconds = respawn_seconds(countdown)
-        lead = int(cfg.get("join_lead_sec", 120))
-        if seconds is None or seconds > lead:
-            return None
-    if not join:
-        return None  # кнопки входа нет — вступать нечем
+    seconds = respawn_seconds(countdown) if countdown else None
+    lead = int(cfg.get("join_lead_sec", 120))
+    if seconds is not None and seconds > lead:
+        return None  # до старта боя далеко — вступать рано, игра откажет
+    if seconds is None and not join:
+        return None  # нет отсчёта и нет кнопки входа (бой идёт или вход закрыт)
     if int(info.get("fights_today", 0) or 0) >= int(cfg.get("max_fights_per_day", 5)):
         return None
     return Decision(

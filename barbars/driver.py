@@ -1407,6 +1407,30 @@ class Game:
         self.goto("https://barbars.ru/game/bg")
         return pages.parse_battlefields(self.p.content(), self.body_text())
 
+    def refresh_battlefields(self) -> dict[str, Any]:
+        """Обновить страницу полей («Обновить») и перечитать состояние.
+
+        Кнопка входа в бой появляется только в момент старта сражения, поэтому
+        страницу нужно перезапрашивать, пока отсчёт не дойдёт до нуля.
+        """
+        from . import pages
+
+        html = self.p.content()
+        m = re.search(r'<a[^>]+href="([^"]*refresh[^"]*)"', html, re.S)
+        try:
+            if m:
+                href = m.group(1)
+                if href.startswith("?"):
+                    self.goto("https://barbars.ru/" + href)
+                else:
+                    self.click_href(href)
+                self._settle()
+            else:
+                self.goto("https://barbars.ru/game/bg")
+        except Exception:  # noqa: BLE001
+            self.goto("https://barbars.ru/game/bg")
+        return pages.parse_battlefields(self.p.content(), self.body_text())
+
     def join_battlefields(self) -> bool:
         """Вступить в бой на Полях сражений (если бой идёт и есть кнопка)."""
         from . import pages

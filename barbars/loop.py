@@ -755,21 +755,34 @@ class Agent:
             self.log(f"свитки: найдено {len(scrolls)} — {', '.join(s['name'] for s in scrolls[:4])}")
 
     def _do_battlefields(self, decision: rules.Decision) -> None:
-        """Бой на Полях сражений — за победу дают очки полей."""
-        self.game.goto(str(decision.params.get("url", "https://barbars.ru/game/bg")))
-        # Если до старта осталось немного — подождём и зайдём, когда отсчёт
-        # дойдёт до нуля: вход до начала боя игра не принимает.
-        for _ in range(4):
-            info = self.game.battlefields_state()
+        """Бой на Полях сражений — за победу дают очки полей.
+
+        Кнопка входа появляется только в момент старта боя, поэтому ждём
+        отсчёт до нуля, обновляем страницу и вступаем, как только вход есть.
+        """
+        url = str(decision.params.get("url", "https://barbars.ru/game/bg"))
+        cfg = self.config.get("battlefields", {}) or {}
+        deadline = time.time() + int(cfg.get("wait_sec", 300))
+        self.game.goto(url)
+        info = self.game.battlefields_state()
+        joined = False
+        while True:
             countdown = str(info.get("countdown", "") or "")
-            seconds = respawn_seconds(countdown) if countdown else None
-            if seconds is None or seconds <= 20:
+            text = str(info.get("text", "") or "").lower()
+            if "закрыт" in text and "очки полей" not in text and not info.get("join"):
+                self.log("поля сражений: вход закрыт игрой", "WARN")
+                return
+            if info.get("join") and self.game.join_battlefields():
+                joined = True
                 break
-            wait = min(60, max(5, seconds))
-            self.log(f"поля сражений: ждём старта боя {countdown}", "INFO")
+            if time.time() >= deadline:
+                break
+            seconds = respawn_seconds(countdown) if countdown else None
+            wait = 20 if seconds is None else min(30, max(5, seconds))
+            self.log(f"поля сражений: ждём старта боя ({countdown or 'без отсчёта'})", "INFO")
             time.sleep(wait)
-            self.game.goto(str(decision.params.get("url", "https://barbars.ru/game/bg")))
-        if not self.game.join_battlefields():
+            info = self.game.refresh_battlefields()
+        if not joined:
             info = self.game.battlefields_state()
             countdown = str(info.get("countdown", "") or "")
             self.log(f"поля сражений: вступить нельзя (отсчёт {countdown or '—'})", "INFO")
