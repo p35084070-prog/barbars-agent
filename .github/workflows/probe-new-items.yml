@@ -1,0 +1,60 @@
+name: probe-new-items
+
+# Где игра держит купленные вещи: разбор HTML главной, рюкзака, сундука, витрины.
+
+on:
+  workflow_dispatch:
+    inputs:
+      hero:
+        description: 'Герой (keis / firewhite / steelblue)'
+        default: 'keis'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-new-items
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: Креды из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
+          chmod 600 credentials/*.txt
+
+      - name: Проба
+        env:
+          HERO: ${{ github.event.inputs.hero || 'keis' }}
+        run: |
+          case "$HERO" in
+            firewhite) F=credentials/firewhite.txt ;;
+            steelblue) F=credentials/steelblue.txt ;;
+            *) F=credentials/keis.txt ;;
+          esac
+          NICK=$(head -1 "$F"); PW=$(sed -n 2p "$F")
+          python -u tools/probe_new_items.py "$NICK" "$PW"
