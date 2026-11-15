@@ -87,6 +87,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo "SESSION_START=$(date +%s)" >> $GITHUB_ENV
           python -u run.py --config config-ok2.json play-ok \
             --headless \
             --duration ${{ github.event.inputs.duration || '330' }}
@@ -120,19 +121,18 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RUN_START: ${{ github.run_started_at }}
         run: |
           # Сбой в середине сеанса (сеть, таймаут страницы) не должен
           # оставлять героя без рейда: продолжаем цепочку. Короткий сеанс —
           # значит не поднялись (сессия ОК протухла, креды неверны): тогда
           # цепочку не продолжаем, подхватит cron.
-          now=$(date +%s); start=$(date -d "$RUN_START" +%s 2>/dev/null || echo 0)
+          now=$(date +%s); start=${SESSION_START:-0}
           if [ $((now - start)) -lt 180 ]; then
             echo "сеанс короче 3 минут — цепочку не продолжаем (подстрахует cron)"
             exit 0
           fi
           gh api -X POST \
-            "repos/${ github.repository }/actions/workflows/agent-ok2.yml/dispatches" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/agent-ok2.yml/dispatches" \
             -f ref=main \
             || echo 'не удалось запланировать следующий сеанс (подстрахует cron)'
 
