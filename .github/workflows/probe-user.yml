@@ -5,6 +5,10 @@ name: probe-user
 
 on:
   workflow_dispatch:
+    inputs:
+      url:
+        description: 'Страница для разведки'
+        default: '/user'
 
 permissions:
   contents: read
