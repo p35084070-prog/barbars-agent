@@ -972,3 +972,111 @@ def test_battlefields_no_decision_when_far_and_no_button():
     cfg = {"battlefields": {"enabled": True, "join_lead_sec": 300}}
     info = pages.parse_battlefields("<div>Игра начнётся через 00:34:34</div>", "Игра начнётся через 00:34:34 Мои очки полей: 0")
     assert rules._pick_battlefields(rules.GameState(battlefields=info, bg_points=0), cfg) is None
+
+def test_tower_attack_hits_enemies_before_the_tower_itself():
+    # На странице локации башни две кнопки: «Бить башню» и «Бить врагов».
+    # Бьём врагов — они дают опыт, железо и бутылочки.
+    clicked = []
+
+    class Link:
+        def __init__(self, href, text):
+            self.href = href
+            self.text = text
+
+        def scroll_into_view_if_needed(self, timeout=None):
+            pass
+
+        def click(self, timeout=None):
+            clicked.append(self.href)
+
+        def inner_text(self):
+            return self.text
+
+    class Loc:
+        def __init__(self, links):
+            self.links = links
+
+        def count(self):
+            return len(self.links)
+
+        @property
+        def first(self):
+            return self.links[0]
+
+        def all(self):
+            return self.links
+
+    tower = Link("?wicket:interface=:4:actionPanel:damageTowerLink::ILinkListener::", "Бить башню (11691 хп)")
+    enemies = Link("?wicket:interface=:4:actionPanel:damageRandomEnemyLink::ILinkListener::", "Бить врагов")
+
+    class Page:
+        def locator(self, selector):
+            if "damageRandomEnemyLink" in selector:
+                return Loc([enemies])
+            if "damageTowerLink" in selector:
+                return Loc([tower])
+            if "Бить" in selector:
+                return Loc([tower, enemies])
+            return Loc([])
+
+    g = Game({}, ".")
+    g.page = Page()
+    g._settle = Mock()
+    g.human = Mock()
+    assert g.click_attack() is True
+    assert "damageRandomEnemyLink" in clicked[0]
+
+
+def test_tower_attack_retries_when_link_is_stale():
+    # Wicket перерисовывает страницу: первый клик падает, второй по новой ссылке.
+    clicked = []
+    state = {"first": True}
+
+    class Link:
+        def __init__(self, href, stale=False):
+            self.href = href
+            self.stale = stale
+
+        def scroll_into_view_if_needed(self, timeout=None):
+            pass
+
+        def click(self, timeout=None):
+            if self.stale:
+                state["first"] = False
+                raise RuntimeError("element is not attached to the DOM")
+            clicked.append(self.href)
+
+        def inner_text(self):
+            return "Бить врагов"
+
+    class Loc:
+        def __init__(self, link):
+            self.link = link
+
+        def count(self):
+            return 1
+
+        @property
+        def first(self):
+            return self.link
+
+        def all(self):
+            return [self.link]
+
+    class Page:
+        def locator(self, selector):
+            if "damageRandomEnemyLink" in selector:
+                return Loc(Link("?damageRandomEnemyLink::", stale=state["first"]))
+            if "damageTowerLink" in selector:
+                return Loc([])
+            if "Бить" in selector:
+                return Loc(Link("?damageRandomEnemyLink::", stale=state["first"]))
+            return Loc([])
+
+    g = Game({}, ".")
+    g.page = Page()
+    g._settle = Mock()
+    g.human = Mock()
+    g.reload = Mock()
+    assert g.click_attack() is True
+    assert clicked

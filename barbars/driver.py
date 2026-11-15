@@ -1004,22 +1004,48 @@ class Game:
         return True
 
     def click_attack(self) -> bool:
-        """Кликнуть по основной боевой кнопке ('Бить ...' / 'Атаковать ...')."""
-        for label in ("Бить", "Атаковать", "Жечь", "Ударить"):
-            locator = self.p.locator(f"a:has-text('{label}'), button:has-text('{label}')")
-            if locator.count() == 0:
-                continue
-            target = locator.first
-            try:
-                target.scroll_into_view_if_needed(timeout=3000)
-                self.human.move_mouse_to(self.p, target)
+        """Кликнуть по боевой кнопке.
+
+        На странице локации башни есть две кнопки: «Бить врагов» (даёт опыт,
+        железо и бутылочки) и «Бить башню» (захват башни). Сначала бьём врагов.
+        Wicket перерисовывает страницу после каждого клика, поэтому кнопка
+        может «протухнуть» — тогда ищем её заново и пробуем ещё раз.
+        """
+        hrefs = ("damageRandomEnemyLink", "damageTowerLink")
+        for attempt in range(2):
+            for href in hrefs:
+                locator = self.p.locator(f"a[href*='{href}']")
+                if locator.count() == 0:
+                    continue
+                try:
+                    target = locator.first
+                    target.scroll_into_view_if_needed(timeout=3000)
+                    self.human.move_mouse_to(self.p, target)
+                    self.human.pause("fight")
+                    target.click(timeout=8000)
+                except Exception:  # noqa: BLE001
+                    continue
+                self._settle()
                 self.human.pause("fight")
-                target.click(timeout=8000)
-            except Exception:
-                continue
-            self._settle()
-            self.human.pause("fight")
-            return True
+                return True
+            for label in ("Бить", "Атаковать", "Жечь", "Ударить"):
+                locator = self.p.locator(f"a:has-text('{label}'), button:has-text('{label}')")
+                if locator.count() == 0:
+                    continue
+                try:
+                    target = locator.first
+                    target.scroll_into_view_if_needed(timeout=3000)
+                    self.human.move_mouse_to(self.p, target)
+                    self.human.pause("fight")
+                    target.click(timeout=8000)
+                except Exception:  # noqa: BLE001
+                    continue
+                self._settle()
+                self.human.pause("fight")
+                return True
+            if attempt == 0:
+                # Страница перерисовалась — перечитаем её и попробуем снова.
+                self.reload()
         return False
 
     def donate_clan(self, kind: str = "iron", amount: int | None = None) -> int | None:
