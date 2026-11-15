@@ -266,13 +266,30 @@ class Game:
         return self.page
 
     def goto(self, path: str) -> None:
-        """Переход по URL. path может быть абсолютным или относительным."""
+        """Переход по URL. path может быть абсолютным или относительным.
+
+        Короткий сетевой сбой не должен ронять весь сеанс: при таймауте
+        перезагружаем страницу и пробуем ещё раз.
+        """
         path = re.sub(r";jsessionid=[0-9A-Za-z]+", "", path)
         url = path if path.startswith("http") else urljoin(self.base_url, path)
         self.human.pause("page")
-        self.p.goto(url, wait_until="domcontentloaded")
-        self._settle()
-        self.human.maybe_scroll(self.p)
+        last_error: Exception | None = None
+        for attempt in range(2):
+            try:
+                self.p.goto(url, wait_until="domcontentloaded", timeout=30000)
+                self._settle()
+                self.human.maybe_scroll(self.p)
+                return
+            except (PWTimeout, TimeoutError) as exc:
+                last_error = exc
+                if attempt == 0:
+                    try:
+                        self.p.wait_for_load_state("domcontentloaded", timeout=10000)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    time.sleep(5)
+        raise GameError(f"переход не удался: {url} — {last_error}")
 
     def _settle(self, timeout: int = 2500) -> None:
         """Дождаться, пока Wicket дорисует страницу."""

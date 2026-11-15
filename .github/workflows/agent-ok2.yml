@@ -117,12 +117,22 @@ jobs:
         run: echo '::error::ОК2 не запущен; проверьте защитное подтверждение Одноклассников и сохранённую сессию'
 
       - name: Следующий сеанс
-        if: success()
+        if: always()
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${ secrets.GITHUB_TOKEN }
+          RUN_START: ${ github.run_started_at }
         run: |
+          # Сбой в середине сеанса (сеть, таймаут страницы) не должен
+          # оставлять героя без рейда: продолжаем цепочку. Короткий сеанс —
+          # значит не поднялись (сессия ОК протухла, креды неверны): тогда
+          # цепочку не продолжаем, подхватит cron.
+          now=$(date +%s); start=$(date -d "$RUN_START" +%s)
+          if [ $((now - start)) -lt 180 ]; then
+            echo "сеанс короче 3 минут — цепочку не продолжаем (подстрахует cron)"
+            exit 0
+          fi
           gh api -X POST \
-            "repos/${{ github.repository }}/actions/workflows/agent-ok2.yml/dispatches" \
+            "repos/${ github.repository }/actions/workflows/agent-ok2.yml/dispatches" \
             -f ref=main \
             || echo 'не удалось запланировать следующий сеанс (подстрахует cron)'
 

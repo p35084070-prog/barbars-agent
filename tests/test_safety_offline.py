@@ -705,6 +705,35 @@ def test_assembly_gives_up_and_returns_to_farming(tmp_path):
     a.game.click_text.assert_called_with("Покинуть бой")
 
 
+def test_goto_retries_once_after_timeout():
+    # Короткий сетевой сбой не должен ронять весь сеанс агента.
+    from playwright.sync_api import TimeoutError as PWTimeout
+
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.goto.side_effect = [PWTimeout("boom"), None]
+    g._settle = Mock()
+    g.human.pause = Mock()
+    g.human.maybe_scroll = Mock()
+    g.goto("https://barbars.ru/")
+    assert g.page.goto.call_count == 2
+
+
+def test_goto_gives_up_after_second_timeout():
+    from playwright.sync_api import TimeoutError as PWTimeout
+    from barbars.driver import GameError
+
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.goto.side_effect = [PWTimeout("boom"), PWTimeout("boom")]
+    g._settle = Mock()
+    g.human.pause = Mock()
+    g.human.maybe_scroll = Mock()
+    with pytest.raises(GameError):
+        g.goto("https://barbars.ru/")
+    assert g.page.goto.call_count == 2
+
+
 def test_respawn_mode_ignores_half_hour_windows(tmp_path):
     a = respawn_agent(tmp_path)
     a._do_respawn_raid = Mock()
