@@ -109,7 +109,7 @@
     "fatigue_skip": 0
   },
   "altar": {
-    "enabled": true,
+    "enabled": false,
     "resource": "iron",
     "amount": 1250,
     "keep_iron": 50000,
@@ -123,7 +123,7 @@
     "allow_shop": false,
     "allow_auction": false,
     "clan_donate": {
-      "enabled": true,
+      "enabled": false,
       "iron": true,
       "iron_amount": 50000,
       "keep_iron": 500000

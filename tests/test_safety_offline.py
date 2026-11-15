@@ -869,3 +869,74 @@ def test_gear_cleanup_protects_reward_tiers(name):
     cfg = config(name)
     keep = tuple(cfg.get("gear", {}).get("keep_tiers", ("мифический", "легендарный", "эпический")))
     assert set(keep) == {"мифический", "легендарный", "эпический"}
+
+
+# --- сторож усталости: строка есть только когда усталость есть -------------
+
+def test_fatigue_line_absent_on_loaded_hero_page_means_no_fatigue():
+    # Игра показывает «усталость: -N%» только когда усталость ЕСТЬ. Отсутствие
+    # строки на открытой странице героя = усталости нет (0), а не «неизвестно».
+    g = Game({}, ".")
+    g.goto = Mock()
+    g.body_text = Mock(return_value="Мой герой\n36 ур, воин, север\nСнаряжение (12)\nДостижения: 17")
+    assert g.hero_fatigue() == 0
+
+
+def test_fatigue_still_unknown_when_hero_page_did_not_load():
+    g = Game({}, ".")
+    g.goto = Mock()
+    g.body_text = Mock(return_value="Вход для игроков")
+    assert g.hero_fatigue() is None
+
+
+def test_tower_farms_when_fatigue_reads_zero():
+    a = agent(Path(ROOT))
+    state = rules.GameState(tire=0)
+    decision = rules._pick_tower(state, a.config)
+    assert decision is not None and decision.action == "tower"
+
+
+# --- Поля сражений: вступаем только у старта боя ----------------------------
+
+def _bg_html():
+    return ('<a href="game/bg?start=1">Игра начнётся через 00:47:33</a>'
+            '<a href="game/bg?join=1">Вступить в бой</a>')
+
+
+def test_countdown_link_is_not_a_join_link():
+    info = pages.parse_battlefields(_bg_html(), "Игра начнётся через 00:47:33")
+    assert len(info["join"]) == 1
+    assert "Вступить" in info["join"][0]["label"]
+
+
+def test_battlefields_decision_waits_for_start():
+    cfg = {"battlefields": {"enabled": True, "join_lead_sec": 120}}
+    far = pages.parse_battlefields(_bg_html(), "Игра начнётся через 00:47:33 Мои очки полей: 12 Сегодня боёв: 0")
+    assert far["points"] == 12
+    assert rules._pick_battlefields(rules.GameState(battlefields=far, bg_points=12), cfg) is None
+    near = pages.parse_battlefields(_bg_html(), "Игра начнётся через 00:00:45 Мои очки полей: 12 Сегодня боёв: 0")
+    decision = rules._pick_battlefields(rules.GameState(battlefields=near, bg_points=12), cfg)
+    assert decision is not None and decision.action == "battlefields"
+
+
+def test_battlefields_respects_daily_limit():
+    cfg = {"battlefields": {"enabled": True, "join_lead_sec": 120, "max_fights_per_day": 5}}
+    near = pages.parse_battlefields(_bg_html(), "Игра начнётся через 00:00:45 Мои очки полей: 12 Сегодня боёв: 5")
+    assert rules._pick_battlefields(rules.GameState(battlefields=near, bg_points=12), cfg) is None
+
+
+# --- вклад в клан выключен, алтарь только у keis ----------------------------
+
+@pytest.mark.parametrize("name", CONFIGS)
+def test_no_clan_storage_donation_anywhere(name):
+    cfg = config(name)
+    assert cfg.get("spend", {}).get("clan_donate", {}).get("enabled") is False
+
+
+def test_only_keis_donates_to_the_altar():
+    keis = config("deploy/config-actions-keis.json")
+    assert keis["altar"]["enabled"] is True
+    for name in CONFIGS:
+        if name == "deploy/config-actions-keis.json":
+            continue
+        assert config(name)["altar"]["enabled"] is False

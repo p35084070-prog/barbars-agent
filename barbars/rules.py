@@ -13,6 +13,7 @@ from typing import Any
 
 from . import pages
 from .driver import CombatState, Game, Status
+from .safety import respawn_seconds
 
 
 @dataclass
@@ -793,8 +794,15 @@ def _pick_battlefields(state: GameState, config: dict[str, Any]) -> Decision | N
         return None
     countdown = str(info.get("countdown", "") or "")
     join = info.get("join") or []
-    if countdown and countdown not in ("00:00:00", "0:00:00") and not join:
-        return None  # бой ещё не начался
+    if countdown and countdown not in ("00:00:00", "0:00:00"):
+        # До боя есть отсчёт: вступать рано бессмысленно — игра отказывает.
+        # Вступаем только когда до старта осталось не больше join_lead_sec.
+        seconds = respawn_seconds(countdown)
+        lead = int(cfg.get("join_lead_sec", 120))
+        if seconds is None or seconds > lead:
+            return None
+    if not join:
+        return None  # кнопки входа нет — вступать нечем
     if int(info.get("fights_today", 0) or 0) >= int(cfg.get("max_fights_per_day", 5)):
         return None
     return Decision(
@@ -902,6 +910,9 @@ def _pick_tower(state: GameState, config: dict[str, Any]) -> Decision | None:
     max_level = int(cfg.get("max_level", 0) or 0)
     if max_level and (state.level or 0) > max_level:
         return None
+    # Правило игрока: усталость ≠ 0 → в башни не ходим (усталость срезает опыт
+    # и участие из башен). Неизвестная усталость (None) тоже блокирует башню:
+    # это правило «не ходим, пока не доказали, что усталости нет».
     if state.tire != 0:
         return None
     return Decision(

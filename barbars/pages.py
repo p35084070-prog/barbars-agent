@@ -582,6 +582,10 @@ def parse_battlefields(html: str, text: str = "") -> dict[str, Any]:
             k in label.lower()
             for k in ("вступи", "присоедин", "в бой", "начать бой", "зайти", "войти", "участвовать")
         )
+        # Ссылка-отсчёт «Игра начнётся через 00:47:33» — это не вход в бой:
+        # раньше по ней агент пытался вступить заранее и получал отказ.
+        if re.search(r"\d+:\d+", label) and ("через" in label.lower() or "начн" in label.lower()):
+            continue
         if href_hit or label_hit:
             join.append({"label": label, "href": href})
     return {

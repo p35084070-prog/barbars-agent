@@ -757,6 +757,18 @@ class Agent:
     def _do_battlefields(self, decision: rules.Decision) -> None:
         """Бой на Полях сражений — за победу дают очки полей."""
         self.game.goto(str(decision.params.get("url", "https://barbars.ru/game/bg")))
+        # Если до старта осталось немного — подождём и зайдём, когда отсчёт
+        # дойдёт до нуля: вход до начала боя игра не принимает.
+        for _ in range(4):
+            info = self.game.battlefields_state()
+            countdown = str(info.get("countdown", "") or "")
+            seconds = respawn_seconds(countdown) if countdown else None
+            if seconds is None or seconds <= 20:
+                break
+            wait = min(60, max(5, seconds))
+            self.log(f"поля сражений: ждём старта боя {countdown}", "INFO")
+            time.sleep(wait)
+            self.game.goto(str(decision.params.get("url", "https://barbars.ru/game/bg")))
         if not self.game.join_battlefields():
             info = self.game.battlefields_state()
             countdown = str(info.get("countdown", "") or "")
@@ -765,6 +777,11 @@ class Agent:
         outcome = self._fight_loop()
         self.fights_done += 1
         self.log(f"поля сражений: бой завершён — {outcome}")
+        try:
+            points = int(self.game.battlefields_state().get("points", 0) or 0)
+            self.log(f"поля сражений: очков полей теперь {points}")
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"поля сражений: очки не прочитаны: {str(exc).splitlines()[0][:120]}", "WARN")
         self.game.click_text("Покинуть бой")
 
     def _do_ability(self, decision: rules.Decision) -> None:
@@ -1509,6 +1526,9 @@ class Agent:
         except Exception:
             fatigue = None
         self.tire_cache = fatigue
+        # Правило игрока: усталость ≠ 0 → в башни не идём. Неизвестная
+        # усталость (None) тоже считаем «не идём» — безопаснее, чем фармить
+        # вслепую. Сторож снимается, когда парсер читает честные 0.
         paused = fatigue != 0
         if self.runtime.get("tower_paused") != paused:
             self.runtime["tower_paused"] = paused
