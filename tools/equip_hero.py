@@ -98,6 +98,17 @@ def main() -> int:
             out["bag"] = [{"id": i["item_id"], "name": i["name"], "better": i["better"]} for i in bag if i["name"]]
             if args.equip:
                 out["worn_count"] = game.equip_better_items(limit=12)
+                # мифические вещи без метки «Лучше» (герой ниже уровня вещи)
+                # надеваем напрямую — слот занять должна новая вещь
+                forced = []
+                for item in game.bag_items():
+                    if not item["mythic"] or not item["name"]:
+                        continue
+                    ok = game.click_href(f"items:{item['index']}:wearLink")
+                    game.confirm_if_needed()
+                    game._settle()
+                    forced.append({"name": item["name"], "ok": bool(ok)})
+                out["forced_equip"] = forced
             game.goto(f"https://barbars.ru/user/body/id/{args.hero_id}")
             out["worn_text"] = " ".join(game.body_text().split())[:1200]
             st = game.status()
