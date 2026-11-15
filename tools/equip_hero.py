@@ -65,7 +65,16 @@ def main() -> int:
                 return 1
             game.goto("https://barbars.ru/user/mail")
             out["mail_text"] = " ".join(game.body_text().split())[:600]
+            links = []
+            for m in re.finditer(r'<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', game.p.content(), re.S | re.I):
+                label = " ".join(re.sub("<[^>]+>", " ", m.group(2)).split())
+                href = m.group(1)
+                if re.search(r"посылк|забр|mail|message|get", href + " " + label, re.I):
+                    links.append({"label": label[:60], "href": href[:120]})
+            out["mail_links"] = links[:40]
             out["mail_taken"] = game.take_mail()
+            game.goto("https://barbars.ru/user/mail")
+            out["mail_text_after"] = " ".join(game.body_text().split())[:600]
             out["moved_to_bag"] = collect_new_items(game)
             bag = game.bag_items()
             out["bag"] = [{"id": i["item_id"], "name": i["name"], "better": i["better"]} for i in bag if i["name"]]
