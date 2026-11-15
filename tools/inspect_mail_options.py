@@ -2,8 +2,14 @@
 import json
 import tempfile
 import re
+import sys
+from pathlib import Path
 
-from barbars.driver import Game, normalize_ru
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from barbars.driver import Game, normalize_ru  # noqa: E402
 
 
 def main():
