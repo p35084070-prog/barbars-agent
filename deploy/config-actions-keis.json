@@ -352,7 +352,8 @@
   "ally_repair": {
     "enabled": true,
     "heroes": [
-      "1286381"
+      "1286381",
+      "31389504"
     ],
     "check_interval_min": 60,
     "keep_iron": 20000
