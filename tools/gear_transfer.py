@@ -94,7 +94,7 @@ def main() -> int:
             if args.send_to:
                 wanted = [n.lower() for n in args.names]
                 picks = []
-                for item in bag + store:
+                for item in bag:  # отправляем только из рюкзака
                     if not item["name"]:
                         continue
                     if wanted and not any(w in item["name"].lower() for w in wanted):
