@@ -501,6 +501,8 @@ def test_incomplete_party_never_starts(tmp_path):
 
 def test_active_raid_resumed_before_farming(tmp_path):
     a = agent(tmp_path)
+    # Рейд на паузе в живых конфигах, но алгоритм проверяем с включённым рейдом.
+    a.config["raid"]["enabled"] = True
     a.runtime["raid_active"] = {"window": 10, "started_at": 18001}
     a.game.raid_room.return_value = {"in_fight": True, "valid": True}
     a._raid_fight = Mock()
@@ -649,7 +651,10 @@ def test_server_respawn_timer(raw, expected):
 
 def respawn_agent(tmp_path, name=CONFIGS[0]):
     a = agent(tmp_path, name)
+    # Рейд в пещеру дракона стоит на паузу (см. knowledge/AUTONOMY_SAFETY.md),
+    # но алгоритм рейда должен остаться рабочим — тесты включают его явно.
     a.config["raid"]["every_respawn"] = True
+    a.config["raid"]["enabled"] = True
     return a
 
 
@@ -817,10 +822,15 @@ def test_respawn_mode_restores_active_battle(tmp_path):
 
 
 @pytest.mark.parametrize("name", CONFIGS)
-def test_all_live_configs_use_respawn_mode(name):
+def test_live_configs_have_raid_paused(name):
+    # По решению игрока рейд на дракона на паузе: включаем обратно одной строкой.
     cfg = config(name)
-    assert cfg["raid"]["every_respawn"]
+    assert cfg["raid"]["enabled"] is False
+    assert cfg["raid"]["every_respawn"] is False
     assert cfg["raid"]["max_fights_per_day"] == 0
+    # Алгоритм рейда сохранён: режим возрождения и состав четвёрки на месте.
+    assert cfg["raid"]["party"], "состав рейда должен остаться в конфиге"
+    assert cfg["raid"]["min_party"] == 4
 
 
 @pytest.mark.parametrize("icon,tier", [

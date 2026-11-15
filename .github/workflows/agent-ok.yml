@@ -126,14 +126,14 @@ jobs:
       - name: Следующий сеанс
         if: always()
         env:
-          GH_TOKEN: ${ secrets.GITHUB_TOKEN }
-          RUN_START: ${ github.run_started_at }
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_START: ${{ github.run_started_at }}
         run: |
           # Сбой в середине сеанса (сеть, таймаут страницы) не должен
           # оставлять героя без рейда: продолжаем цепочку. Короткий сеанс —
           # значит не поднялись (сессия ОК протухла, креды неверны): тогда
           # цепочку не продолжаем, подхватит cron.
-          now=$(date +%s); start=$(date -d "$RUN_START" +%s)
+          now=$(date +%s); start=$(date -d "$RUN_START" +%s 2>/dev/null || echo 0)
           if [ $((now - start)) -lt 180 ]; then
             echo "сеанс короче 3 минут — цепочку не продолжаем (подстрахует cron)"
             exit 0
