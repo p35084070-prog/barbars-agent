@@ -4,6 +4,9 @@ name: equip-steelblue
 # Экипировка работает только при `gear.auto_equip` в конфиге героя.
 
 on:
+  schedule:
+    # раз в 2 часа: герой забирает посылки и надевает комплект, когда дойдёт до 25 уровня
+    - cron: '17 */2 * * *'
   workflow_dispatch:
     inputs:
       hero_id:

@@ -107,7 +107,13 @@ def main() -> int:
                     ok = game.click_href(f"items:{item['index']}:wearLink")
                     game.confirm_if_needed()
                     game._settle()
-                    forced.append({"name": item["name"], "ok": bool(ok)})
+                    forced.append(
+                        {
+                            "name": item["name"],
+                            "ok": bool(ok),
+                            "after": " ".join(game.body_text().split())[:160],
+                        }
+                    )
                 out["forced_equip"] = forced
             game.goto(f"https://barbars.ru/user/body/id/{args.hero_id}")
             out["worn_text"] = " ".join(game.body_text().split())[:1200]
