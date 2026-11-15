@@ -80,6 +80,8 @@ def main() -> int:
             m = re.search(r'href="(?:\.\./)*user/mail/message/id/(\d+)"', game.p.content())
             if m:
                 game.goto(f"https://barbars.ru/user/mail/message/id/{m.group(1)}")
+                out["parcel_url"] = game.p.url
+                out["parcel_html"] = game.p.content()[:2500]
                 out["parcel_text"] = " ".join(game.body_text().split())[:800]
                 out["parcel_links"] = [
                     {
