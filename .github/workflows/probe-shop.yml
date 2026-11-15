@@ -7,12 +7,9 @@ name: probe-shop
 on:
   workflow_dispatch:
     inputs:
-      nick:
-        description: 'Игровое имя (герой, у которого смотрим магазин)'
-        default: 'Steel Blue ii'
-      password:
-        description: 'Пароль'
-        default: ''
+      hero:
+        description: 'Чей магазин смотрим: keis / firewhite / steelblue'
+        default: 'keis'
       set:
         description: 'Набор (пусто — все)'
         default: ''
@@ -38,18 +35,27 @@ jobs:
 
       - name: Учётные данные из секретов
         env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
           SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
           SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
         run: |
           mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
           printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
-          chmod 600 credentials/steelblue.txt
+          chmod 600 credentials/*.txt
 
       - name: Проба магазина
+        env:
+          HERO: ${{ github.event.inputs.hero || 'keis' }}
         run: |
-          if [ -n "${{ github.event.inputs.nick }}" ]; then
-            NICK="${{ github.event.inputs.nick }}"; PW="${{ github.event.inputs.password }}";
-          else
-            NICK=$(head -1 credentials/steelblue.txt); PW=$(sed -n 2p credentials/steelblue.txt);
-          fi
+          case "$HERO" in
+            firewhite) F=credentials/firewhite.txt ;;
+            steelblue) F=credentials/steelblue.txt ;;
+            *) F=credentials/keis.txt ;;
+          esac
+          NICK=$(head -1 "$F"); PW=$(sed -n 2p "$F")
           python -u tools/probe_shop.py "$NICK" "$PW" "${{ github.event.inputs.set }}"
