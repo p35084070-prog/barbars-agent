@@ -85,6 +85,7 @@ def main() -> int:
                 out["error"] = "вход не подтверждён"
                 print("GEAR_TRANSFER " + json.dumps(out, ensure_ascii=False), flush=True)
                 return 1
+            game.take_mail()
             out["moved_to_bag"] = collect_new_items(game)
             bag = list_items(game, "https://barbars.ru/user/rack")
             store = list_items(game, "https://barbars.ru/user/public/store")
