@@ -1465,21 +1465,27 @@ def test_event_urls_point_to_real_pages(name):
 
 
 def test_real_fight_page_buttons_are_recognised_as_attacks():
-    # Настоящий HTML боевой страницы (fight_sample.html) и страница локации
-    # башни: детектор удара должен узнавать и «Бить …», и «Жечь энергию
-    # врагам» (у медика в башне другого удара нет вообще).
+    # Настоящий HTML боевой страницы: детектор удара должен узнавать и
+    # «Бить …», и «Жечь энергию врагам» (у медика в башне другого удара нет).
+    # Фрагмент вшит прямо в тест: файлы *.html в репозиторий не попадают
+    # (.gitignore), и тест не должен зависеть от локальных дампов.
     from barbars.driver import ATTACK_TEXT_PREFIXES, normalize_ru
 
-    html = (ROOT / "fight_sample.html").read_text(encoding="utf-8")
+    html = (
+        '<div class="fbtn mb2"><a href="../?wicket:interface=:11:actionPanel:damageOgreLink::ILinkListener::">'
+        '<span class="lbl">Бить <span>разгневанного призрака</span><span>обычный удар</span></span></a></div>'
+        '<div class="fbtn mb2"><a href="../?wicket:interface=:11:actionPanel:energyDamageRandomEnemyLink::ILinkListener::">'
+        '<span class="lbl">Жечь энергию врагам</span></a></div>'
+    )
     labels = re.findall(r'<span class="lbl">(.*?)</span>', html, re.S)
-    labels = [" ".join(l.split()) for l in labels]
+    labels = [" ".join(re.sub(r"<[^>]+>", " ", l).split()) for l in labels]
     assert any(l.startswith("Бить") for l in labels), labels
+    assert any(l.startswith("Жечь") for l in labels), labels
     for label in labels:
-        low = normalize_ru(label)
-        if low.startswith(ATTACK_TEXT_PREFIXES):
+        if normalize_ru(label).startswith(ATTACK_TEXT_PREFIXES):
             break
     else:
-        raise AssertionError(f"ни один бойвой текст не распознан: {labels}")
+        raise AssertionError(f"ни один боевой текст не распознан: {labels}")
 
 
 def test_medic_tower_attack_is_recognised():
