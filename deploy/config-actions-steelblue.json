@@ -261,7 +261,7 @@
   "gear": {
     "enabled": true,
     "keep_bag": 2,
-    "max_equip": 0,
+    "max_equip": 12,
     "crack": false,
     "crack_limit": 15,
     "crack_chest": false,

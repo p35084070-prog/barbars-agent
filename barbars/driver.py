@@ -2275,6 +2275,17 @@ class Game:
         except Exception:
             return False
 
+    @staticmethod
+    def _equip_limit(value: int) -> int:
+        """Лимит надевания: 0 или меньше — «без ограничения».
+
+        В конфигах `gear.max_equip: 0` означало «не надевать ничего» —
+        цикл `range(0)` не выполнялся ни разу, и автоэкипировка молча
+        не работала (так было у Steel Blue ii: 12 вещей «Лучше» лежали
+        в рюкзаке не надетыми).
+        """
+        return value if value > 0 else 20
+
     def equip_better_items(self, limit: int = 8) -> int:
         """Надеть вещи, помеченные «Лучше (+N)» — герой становится сильнее.
 
@@ -2286,13 +2297,22 @@ class Game:
         if not bool((self.config.get("gear", {}) or {}).get("auto_equip")):
             return 0
         worn = 0
-        for _ in range(limit):
+        # Вещи, которые игра не дала надеть (уровень героя ниже уровня вещи).
+        # Их пропускаем и пробуем следующие — иначе одна недоступная вещь
+        # (например, Топор 25 ур. при 17 уровне) блокирует весь набор.
+        skipped: set[str] = set()
+        for _ in range(self._equip_limit(limit)):
             self.goto("https://barbars.ru/user/rack")
             html = self.p.content()
             target = None
+            target_id = ""
             for chunk, index in self._item_blocks(html):
                 if "Лучше" in chunk and f"items:{index}:wearLink" in chunk:
+                    item_id = re.search(r"item/id/(\d+)", chunk)
+                    if item_id and item_id.group(1) in skipped:
+                        continue
                     target = index
+                    target_id = item_id.group(1) if item_id else ""
                     break
             if target is None:
                 # ищем «Лучше» в сундуке и переносим в рюкзак
@@ -2312,6 +2332,15 @@ class Game:
                 break
             # игра спрашивает подтверждение («вещь станет личной»)
             self.confirm_if_needed()
+            page_text = normalize_ru(self.body_text())
+            if "переодеваться в бою нельзя" in page_text:
+                # герой в бою — сейчас не переодеться, вернёмся к этому позже
+                break
+            if "ты не можешь надеть" in page_text:
+                # вещь выше уровня героя — пропускаем её и берём следующую
+                if target_id:
+                    skipped.add(target_id)
+                continue
             worn += 1
         return worn
 
