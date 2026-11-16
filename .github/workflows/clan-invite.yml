@@ -1,0 +1,97 @@
+name: clan-invite
+
+# Приглашение героя в клан и его вступление.
+# Инвайтер (обычно keis — лидер «Слепых ТИТАНОВ») ищет героя в поиске игроков,
+# жмёт «Пригласить в клан», герой принимает приглашение.
+# Креды берутся из GitHub Secrets и не печатаются в лог.
+
+on:
+  workflow_dispatch:
+    inputs:
+      inviter_account:
+        description: 'Аккаунт пригласителя (keis, firewhite, ...)'
+        default: 'keis'
+        required: true
+      target_account:
+        description: 'Аккаунт героя (steelblue, ...)'
+        default: 'steelblue'
+        required: true
+      target_nick:
+        description: 'Ник героя в игре'
+        default: 'Steel Blue ii'
+        required: true
+      guild_id:
+        description: 'id клана (Слепые ТИТАНЫ = 16675)'
+        default: '16675'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clan-invite
+  cancel-in-progress: true
+
+jobs:
+  invite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Креды из секретов
+        env:
+          INV_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          INV_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          TGT_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          TGT_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+          INVITER: ${{ github.event.inputs.inviter_account }}
+          TARGET: ${{ github.event.inputs.target_account }}
+        run: |
+          set -e
+          mkdir -p credentials
+          # пригласитель: прямые ссылки на секреты (динамический ${{ secrets[...] }} пустой)
+          case "$INVITER" in
+            keis)      INV_LOGIN="${{ secrets.BARBARS_KEIS_LOGIN }}";      INV_PASS="${{ secrets.BARBARS_KEIS_PASSWORD }}" ;;
+            firewhite) INV_LOGIN="${{ secrets.BARBARS_FIREWHITE_LOGIN }}"; INV_PASS="${{ secrets.BARBARS_FIREWHITE_PASSWORD }}" ;;
+            steelblue) INV_LOGIN="${{ secrets.BARBARS_STEELBLUE_LOGIN }}"; INV_PASS="${{ secrets.BARBARS_STEELBLUE_PASSWORD }}" ;;
+            *) echo "нет секретов для пригласителя $INVITER"; exit 1 ;;
+          esac
+          # герой
+          case "$TARGET" in
+            keis)      TGT_LOGIN="${{ secrets.BARBARS_KEIS_LOGIN }}";      TGT_PASS="${{ secrets.BARBARS_KEIS_PASSWORD }}" ;;
+            firewhite) TGT_LOGIN="${{ secrets.BARBARS_FIREWHITE_LOGIN }}"; TGT_PASS="${{ secrets.BARBARS_FIREWHITE_PASSWORD }}" ;;
+            steelblue) TGT_LOGIN="${{ secrets.BARBARS_STEELBLUE_LOGIN }}"; TGT_PASS="${{ secrets.BARBARS_STEELBLUE_PASSWORD }}" ;;
+            *) echo "нет секретов для героя $TARGET"; exit 1 ;;
+          esac
+          printf '%s\n%s\n' "$INV_LOGIN" "$INV_PASS" > credentials/inviter.txt
+          printf '%s\n%s\n' "$TGT_LOGIN" "$TGT_PASS" > credentials/target.txt
+          chmod 600 credentials/*.txt
+          echo "пригласитель: $INVITER (длина ника ${#INV_LOGIN}), герой: $TARGET (длина ника ${#TGT_LOGIN})"
+
+      - name: Пригласить и вступить
+        run: |
+          python -u tools/clan_invite.py \
+            --inviter-creds credentials/inviter.txt \
+            --target-creds credentials/target.txt \
+            --target-nick "${{ github.event.inputs.target_nick }}" \
+            --guild-id "${{ github.event.inputs.guild_id }}"
+
+      - name: Артефакт лога
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clan-invite-${{ github.run_number }}
+          path: logs/
+          retention-days: 5
+          if-no-files-found: ignore
