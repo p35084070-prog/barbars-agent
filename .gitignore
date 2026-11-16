@@ -40,3 +40,13 @@ venv/
 .test-temp-*/
 state/*/credentials.json
 credentials/*.txt
+
+# Разовые отладочные скрипты и логи (в репозиторий не коммитятся)
+logs_reg*.txt
+logs_*.txt
+state/_probe/
+tests/probe_*.py
+tests/tmp_*.py
+tests/raw/
+tools/ok_*.py
+tmp_*.py
