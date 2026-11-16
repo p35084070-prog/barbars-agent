@@ -1494,3 +1494,34 @@ def test_medic_tower_attack_is_recognised():
     from barbars.driver import ATTACK_TEXT_PREFIXES, normalize_ru
     low = normalize_ru("Жечь энергию врагам")
     assert low.startswith(ATTACK_TEXT_PREFIXES)
+
+
+def test_ok_channel_click_attack_accepts_parsed_hrefs():
+    # ОК-канал (vagojan) переопределяет click_attack: если сигнатура разойдётся
+    # с базовым классом, весь бой в канале падает с TypeError.
+    import inspect
+
+    from barbars.ok_channel import OkGame
+    params = inspect.signature(OkGame.click_attack).parameters
+    assert "hrefs" in params
+    assert params["hrefs"].default is None
+
+
+def test_blocked_money_operations_are_not_planned():
+    # Покупки и пересылки запрещены политикой сохранения ресурсов. Раньше
+    # планировщик всё равно предлагал их каждый цикл, а исполнение
+    # отбрасывало — герой (Pandei) стоял и не фармил.
+    cfg = config("deploy/config-actions-pandei.json")
+    state = rules.GameState(level=80, gold=0, silver=72)
+    assert rules._pick_share_money(state, cfg) is None
+    assert rules._pick_shop(state, cfg) is None
+    assert rules._pick_auction(state, cfg) is None
+    assert rules._pick_trade_market(state, cfg) is None
+
+
+def test_share_money_can_be_enabled_explicitly():
+    cfg = config("deploy/config-actions-pandei.json")
+    cfg.setdefault("spend", {})["allow_share_money"] = True
+    state = rules.GameState(level=80, gold=0, silver=72)
+    decision = rules._pick_share_money(state, cfg)
+    assert decision is not None and decision.action == "share_money"

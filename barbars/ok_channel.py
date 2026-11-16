@@ -44,7 +44,7 @@ from urllib.parse import urljoin
 
 from playwright.sync_api import Frame, Page, sync_playwright
 
-from .driver import Game, GameError
+from .driver import ATTACK_LABELS, Game, GameError
 
 IPHONE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 "
@@ -466,6 +466,18 @@ class OkGame(Game):
                 time.sleep(1.0)
         return False
 
+    def click_href(self, pattern: str, *, nth: int = 0) -> bool:
+        """Клик по ссылке, в адресе которой есть кусок `pattern`.
+
+        Отдельная реализация: у ОК-канала кадр с игрой пересоздаётся, и
+        клик должен идти через _click_selector (он переоткрывает кадр).
+        """
+        if not self._click_selector(f"a[href*='{pattern}']", nth=nth):
+            return False
+        self._settle()
+        self.human.pause("action")
+        return True
+
     def use_ability(self, href: str) -> bool:
         """Применить умение боя (ссылка с abilityCombatPanel)."""
         if not href:
@@ -476,9 +488,20 @@ class OkGame(Game):
         self.human.pause("fight")
         return True
 
-    def click_attack(self) -> bool:
-        """Кликнуть по основной боевой кнопке ('Бить ...' / 'Атаковать ...')."""
-        for label in ("Бить", "Атаковать", "Жечь", "Ударить"):
+    def click_attack(self, hrefs: list[str] | None = None) -> bool:
+        """Кликнуть по основной боевой кнопке ('Бить ...' / 'Атаковать ...').
+
+        `hrefs` — ссылки, которые парсер боя уже опознал как удар: кликаем
+        их первыми, чтобы детектор и клик смотрели на одну кнопку.
+        """
+        for href in list(hrefs or []):
+            for token in re.findall(r"[A-Za-z]+Link", href or ""):
+                selector = f"a[href*='{token}']"
+                if self._click_selector(selector):
+                    self._settle()
+                    self.human.pause("fight")
+                    return True
+        for label in ATTACK_LABELS:
             selector = f"a:has-text('{label}'), button:has-text('{label}')"
             if self._click_selector(selector):
                 self._settle()

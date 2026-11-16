@@ -554,6 +554,8 @@ def _pick_share_gear(state: GameState, config: dict[str, Any]) -> Decision | Non
     recipient = str(cfg.get("share_with", "") or "")
     if not recipient:
         return None
+    if not (config.get("spend", {}) or {}).get("allow_share_gear", False):
+        return None
     bought = state.shop_bought
     if not bought:
         return None
@@ -570,7 +572,15 @@ def _pick_share_money(state: GameState, config: dict[str, Any]) -> Decision | No
 
     Задание игрока: золото с firewhite перекладывается на keis, который
     закупает снаряжение и передаёт его обратно.
+
+    Передача включается только `spend.allow_share_money: true`. Без этого
+    флага действие запрещено политикой сохранения ресурсов — и раньше оно
+    всё равно предлагалось каждый цикл, но отбрасывалось при выполнении,
+    из-за чего герой (Pandei) не фармил вообще, а только ждал.
     """
+    spend = config.get("spend", {}) or {}
+    if not spend.get("allow_share_money", False):
+        return None
     cfg = config.get("shop", {})
     recipient = str(cfg.get("share_money_with", "") or "")
     if not recipient:
@@ -599,6 +609,11 @@ def _pick_shop(state: GameState, config: dict[str, Any]) -> Decision | None:
     """
     cfg = config.get("shop", {})
     if not cfg.get("enabled"):
+        return None
+    # Политика сохранения ресурсов: покупки в магазине запрещены, пока
+    # явно не разрешены. Раньше запрет срабатывал уже при выполнении, и
+    # планировщик пустым решением съедал весь цикл героя.
+    if not (config.get("spend", {}) or {}).get("allow_shop", False):
         return None
     min_level = int(cfg.get("min_level", 25))
     if int(state.level or 0) < min_level:
@@ -721,6 +736,8 @@ def _pick_auction(state: GameState, config: dict[str, Any]) -> Decision | None:
     cfg = config.get("auction", {})
     if not cfg.get("enabled"):
         return None
+    if not (config.get("spend", {}) or {}).get("allow_auction", False):
+        return None
     max_per_day = int(cfg.get("max_per_day", 10))
     if int(state.auction_today or 0) >= max_per_day:
         return None
@@ -755,6 +772,8 @@ def _pick_trade_market(state: GameState, config: dict[str, Any]) -> Decision | N
     """
     cfg = config.get("trade_market", {})
     if not cfg.get("enabled"):
+        return None
+    if not (config.get("spend", {}) or {}).get("allow_auction", False):
         return None
     if int(state.market_today or 0) >= int(cfg.get("max_per_day", 3)):
         return None
