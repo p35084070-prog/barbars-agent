@@ -266,6 +266,8 @@
     "crack_limit": 15,
     "crack_chest": false,
     "crack_chest_limit": 15,
+    "chest_cleanup": "off",
+    "chest_cleanup_limit": 10,
     "keep_mythic": true,
     "sell_store": false,
     "sell_limit": 3,

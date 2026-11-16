@@ -2529,6 +2529,67 @@ class Game:
             cracked += 1
         return cracked
 
+    def clean_chest(
+        self,
+        limit: int = 10,
+        action: str = "crack",
+        keep_tiers: tuple[str, ...] = PROTECTED_ITEM_TIERS,
+        keep_better: bool = True,
+    ) -> dict[str, int]:
+        """Почистить сундук от хлама: разобрать на железо или выбросить.
+
+        Никогда не трогаем вещи защищённых качеств (мифические, легендарные,
+        эпические — это награда за дракона) и вещи «Лучше» (их надо надеть).
+
+        action="crack": сначала «разобрать на железо» (`crackLink`), а если
+        разобрать нельзя — «выкинуть» (`dropLink`): с такой вещи даже железо
+        не получить, держать её незачем.
+        action="drop": только «выкинуть» — железо сжигается.
+        """
+        out = {"cracked": 0, "dropped": 0, "skipped": 0}
+        if action not in ("crack", "drop"):
+            return out
+        tried: set[str] = set()
+        for _ in range(max(1, limit)):
+            self.goto("https://barbars.ru/user/store")
+            html = self.p.content()
+            target: str | None = None
+            for chunk, _index in self._item_blocks(html):
+                if keep_better and "Лучше" in chunk:
+                    continue
+                if self._tier_is_protected(chunk, keep_tiers):
+                    continue
+                if self._is_scroll_or_book(chunk):
+                    continue  # свитки и книги не трогаем
+                item_id = re.search(r'href="(?:\.\./)*item/id/(\d+)"', chunk)
+                if item_id and item_id.group(1) not in tried:
+                    target = item_id.group(1)
+                    break
+            if target is None:
+                break
+            tried.add(target)
+            self.goto(f"https://barbars.ru/item/id/{target}")
+            page = self.p.content()
+            if self._tier_is_protected(page, keep_tiers):
+                out["skipped"] += 1
+                continue
+            if keep_better and "Лучше" in self.body_text():
+                out["skipped"] += 1
+                continue
+            if action == "crack" and "crackIronPanel:crackLink" in page:
+                if self.click_href("crackIronPanel:crackLink"):
+                    out["cracked"] += 1
+                else:
+                    out["skipped"] += 1
+            elif "crackIronPanel:dropLink" in page:
+                if self.click_href("crackIronPanel:dropLink"):
+                    out["dropped"] += 1
+                else:
+                    out["skipped"] += 1
+            else:
+                out["skipped"] += 1
+        return out
+
     def crack_all_items(self) -> bool:
         """«Разобрать всё на железо» — аварийный вариант для полного рюкзака."""
         # Bulk destruction cannot prove that mythical items are excluded.

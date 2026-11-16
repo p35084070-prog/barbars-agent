@@ -1235,3 +1235,93 @@ def test_buy_shop_item_capped_allows_price_within_limit():
     ok, msg = g.buy_shop_item_capped("1", max_gold=1)
     assert ok is True
     assert "55" in msg
+
+
+# --- чистка сундука от хлама (16.11.2026) -----------------------------------
+# Правила игрока: мифические/легендарные/эпические (награда за дракона) не
+# трогаем никогда; «Лучше» — такую вещь надо надеть; обычный хлам разбираем
+# на железо (crack) либо выбрасываем (drop).
+
+CHEST_ITEM = (
+    '<div class="hr"></div>'
+    '<div><a href="../user/store;jsessionid=X?items:0:crackIronPanel:crackLink">разобрать</a>'
+    '<a href="../item/id/123"><span>Куртка Дружинника</span></a>'
+    '<span class="bonusrare"></span></div>'
+)
+CHEST_EMPTY = '<div class="hr"></div><div>Сундук пуст</div>'
+ITEM_CRACK = '<a href="../?wicket:interface=:5:crackIronPanel:crackLink">разобрать на железо</a>'
+ITEM_DROP = '<a href="../?wicket:interface=:5:crackIronPanel:dropLink">выкинуть</a>'
+
+
+def _chest_game(pages_html):
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.content.side_effect = pages_html
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    g.body_text = Mock(return_value="Куртка Дружинника 12 ур")
+    return g
+
+
+def test_protected_tier_in_chest_is_never_touched():
+    g = _chest_game([CHEST_ITEM.replace("bonusrare", "bonusdarkiron")])
+    res = g.clean_chest(limit=1, action="crack")
+    assert res["cracked"] == 0 and res["dropped"] == 0
+    g.click_href.assert_not_called()
+
+
+def test_crack_mode_cracks_junk_for_iron():
+    g = _chest_game([CHEST_ITEM, ITEM_CRACK, CHEST_EMPTY])
+    res = g.clean_chest(limit=2, action="crack")
+    assert res["cracked"] == 1 and res["dropped"] == 0
+    g.click_href.assert_called_once_with("crackIronPanel:crackLink")
+
+
+def test_crack_mode_falls_back_to_drop_when_item_gives_no_iron():
+    g = _chest_game([CHEST_ITEM, ITEM_DROP, CHEST_EMPTY])
+    res = g.clean_chest(limit=2, action="crack")
+    assert res["dropped"] == 1 and res["cracked"] == 0
+    g.click_href.assert_called_once_with("crackIronPanel:dropLink")
+
+
+def test_drop_mode_never_cracks():
+    # «Выкинуть» сжигает железо — в режиме drop разбор не делаем.
+    g = _chest_game([CHEST_ITEM, ITEM_CRACK, CHEST_EMPTY])
+    res = g.clean_chest(limit=2, action="drop")
+    assert res["cracked"] == 0 and res["dropped"] == 0
+
+
+def test_off_mode_does_nothing():
+    g = _chest_game([CHEST_ITEM, ITEM_CRACK])
+    res = g.clean_chest(limit=2, action="off")
+    assert res == {"cracked": 0, "dropped": 0, "skipped": 0}
+    g.click_href.assert_not_called()
+
+
+def _gear_agent(tmp_path, cleanup):
+    cfg = json.loads((ROOT / "deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
+    cfg["gear"]["chest_cleanup"] = cleanup
+    cfg["_root"] = str(tmp_path)
+    game = Mock()
+    game.body_text.return_value = ""
+    game.bag_counts.return_value = {"bag_used": 1, "bag_total": 20, "chest_used": 3, "chest_total": 20}
+    return Agent(game, cfg, tmp_path / "logs")
+
+
+def test_loop_cleans_chest_only_when_enabled(tmp_path):
+    a = _gear_agent(tmp_path, "crack")
+    a.game.clean_chest.return_value = {"cracked": 4, "dropped": 1, "skipped": 2}
+    a._do_gear(rules.Decision("gear", params={"crack": False, "crack_chest": False}))
+    a.game.clean_chest.assert_called_once()
+    assert a.game.clean_chest.call_args.kwargs["action"] == "crack"
+
+
+def test_loop_leaves_chest_alone_when_disabled(tmp_path):
+    a = _gear_agent(tmp_path, "off")
+    a._do_gear(rules.Decision("gear", params={"crack": False, "crack_chest": False}))
+    a.game.clean_chest.assert_not_called()
+
+
+def test_live_config_has_chest_cleanup_mode():
+    cfg = json.loads((ROOT / "deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
+    assert cfg["gear"]["chest_cleanup"] in ("crack", "drop", "off")

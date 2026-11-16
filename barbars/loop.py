@@ -523,10 +523,11 @@ class Agent:
         cracked = 0
         moved = 0
         sold = 0
+        dropped = 0
+        keep_tiers = tuple(gear_cfg.get("keep_tiers", ("мифический", "легендарный", "эпический")))
         if crack:
             # разбираем всё, кроме «Лучше» (их надо надеть) и вещей
             # защищённых качеств (мифические/легендарные/эпические)
-            keep_tiers = tuple(gear_cfg.get("keep_tiers", ("мифический", "легендарный", "эпический")))
             cracked = self.game.crack_items(
                 limit=int(gear_cfg.get("crack_limit", 10)),
                 keep_better=True,
@@ -543,6 +544,18 @@ class Agent:
                     keep_tiers=keep_tiers,
                 )
                 cracked += chest_cracked
+        # отдельная чистка сундука от хлама: режим задаёт игрок
+        # (gear.chest_cleanup = crack | drop | off)
+        cleanup = str(gear_cfg.get("chest_cleanup", "off")).lower()
+        if cleanup in ("crack", "drop"):
+            res = self.game.clean_chest(
+                limit=int(gear_cfg.get("chest_cleanup_limit", 10)),
+                action=cleanup,
+                keep_tiers=keep_tiers,
+                keep_better=True,
+            )
+            cracked += int(res.get("cracked", 0))
+            dropped += int(res.get("dropped", 0))
         counts = self.game.bag_counts()
         # лишние мифические вещи (дубли по слотам) — на витрину, их не разобрать
         sold = 0
@@ -555,11 +568,12 @@ class Agent:
         moved = self.game.stash_items(keep=keep)
         counts = self.game.bag_counts()
         self.log(
-            f"рюкзак: надето {worn}, разобрано {cracked}, на витрину {sold}, в сундук {moved}, "
+            f"рюкзак: надето {worn}, разобрано {cracked}, выброшено {dropped}, "
+            f"на витрину {sold}, в сундук {moved}, "
             f"рюкзак {counts.get('bag_used')}/{counts.get('bag_total')}, "
             f"сундук {counts.get('chest_used')}/{counts.get('chest_total')}"
         )
-        if worn == 0 and cracked == 0 and moved == 0 and sold == 0:
+        if worn == 0 and cracked == 0 and moved == 0 and sold == 0 and dropped == 0:
             # Ничего не изменилось: сундук полон и надеть нечего. Повторять
             # этот шаг бессмысленно — он блокирует фарм, поэтому ставим паузу.
             pause_min = int(gear_cfg.get("pause_min", 10))
