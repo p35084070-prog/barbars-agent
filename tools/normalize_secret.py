@@ -23,6 +23,15 @@ def main() -> int:
     login = clean(os.environ.get("LOGIN", ""))
     password = clean(os.environ.get("PASSWORD", ""))
     if not login or not password:
+        # значения могли остаться в файле — читаем оттуда
+        path = os.environ.get("CREDS_FILE", "credentials-input.txt")
+        if os.path.exists(path):
+            lines = open(path, encoding="utf-8").read().splitlines()
+            if lines:
+                login = clean(lines[0])
+            if len(lines) > 1:
+                password = clean(lines[1])
+    if not login or not password:
         print("LOGIN/PASSWORD пустые — нечего чинить")
         return 1
     print("ник очищен, длина:", len(login))
