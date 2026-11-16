@@ -1,0 +1,67 @@
+name: buy-missing-gear
+
+# Возврат вещи, случайно разобранной, и добор комплекта 25 уровня.
+# Покупка — только если цена укладывается в лимит игрока: не больше 1 золота
+# на вещь (серебро считается как 1 зол = 100 сер).
+
+on:
+  schedule:
+    - cron: '23 */3 * * *'
+  workflow_dispatch:
+    inputs:
+      want:
+        description: 'Название вещи (подстрока)'
+        default: 'Бурка Ветерана'
+      level:
+        description: 'Уровень вещи'
+        default: '25'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: buy-missing-gear
+  cancel-in-progress: false
+
+jobs:
+  buy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Креды из секретов
+        env:
+          SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
+          chmod 600 credentials/*.txt
+
+      - name: Покупка
+        run: |
+          python -u tools/buy_missing_gear.py \
+            --config deploy/config-actions-steelblue.json \
+            --creds credentials/steelblue.txt \
+            --want "${{ github.event.inputs.want || 'Бурка Ветерана' }}" \
+            --level ${{ github.event.inputs.level || '25' }} \
+            --max-gold 1
+
+      - name: Логи
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buy-missing-gear-${{ github.run_number }}
+          path: logs
+          retention-days: 7
