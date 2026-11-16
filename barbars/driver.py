@@ -2455,12 +2455,27 @@ class Game:
             sold += 1
         return sold
 
+    @staticmethod
+    def _first_tier(text: str) -> str:
+        """Первое упоминание качества в тексте: «Куртка Дружинника редкий, новый» → «редкий»."""
+        m = re.search(
+            r"(мифический|легендарный|эпический|редкий|необычный|обычный)",
+            normalize_ru(text),
+        )
+        return m.group(1) if m else ""
+
     def _tier_is_protected(self, chunk: str, keep_tiers: tuple[str, ...] = PROTECTED_ITEM_TIERS) -> bool:
         """Вещь защищённого качества (мифическая/легендарная/эпическая)?
 
         Качество берём по иконке бонуса (`bonusdarkiron`/`bonuslegendary`/
         `bonusepic`) — это надёжнее текста, который игра местами пишет
         с омоглифами.
+
+        Если иконки нет, смотрим **первое** упоминание качества в тексте: на
+        странице вещи качество самой вещи идёт сразу за её названием
+        («Куртка Дружинника редкий, новый»). Проверять «любое слово» нельзя:
+        ниже по странице идёт сравнение с надетым снаряжением, где встречается
+        «эпический» — и обычная вещь ошибочно считалась бы наградной.
         """
         from . import pages
 
@@ -2469,8 +2484,44 @@ class Game:
         tier = pages.item_tier(chunk)
         if tier and tier in keep_tiers:
             return True
-        text = normalize_ru(chunk)
-        return any(word in text for word in ("мифическ", "легендарн", "эпическ"))
+        first = self._first_tier(chunk)
+        return bool(first) and first in keep_tiers
+
+    def _own_item_text(self, html: str | None = None, limit: int = 400) -> str:
+        """Текст описания **самой** вещи (начало страницы).
+
+        На странице вещи ниже идёт блок «На мне надето …» со сравнением
+        надетого снаряжения — там бывают чужие «Лучше (+N)» и слова
+        «мифический»/«эпический». Для проверок берём только начало страницы,
+        где описана сама вещь.
+        """
+        if html is None:
+            try:
+                html = self.p.content()
+            except Exception:  # noqa: BLE001
+                html = ""
+        if not isinstance(html, str):
+            html = ""
+        text = " ".join(re.sub(r"<[^>]+>", " ", html).split())
+        cut = text.find("На мне надето")
+        if 0 < cut < limit:
+            return text[:cut]
+        return text[:limit]
+
+    def _own_item_is_protected(
+        self,
+        html: str | None = None,
+        keep_tiers: tuple[str, ...] = PROTECTED_ITEM_TIERS,
+    ) -> bool:
+        """Защищённое ли качество у **самой** вещи (по её описанию)?
+
+        Иконки на странице вещи относятся и к надетому снаряжению, поэтому
+        для страницы вещи берём только текст описания самой вещи.
+        """
+        if not keep_tiers:
+            return False
+        first = self._first_tier(self._own_item_text(html))
+        return bool(first) and first in keep_tiers
 
     def _crack_item_page(
         self,
@@ -2480,7 +2531,7 @@ class Game:
         """Разобрать вещь со страницы самой вещи (`/item/id/<id>`)."""
         self.goto(f"https://barbars.ru/item/id/{item_id}")
         html = self.p.content()
-        if self._tier_is_protected(html, keep_tiers):
+        if self._own_item_is_protected(html, keep_tiers):
             return False
         if "crackIronPanel:crackLink" not in html:
             return False
@@ -2576,10 +2627,10 @@ class Game:
             tried.add(target)
             self.goto(f"https://barbars.ru/item/id/{target}")
             page = self.p.content()
-            if self._tier_is_protected(page, keep_tiers):
+            if self._own_item_is_protected(page, keep_tiers):
                 out["skipped"] += 1
                 continue
-            if keep_better and "Лучше" in self.body_text():
+            if keep_better and "Лучше" in self._own_item_text(page):
                 out["skipped"] += 1
                 continue
             if action == "crack" and "crackIronPanel:crackLink" in page:

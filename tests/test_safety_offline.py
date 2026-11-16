@@ -1319,6 +1319,36 @@ def test_crack_confirmed_counts_as_cleared():
     assert res["cracked"] == 1 and res["skipped"] == 0
 
 
+JUNK_PAGE = (
+    '<div>Куртка Дружинника редкий, новый</div>' + ITEM_CRACK +
+    '<div>На мне надето Перчатки Берсерка мифический, Лучше (+370)</div>'
+)
+MYTHIC_PAGE = '<div>Бурка Ветерана мифический, новый</div>' + ITEM_CRACK
+
+
+def test_epic_word_in_comparison_block_does_not_protect_junk():
+    # На странице обычной вещи есть блок «На мне надето … мифический» —
+    # из-за него хлам раньше считался наградным и не чистился.
+    g = _chest_game([CHEST_ITEM, JUNK_PAGE, CHEST_EMPTY])
+    g.confirm_if_needed = Mock(return_value=True)
+    res = g.clean_chest(limit=2, action="crack")
+    assert res["cracked"] == 1 and res["skipped"] == 0
+
+
+def test_mythic_item_on_page_is_never_cracked():
+    g = _chest_game([CHEST_ITEM, MYTHIC_PAGE, CHEST_EMPTY])
+    res = g.clean_chest(limit=2, action="crack")
+    assert res["cracked"] == 0 and res["dropped"] == 0
+    g.click_href.assert_not_called()
+
+
+def test_first_tier_reads_own_item_quality():
+    g = Game({}, ".")
+    assert g._first_tier("Куртка Дружинника редкий, новый") == "редкий"
+    assert g._first_tier("Бурка Ветерана мифический, новый") == "мифический"
+    assert g._first_tier("Шляпа Ополченца необычный, личный") == "необычный"
+
+
 def _gear_agent(tmp_path, cleanup):
     cfg = json.loads((ROOT / "deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
     cfg["gear"]["chest_cleanup"] = cleanup
