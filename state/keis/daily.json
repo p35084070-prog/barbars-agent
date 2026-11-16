@@ -10,5 +10,6 @@
   "market_bought": [],
   "shop_buy_ids": [],
   "shop_slots": [],
-  "shop_bought": []
+  "shop_bought": [],
+  "raid": 1
 }
