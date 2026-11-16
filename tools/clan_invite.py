@@ -131,10 +131,29 @@ def main() -> int:
                     if not accepted:
                         log("герой не увидел приглашение за отведённое время")
 
-                    # 3) проверка состава клана
+                    # 3) проверка вступления:
+                    #    - шапка героя: «ник, N ур, ... <Клан>, <ранг>» и ссылка «Мой клан»
+                    #    - состав клана: блок «Участники [...]»
+                    joined = False
+                    deadline2 = time.time() + 60
+                    while time.time() < deadline2 and not joined:
+                        page_b.goto("https://barbars.ru/user", wait_until="domcontentloaded", timeout=60_000)
+                        head = " ".join(page_b.inner_text("body").split())
+                        if "Мой клан" in head or "Покинуть клан" in head:
+                            joined = True
+                            break
+                        page_b.goto(f"https://barbars.ru/guild/{args.guild_id}", wait_until="domcontentloaded", timeout=60_000)
+                        body_b = " ".join(page_b.inner_text("body").split())
+                        i = body_b.find("Участники")
+                        if i >= 0:
+                            block = body_b[i: i + 900]
+                            block = re.split(r"Рейтинг клана|Клановый опыт|Покинуть клан", block)[0]
+                            if args.target_nick.lower() in block.lower():
+                                joined = True
+                                break
+                        time.sleep(5)
                     page_b.goto(f"https://barbars.ru/guild/{args.guild_id}", wait_until="domcontentloaded", timeout=60_000)
                     body_b = " ".join(page_b.inner_text("body").split())
-                    joined = args.target_nick.lower() in body_b.lower() and "Участники" in body_b
                     log(f"клан глазами героя: {'ГЕРОЙ В КЛАНЕ' if joined else 'героя в клане нет'}")
                     log(body_b[:300])
                     return 0 if joined else 4

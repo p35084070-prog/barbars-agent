@@ -106,8 +106,17 @@ description: |
    Затем скопировать `.github/workflows/agent-steelblue.yml` в `agent-<аккаунт>.yml`
    и заменить `steelblue` на `<аккаунт>` (имя workflow, группа concurrency, конфиг,
    путь дневных счётчиков, секреты). Прогон 330 мин, cron `*/20`, самоперезапуск.
-   Вступление в клан (с 11 уровня) делает `tests/clan_join_auto.py` — там зашит ник,
-   поменяй его на ник нового героя.
+   **Вступление в клан** (с 11 уровня) — универсальным инструментом, ника в коде менять
+   не нужно: инвайтер (keis — лидер «Слепых ТИТАНОВ», id 16675) ищет героя в
+   `/users/search`, жмёт «Пригласить в клан», герой принимает приглашение:
+   ```powershell
+   gh workflow run clan-invite.yml -R p35084070-prog/barbars-agent --ref main \
+     -f inviter_account=keis -f target_account=steelblue \
+     -f target_nick="Steel Blue ii" -f guild_id=16675
+   ```
+   Локальный вариант: `python tools\clan_invite.py --inviter-creds <файл> --target-creds <файл>
+   --target-nick "<ник>" --guild-id 16675` (файлы кредов: ник/пароль, в `.gitignore`).
+   Старый `tests/clan_join_auto.py` зашит под fire white ii — для новых героев не годится.
 
 6. **Закупить снаряжение 25 уровня глазами keis** (у него золото; новый герой богатством
    не владеет). Цены в магазине **серебряные**, а золото игра сама конвертирует
