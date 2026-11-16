@@ -41,13 +41,13 @@
     "enabled": true
   },
   "raid": {
-    "enabled": false,
+    "enabled": true,
     "name": "Мифический дракон",
     "url": "https://barbars.ru/game/dragonDungeon",
     "check_interval_min": 1,
     "repeat_min": 30,
     "stay_sec": 780,
-    "min_party": 4,
+    "min_party": 5,
     "can_start": false,
     "max_fights_per_day": 0,
     "max_turns": 400,
@@ -68,7 +68,8 @@
         "account": "firewhite",
         "names": [
           "Firewall",
-          "firewhite"
+          "firewhite",
+          "fire white ii"
         ],
         "role": "warrior",
         "id": "31389504"
@@ -76,7 +77,7 @@
       {
         "account": "ok",
         "names": [
-          "Лагиджан",
+          "Вагиджан",
           "WG",
           "vagojan"
         ],
@@ -88,10 +89,19 @@
         "names": [
           "qdal",
           "Qdle",
-          "кьюдл"
+          "Кёндл"
         ],
         "role": "warrior",
         "id": "1596900"
+      },
+      {
+        "account": "pandei",
+        "names": [
+          "Pandei",
+          "pandei"
+        ],
+        "role": "warrior",
+        "id": "11604269"
       }
     ],
     "assembly_sec": 600,
@@ -330,7 +340,9 @@
   "battlefields": {
     "enabled": true,
     "check_interval_min": 1,
-    "max_fights_per_day": 5, "join_lead_sec": 300, "wait_sec": 300
+    "max_fights_per_day": 5,
+    "join_lead_sec": 300,
+    "wait_sec": 300
   },
   "ability": {
     "enabled": true,
