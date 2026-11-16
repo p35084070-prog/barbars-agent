@@ -38,3 +38,5 @@ venv/
 
 # Offline test scratch directories
 .test-temp-*/
+state/*/credentials.json
+credentials/*.txt

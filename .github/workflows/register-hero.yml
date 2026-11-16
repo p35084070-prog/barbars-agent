@@ -60,29 +60,19 @@ jobs:
         run: |
           python -u tools/register_hero.py "$NICK" "$KIND" "$SIDE" "$PW" "$TRIES" "$ACCOUNT"
 
-      - name: Сохранить учётные данные
+      - name: Собрать учётные данные в артефакт
         if: always()
         env:
           ACCOUNT: ${{ github.event.inputs.account }}
         run: |
-          mkdir -p "state/$ACCOUNT"
-          if [ -f "credentials-$ACCOUNT.json" ]; then
-            cp "credentials-$ACCOUNT.json" "state/$ACCOUNT/credentials.json"
-          else
-            echo '{"error": "регистрация не завершилась"}' > "state/$ACCOUNT/credentials.json"
-          fi
-          git config user.name 'barbars-bot'
-          git config user.email 'bot@users.noreply.github.com'
-          git add "state/$ACCOUNT/credentials.json"
-          git commit -m "state($ACCOUNT): учётные данные нового героя" || echo 'нечего коммитить'
-          git push origin HEAD:main || (git pull --rebase origin main && git push origin HEAD:main)
-
-      - name: Артефакт сессии
-        if: always()
-        env:
-          ACCOUNT: ${{ github.event.inputs.account }}
-        run: |
+          # креды НЕ комтим в репозиторий: пароль попадёт в историю git.
+          # отдаём их артефактом прогона (живёт 5 дней, доступен владельцам репо)
           mkdir -p artifacts
+          if [ -f "credentials-$ACCOUNT.json" ]; then
+            cp "credentials-$ACCOUNT.json" artifacts/
+          else
+            echo '{"error": "регистрация не завершилась"}' > artifacts/credentials.json
+          fi
           for f in knowledge/discovered/registration-$ACCOUNT*.json \
                    knowledge/discovered/registration-$ACCOUNT*.html; do
             [ -e "$f" ] && cp "$f" artifacts/
