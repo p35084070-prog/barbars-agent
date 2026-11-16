@@ -1298,6 +1298,27 @@ def test_off_mode_does_nothing():
     g.click_href.assert_not_called()
 
 
+CONFIRM_PAGE = "Подтверждение Подтверди, что хочешь разобрать эту вещь на железо Да, подтверждаю Нет, отмена"
+
+
+def test_crack_waits_for_confirmation():
+    # Без «Да, подтверждаю» вещь остаётся целой — разбор не засчитываем.
+    g = _chest_game([CHEST_ITEM, ITEM_CRACK, CONFIRM_PAGE, CHEST_EMPTY])
+    g.body_text = Mock(return_value=CONFIRM_PAGE)
+    g.confirm_if_needed = Mock(return_value=False)
+    res = g.clean_chest(limit=2, action="crack")
+    assert res["cracked"] == 0 and res["skipped"] == 1
+    g.confirm_if_needed.assert_called_once()
+
+
+def test_crack_confirmed_counts_as_cleared():
+    g = _chest_game([CHEST_ITEM, ITEM_CRACK, CONFIRM_PAGE, CHEST_EMPTY])
+    g.body_text = Mock(return_value=CONFIRM_PAGE)
+    g.confirm_if_needed = Mock(return_value=True)
+    res = g.clean_chest(limit=2, action="crack")
+    assert res["cracked"] == 1 and res["skipped"] == 0
+
+
 def _gear_agent(tmp_path, cleanup):
     cfg = json.loads((ROOT / "deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
     cfg["gear"]["chest_cleanup"] = cleanup

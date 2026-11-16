@@ -2484,7 +2484,13 @@ class Game:
             return False
         if "crackIronPanel:crackLink" not in html:
             return False
-        return self.click_href("crackIronPanel:crackLink")
+        if not self.click_href("crackIronPanel:crackLink"):
+            return False
+        # игра спрашивает подтверждение («Да, подтверждаю») — без него вещь
+        # остаётся целой, клик по разбору ничего не ломает
+        if "подтверди" in self.body_text().lower():
+            return self.confirm_if_needed()
+        return True
 
     def crack_chest_items(
         self,
@@ -2577,15 +2583,29 @@ class Game:
                 out["skipped"] += 1
                 continue
             if action == "crack" and "crackIronPanel:crackLink" in page:
-                if self.click_href("crackIronPanel:crackLink"):
+                if not self.click_href("crackIronPanel:crackLink"):
+                    out["skipped"] += 1
+                    continue
+                # после клика игра просит подтвердить разбор — без «Да, подтверждаю»
+                # вещь остаётся целой
+                if "подтверди" in self.body_text().lower():
+                    if self.confirm_if_needed():
+                        out["cracked"] += 1
+                    else:
+                        out["skipped"] += 1
+                else:
                     out["cracked"] += 1
-                else:
-                    out["skipped"] += 1
             elif "crackIronPanel:dropLink" in page:
-                if self.click_href("crackIronPanel:dropLink"):
-                    out["dropped"] += 1
-                else:
+                if not self.click_href("crackIronPanel:dropLink"):
                     out["skipped"] += 1
+                    continue
+                if "подтверди" in self.body_text().lower():
+                    if self.confirm_if_needed():
+                        out["dropped"] += 1
+                    else:
+                        out["skipped"] += 1
+                else:
+                    out["dropped"] += 1
             else:
                 out["skipped"] += 1
         return out
