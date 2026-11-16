@@ -8,11 +8,14 @@
 Поля формы: ник (2–16 символов, ≤2 пробелов), пол (m/f), сторона
 (1 = север, 2 = юг), класс (1 = воин, 2 = медик).
 
-Запуск: python tools\\register_hero.py <ник> [класс] [сторона] [пароль]
+Запуск: python tools\\register_hero.py <ник> [класс] [сторона] [пароль] [попыток] [аккаунт]
+Аккаунт (логическое имя) по умолчанию берётся из HERO_ACCOUNT, иначе "steelblue";
+от него зависят имена файлов credentials-<аккаунт>.json и registration-<аккаунт>*.json.
 """
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 import secrets
@@ -42,8 +45,10 @@ if not PASSWORD:
     alphabet = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     PASSWORD = "Sb" + "".join(secrets.choice(alphabet) for _ in range(12))
 MAX_TRIES = int(sys.argv[5]) if len(sys.argv) > 5 else 200
-MAIL = f"steelblue{random.randint(1000, 9999)}@mailinator.com"
-CRED_FILE = ROOT / "credentials-steelblue.json"
+# логическое имя аккаунта: на него завязаны пути файлов и GitHub-секреты
+ACCOUNT = sys.argv[6] if len(sys.argv) > 6 else os.environ.get("HERO_ACCOUNT", "steelblue")
+MAIL = f"{ACCOUNT}{random.randint(1000, 9999)}@mailinator.com"
+CRED_FILE = ROOT / f"credentials-{ACCOUNT}.json"
 
 
 def log(msg: str) -> None:
@@ -166,8 +171,8 @@ def main() -> int:
         log(f"ответ: {res.status_code} len={len(res.text)} url={res.url}")
         log("текст: " + text_of(res.text)[:600])
         set_password(session, res, PASSWORD)
-        (OUT / "registration-steelblue.html").write_text(res.text, encoding="utf-8")
-        (OUT / "registration-steelblue-session.json").write_text(
+        (OUT / f"registration-{ACCOUNT}.html").write_text(res.text, encoding="utf-8")
+        (OUT / f"registration-{ACCOUNT}-session.json").write_text(
             json.dumps({c.name: c.value for c in session.cookies}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )

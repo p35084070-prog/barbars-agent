@@ -1,0 +1,73 @@
+name: equip-hero
+
+# Герой забирает посылку с снаряжением и надевает комплект.
+# Экипировка работает только при `gear.auto_equip` в конфиге героя.
+# Запускается по cron: пока герой не дорос до уровня вещи, она просто ждёт.
+
+on:
+  schedule:
+    # раз в 2 часа: забрать посылки и надеть комплект, когда дойдёт до нужного уровня
+    - cron: '17 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      account:
+        description: 'Логическое имя аккаунта (config deploy/config-actions-<аккаунт>.json)'
+        required: true
+        default: 'steelblue'
+      hero_id:
+        description: 'ID героя'
+        default: '31390082'
+      equip:
+        description: 'Надеть вещи (true/false)'
+        default: 'true'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: equip-hero
+  cancel-in-progress: false
+
+jobs:
+  equip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Креды из секретов
+        env:
+          ACCOUNT: ${{ github.event.inputs.account || 'steelblue' }}
+          SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          if [ "$ACCOUNT" = "steelblue" ]; then
+            printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
+          else
+            LOGIN=$(printf '%s' "${{ secrets[format('BARBARS_{0}_LOGIN', env.ACCOUNT)] }}")
+            PASS=$(printf '%s' "${{ secrets[format('BARBARS_{0}_PASSWORD', env.ACCOUNT)] }}")
+            printf '%s\n%s\n' "$LOGIN" "$PASS" > "credentials/$ACCOUNT.txt"
+          fi
+          chmod 600 credentials/*.txt
+
+      - name: Забрать почту и надеть
+        env:
+          ACCOUNT: ${{ github.event.inputs.account || 'steelblue' }}
+          HERO_ID: ${{ github.event.inputs.hero_id || '31390082' }}
+          EQUIP: ${{ github.event.inputs.equip || 'true' }}
+        run: |
+          ARGS=""
+          if [ "$EQUIP" = "true" ]; then ARGS="--equip"; fi
+          python -u tools/equip_hero.py --config "deploy/config-actions-$ACCOUNT.json" \
+            --hero-id "$HERO_ID" $ARGS
