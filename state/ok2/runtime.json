@@ -1,7 +1,7 @@
 {
   "hero_maxima": {
-    "max_hp": 227,
-    "max_energy": 170
+    "max_hp": 2356,
+    "max_energy": 2417
   },
   "raid_roster": [
     {
@@ -26731,5 +26731,6 @@
     "closed_observed_at": 1794741740.2375903,
     "reopen_at": 1794741986.2375903
   },
-  "tower_paused": false
+  "tower_paused": false,
+  "raid_window": 997132
 }
