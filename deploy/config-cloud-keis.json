@@ -30,7 +30,7 @@
     "cycle_max_sec": 300
   },
   "raid": {
-    "enabled": true,
+    "enabled": false,
     "name": "Мифический дракон",
     "url": "https://barbars.ru/game/dragonDungeon",
     "check_interval_min": 5,
