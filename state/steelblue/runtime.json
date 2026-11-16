@@ -1,7 +1,7 @@
 {
   "hero_maxima": {
-    "max_hp": 402,
-    "max_energy": 216
+    "max_hp": 111,
+    "max_energy": 130
   },
-  "tower_paused": false
+  "tower_paused": true
 }
