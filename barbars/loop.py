@@ -908,6 +908,20 @@ class Agent:
         # may navigate there; background checks must not disrupt the party.
         state.raid = {}
 
+    def _raid_can_start(self, cfg: dict) -> bool:
+        """Может ли этот герой нажать «Начать бой!».
+
+        Начать бой в клановой пещере может только офицер/ветеран клана.
+        По умолчанию это `raid.leader`, но список `raid.starters` позволяет
+        добавить второго (например, Pandei — офицер клана), если основной
+        стартер не в игре: раньше рейд ждал только keis, а его прогоны часто
+        висели в очереди раннеров.
+        """
+        if not cfg.get("can_start", False):
+            return False
+        starters = cfg.get("starters") or [cfg.get("leader")]
+        return self.account in starters
+
     def _do_raid(self, decision: rules.Decision, state: rules.GameState) -> None:
         cfg = self.config.get("raid", {})
         if cfg.get("every_respawn"):
@@ -970,7 +984,7 @@ class Agent:
                     self.runtime["raid_roster"] = info["ready"]
                     self._save_runtime()
                 self.log("рейд: готовые: " + ", ".join(p.get("name", "?") for p in info.get("ready", [])))
-                leader = cfg.get("leader") == self.account and cfg.get("can_start", False)
+                leader = self._raid_can_start(cfg)
                 if leader and info.get("valid") and not info.get("closed") and not info.get("locked_out") and info.get("can_start") and party_ready(info, cfg):
                     active = {"window": window, "started_at": time.time(), "party": info["ready"]}
                     self.runtime["raid_active"] = active
@@ -1142,7 +1156,7 @@ class Agent:
                     self.runtime["raid_roster"] = info.get("ready", [])
                     self._save_runtime()
                     self.log("рейд: после возрождения готовые: " + ", ".join(p.get("name", "?") for p in info.get("ready", [])))
-                if (cfg.get("leader") == self.account and cfg.get("can_start")
+                if (self._raid_can_start(cfg)
                         and info.get("can_start") and info.get("hp") is not None
                         and info["hp"] > 0 and party_ready(info, cfg)):
                     kills_before = self.game.raid_clan_kills()
