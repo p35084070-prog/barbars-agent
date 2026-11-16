@@ -1,6 +1,7 @@
 """Explicit offline suite. Never collect or execute the live probe scripts."""
 import json
 import os
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -1461,3 +1462,29 @@ def test_event_urls_point_to_real_pages(name):
     assert urls["Арена"] == "https://barbars.ru/game/arena"
     assert urls["Выживание"] == "https://barbars.ru/game/survival"
     assert urls["Турнир героев"] == "https://barbars.ru/game/tournament/0/1"
+
+
+def test_real_fight_page_buttons_are_recognised_as_attacks():
+    # Настоящий HTML боевой страницы (fight_sample.html) и страница локации
+    # башни: детектор удара должен узнавать и «Бить …», и «Жечь энергию
+    # врагам» (у медика в башне другого удара нет вообще).
+    from barbars.driver import ATTACK_TEXT_PREFIXES, normalize_ru
+
+    html = (ROOT / "fight_sample.html").read_text(encoding="utf-8")
+    labels = re.findall(r'<span class="lbl">(.*?)</span>', html, re.S)
+    labels = [" ".join(l.split()) for l in labels]
+    assert any(l.startswith("Бить") for l in labels), labels
+    for label in labels:
+        low = normalize_ru(label)
+        if low.startswith(ATTACK_TEXT_PREFIXES):
+            break
+    else:
+        raise AssertionError(f"ни один бойвой текст не распознан: {labels}")
+
+
+def test_medic_tower_attack_is_recognised():
+    # «Жечь энергию врагам» (energyDamageRandomEnemyLink) — единственная
+    # боевая кнопка медика на странице локации башни.
+    from barbars.driver import ATTACK_TEXT_PREFIXES, normalize_ru
+    low = normalize_ru("Жечь энергию врагам")
+    assert low.startswith(ATTACK_TEXT_PREFIXES)
