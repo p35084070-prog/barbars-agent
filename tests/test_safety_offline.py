@@ -309,8 +309,12 @@ def agent(tmp_path, name=CONFIGS[0]):
     return Agent(game, cfg, tmp_path / "logs")
 
 
-def room(ids=("905853", "31389504", "1286381", "1596900"), ready=True):
-    names = {"905853": "keis", "31389504": "firewhite", "1286381": "vagojan", "1596900": "qdal"}
+PARTY_IDS = ("905853", "31389504", "1286381", "1596900", "11604269")
+
+
+def room(ids=PARTY_IDS, ready=True):
+    names = {"905853": "keis", "31389504": "firewhite", "1286381": "vagojan",
+             "1596900": "qdal", "11604269": "Pandei"}
     rows = "".join(f'<div><a href="../user/id/{i};jsessionid=REMOVED"><span>{names.get(i, "stranger")}</span></a>'
                    + ('<img src="/images/icons/check_green.png">' if ready else "")
                    + ('<img src="blue_healer.png">' if i == "905853" else '<img src="blue_warrior.png">') + "</div>" for i in ids)
@@ -320,10 +324,11 @@ def room(ids=("905853", "31389504", "1286381", "1596900"), ready=True):
 @pytest.mark.parametrize("name", CONFIGS)
 def test_cloud_policies(name):
     c = config(name)
-    assert c["raid"]["min_party"] == 4
+    assert c["raid"]["min_party"] == 5
     assert c["raid"]["can_start"] == (c["account"] == "keis")
     assert c["raid"]["leader"] == "keis"
-    assert {p["id"] for p in c["raid"]["party"]} == {"905853", "31389504", "1286381", "1596900"}
+    assert {p["id"] for p in c["raid"]["party"]} == set(PARTY_IDS)
+    assert sum(1 for p in c["raid"]["party"] if p.get("role") == "medic") == 1
     assert c["gear"]["keep_mythic"] and not c["gear"]["sell_store"] and not c["gear"]["auto_equip"]
     assert c["scrolls"]["mode"] == "discard"
     assert c["spend"]["buy_iron"]["max_gold"] == 1
@@ -332,7 +337,8 @@ def test_cloud_policies(name):
 
 
 @pytest.mark.parametrize("ids,allowed", [
-    (("905853", "31389504", "1286381", "1596900"), True),
+    (PARTY_IDS, True),
+    (("905853", "31389504", "1286381", "1596900"), False),
     (("905853", "31389504", "1286381"), False),
     (("905853", "31389504"), False),
     (("31389504", "1286381", "999"), False),
@@ -822,15 +828,15 @@ def test_respawn_mode_restores_active_battle(tmp_path):
 
 
 @pytest.mark.parametrize("name", CONFIGS)
-def test_live_configs_have_raid_paused(name):
-    # По решению игрока рейд на дракона на паузе: включаем обратно одной строкой.
+def test_live_configs_have_raid_armed_for_five(name):
+    # Рейд на мифического дракона включён по решению игрока: ждём пещеру Pandei.
     cfg = config(name)
-    assert cfg["raid"]["enabled"] is False
+    assert cfg["raid"]["enabled"] is True
     assert cfg["raid"]["every_respawn"] is False
     assert cfg["raid"]["max_fights_per_day"] == 0
-    # Алгоритм рейда сохранён: режим возрождения и состав четвёрки на месте.
     assert cfg["raid"]["party"], "состав рейда должен остаться в конфиге"
-    assert cfg["raid"]["min_party"] == 4
+    assert cfg["raid"]["min_party"] == 5
+    assert len(cfg["raid"]["party"]) == 5
 
 
 @pytest.mark.parametrize("icon,tier", [
