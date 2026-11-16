@@ -27140,7 +27140,7 @@
   "raid_reopen_at": 1794740490.1873267,
   "raid_published_reopen_at": 1794740490.7058003,
   "hero_maxima": {
-    "max_hp": 2402,
+    "max_hp": 3222,
     "max_energy": 2277
   },
   "raid_wait_for_closed_since": 0,
@@ -27150,5 +27150,5 @@
     "reopen_at": 1794744449.0236561
   },
   "raid_assembly_since": 1794747863.457062,
-  "raid_window": 997129
+  "raid_window": 997132
 }
