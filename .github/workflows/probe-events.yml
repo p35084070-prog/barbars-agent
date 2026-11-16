@@ -14,6 +14,9 @@ on:
       heroes:
         description: 'Каких героев опрашивать (keis,fw,sb)'
         default: 'keis,fw,sb'
+      click_url:
+        description: 'Страница, где дополнительно кликнуть по локации (например /game/towers)'
+        default: ''
 
 permissions:
   contents: read
@@ -58,6 +61,7 @@ jobs:
         env:
           URLS: ${{ github.event.inputs.urls }}
           HEROES: ${{ github.event.inputs.heroes }}
+          CLICK_URL: ${{ github.event.inputs.click_url }}
         run: |
           set -e
           for hero in $(echo "$HEROES" | tr ',' ' '); do
@@ -69,7 +73,11 @@ jobs:
             esac
             for url in $(echo "$URLS" | tr ',' ' '); do
               echo "===== $hero $url ====="
-              python -u tools/probe_user_page.py --config "$cfg" --label "${hero}${url//\//_}" --url "$url" || true
+              if [ "$url" = "$CLICK_URL" ]; then
+                python -u tools/probe_user_page.py --config "$cfg" --label "${hero}${url//\//_}" --url "$url" --click-location || true
+              else
+                python -u tools/probe_user_page.py --config "$cfg" --label "${hero}${url//\//_}" --url "$url" || true
+              fi
             done
           done
 
