@@ -1101,10 +1101,15 @@ class CombatPolicy:
         # Энергия должна быть почти максимальной: урон растёт с зарядом меча.
         # В бою с боссом окно попытки короткое: лечить (у медика удара нет)
         # надо сразу, а вот удар лучше делать с полным зарядом.
+        # ВАЖНО: ждать энергию можно, только если её реально видно. В боевой
+        # панели башни/дуэли иконка энергии часто отсутствует (значение 0) —
+        # раньше агент считал это «энергии нет» и вечно ждал, обрывая бой
+        # («энергия не растёт» → «прервано») вместо обычного удара.
         energy_max = state.max_energy or cs.our_energy or 0
         energy_now = cs.our_energy or 0
+        energy_known = bool(cs.our_energy) and energy_now > 0
         need_energy = not (force and not cs.attack_links)
-        if need_energy and energy_max and energy_now < energy_max * self.energy_threshold:
+        if need_energy and energy_known and energy_max and energy_now < energy_max * self.energy_threshold:
             return Decision("wait_energy", reason=f"ждём энергию {energy_now}/{energy_max}")
 
         if cs.attack_links:

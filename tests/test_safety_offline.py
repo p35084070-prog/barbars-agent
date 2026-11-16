@@ -1387,3 +1387,63 @@ def test_loop_leaves_chest_alone_when_disabled(tmp_path):
 def test_live_config_has_chest_cleanup_mode():
     cfg = json.loads((ROOT / "deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
     assert cfg["gear"]["chest_cleanup"] in ("crack", "drop", "off")
+
+
+# ---------------------------------------------------------------- бой: удар
+
+
+def _policy(cfg=None):
+    from barbars import rules
+    return rules.CombatPolicy(cfg or config())
+
+
+def test_unknown_energy_does_not_block_the_attack():
+    # В боевой панели башни/дуэли энергия часто не отображается (значение 0).
+    # Раньше агент считал это «энергии нет» и вечно ждал, обрывая бой.
+    cs = CombatState(attack_links=["Бить врага"], our_hp=100, our_energy=None)
+    state = rules.GameState(max_hp=100, max_energy=3000)
+    decision = _policy().choose(cs, Status(hp=100, energy=0), state)
+    assert decision.action == "attack"
+
+
+def test_known_low_energy_still_waits():
+    # Когда энергию видно и она мала — ждём, урон растёт с зарядом.
+    cs = CombatState(attack_links=["Бить врага"], our_hp=100, our_energy=100)
+    state = rules.GameState(max_hp=100, max_energy=3000)
+    decision = _policy().choose(cs, Status(hp=100, energy=100), state)
+    assert decision.action == "wait_energy"
+
+
+def test_fight_without_attack_gives_up_early(tmp_path):
+    # Бой без удара (у медика в башне) — не ждём лимит ходов, а выходим.
+    a = agent(tmp_path)
+    a.game.combat.side_effect = [
+        CombatState(heal_links=["Лечить союзника"], our_hp=100, our_energy=1000)
+        for _ in range(12)
+    ]
+    a.game.status.return_value = Status(hp=100, energy=1000)
+    with patch("barbars.loop.time.sleep"):
+        assert a._fight_loop(max_turns=50) == "нет удара"
+    a.game.click_text.assert_any_call("Покинуть бой")
+
+
+def test_tower_repeats_the_location_attack_after_a_failed_round(tmp_path):
+    # Медик в бою башни удара не имеет: после неудачного раунда выходим на
+    # страницу локации и жмём «Бить врагов» ещё раз.
+    a = agent(tmp_path)
+    a.game.hero_fatigue.return_value = 0
+    a.game.open_tower.return_value = "Долина Сражений"
+    a._fight_loop = Mock(return_value="нет удара")
+    a.game.click_href.return_value = True
+    a._do_tower(rules.Decision("tower"))
+    a.game.click_href.assert_any_call("damageRandomEnemyLink")
+
+
+def test_attack_hints_cover_tower_and_fight_buttons():
+    from barbars.driver import ATTACK_HREF_HINTS, ATTACK_LABELS, ATTACK_TEXT_PREFIXES
+    assert "damageRandomEnemyLink" in ATTACK_HREF_HINTS
+    assert "damageOgreLink" in ATTACK_HREF_HINTS
+    for label in ("Бить", "Атаковать", "Ударить", "Жечь"):
+        assert label in ATTACK_LABELS
+    for prefix in ("бить", "атаковать", "ударить", "напасть", "жечь"):
+        assert prefix in ATTACK_TEXT_PREFIXES

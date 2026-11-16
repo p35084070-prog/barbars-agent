@@ -1606,6 +1606,22 @@ class Agent:
             self.log(f"прокачка: улучшить {param} не удалось", "WARN")
             self.master_checked_at = 0.0
 
+    def _leave_fight(self) -> bool:
+        """Выйти из боя, если он не наш.
+
+        Герой, оставшийся в боевой панели, блокирует все следующие действия:
+        и башню, и события, и фарм. Поэтому любой неудачный исход боя должен
+        оставлять героя на обычной странице.
+        """
+        for label in ("Покинуть бой", "Отступить", "Сбежать", "Убежать"):
+            try:
+                if self.game.click_text(label):
+                    self.log("  вышли из боя")
+                    return True
+            except Exception:  # noqa: BLE001
+                continue
+        return False
+
     def _do_tower(self, decision: rules.Decision) -> None:
         """Фарм башни: бесплатный бой, капает опыт, железо, бутылочки и вещи."""
         if not self.config.get("tower_farm", {}).get("enabled"):
@@ -1626,14 +1642,23 @@ class Agent:
             self.log(f"башня: пауза до полного сброса усталости (сейчас {fatigue})")
             return
         rounds = 1  # no repeated entries without another fatigue check
+        tower_cfg = self.config.get("tower_farm", {}) or {}
+        tower_turns = int(tower_cfg.get("max_turns", 60))
         name = self.game.open_tower()
         if not name:
             self.log("башня: не удалось открыть локацию", "WARN")
             return
         for index in range(max(1, rounds)):
-            outcome = self._fight_loop()
+            outcome = self._fight_loop(max_turns=tower_turns)
             self.log(f"башня «{name}»: раунд {index + 1}/{rounds} — {outcome}")
-            if outcome in ("прервано", "отступление", "таймаут"):
+            if outcome in ("прервано", "отступление", "таймаут", "нет действий", "лимит ходов", "нет удара"):
+                # У медика в бою башни удара нет (в панели только лечение), и
+                # бой срывается по лимиту ходов. Выходим на страницу локации
+                # и жмём «Бить врагов» — это и есть основной фарм башни.
+                self._leave_fight()
+                if self.game.click_href("damageRandomEnemyLink"):
+                    self.log("башня: повторный удар по врагу")
+                    continue
                 break
             if not self.game.has_attack():
                 break
@@ -2080,6 +2105,7 @@ class Agent:
         last_log = ""
         stale_energy_checks = 0
         stalls = 0
+        no_attack_turns = 0
         last_energy = None
         damage = 0
         healing = 0
@@ -2137,6 +2163,18 @@ class Agent:
             if cs.finished and not cs.attack_links and not cs.heal_links:
                 self.log("  бой окончен")
                 return done("исход неизвестен" if force else "окончен")
+            if not force:
+                # Обычный бой без удара (у медика в башне удара нет) — дальше
+                # идти бессмысленно: герой только лечится и стоит до лимита
+                # ходов. Выходим, чтобы потратить время на другие активности.
+                if cs.attack_links:
+                    no_attack_turns = 0
+                else:
+                    no_attack_turns += 1
+                    if no_attack_turns >= 8:
+                        self.log("  в бою нет удара — выходим, чтобы не простаивать")
+                        self._leave_fight()
+                        return done("нет удара")
             status = self.game.status()
             base = getattr(self, "last_state", None) or rules.GameState()
             saved_maxima = self.runtime.get("hero_maxima", {})
@@ -2156,8 +2194,9 @@ class Agent:
             self.game.human.pause("fight")
             if decision.action == "attack":
                 turns += 1
-                if not self.game.click_attack():
+                if not self.game.click_attack(cs.attack_hrefs):
                     self.log("  не удалось ударить")
+                    self._leave_fight()
                     return done("прервано")
             elif decision.action == "ability":
                 turns += 1
@@ -2190,6 +2229,14 @@ class Agent:
                 # Энергия капает на сервере, но в HTML обновляется только при
                 # перезагрузке страницы — иначе цикл зависает на старом значении.
                 energy_now = cs.our_energy or 0
+                if not energy_now:
+                    # Энергия в боевой панели не читается — ждать нечего.
+                    # Раньше агент в этом месте ждал вечно и обрывал бой.
+                    self.log("  энергия не читается — бьём обычным ударом")
+                    if not self.game.click_attack(cs.attack_hrefs):
+                        self._leave_fight()
+                        return done("прервано")
+                    continue
                 if last_energy is not None and energy_now <= last_energy:
                     stale_energy_checks += 1
                 else:
@@ -2199,7 +2246,8 @@ class Agent:
                 time.sleep(self.config.get("fight", {}).get("energy_wait_sec", 3))
                 if stale_energy_checks >= 3:
                     self.log("  энергия не растёт — бьём принудительно")
-                    if not self.game.click_attack():
+                    if not self.game.click_attack(cs.attack_hrefs):
+                        self._leave_fight()
                         return done("прервано")
             else:
                 # В бою нет ни удара, ни умения (например, незнакомая вёрстка):
@@ -2207,6 +2255,7 @@ class Agent:
                 stalls += 1
                 if stalls >= 8:
                     self.log("  в бою нет доступных действий — выходим")
+                    self._leave_fight()
                     return done("нет действий")
                 self.log("  нет доступных действий в бою — ждём")
                 self.game.reload()

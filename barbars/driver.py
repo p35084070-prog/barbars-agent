@@ -25,6 +25,22 @@ BASE_URL = "https://barbars.ru/"
 # легендарку и эпику тоже держим целыми (обычный хлам ломаем).
 PROTECTED_ITEM_TIERS = ("мифический", "легендарный", "эпический")
 
+# Единый словарь боевых кнопок. Детектор (combat) и клик (click_attack)
+# обязаны использовать один и тот же список: раньше детектор ловил «Ударить»
+# и «Напасть», а клик искал только «Бить/Атаковать/Жечь/Ударить» и два
+# href — из-за этого бой обрывался на «прервано» и герой не получал опыта.
+ATTACK_LABELS = ("Бить", "Атаковать", "Атака", "Ударить", "Удар", "Напасть", "Жечь")
+ATTACK_HREF_HINTS = (
+    "damageRandomEnemyLink",
+    "damageTowerLink",
+    "damageOgreLink",
+    "damageEnemyLink",
+    "damageLink",
+    "attackLink",
+)
+# Начало текста боевой ссылки — по нему combat() признаёт удар.
+ATTACK_TEXT_PREFIXES = ("бить", "атаковать", "атака", "ударить", "удар", "напасть", "жечь")
+
 # Числовые значения в игре используют суффиксы: 52k = 52000, 1.5M = 1500000
 _NUM_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([kKmMgG]?)")
 
@@ -168,6 +184,7 @@ class CombatState:
     enemy_hp: int | None = None
     enemy_name: str = ""
     attack_links: list[str] = field(default_factory=list)
+    attack_hrefs: list[str] = field(default_factory=list)
     abilities: list[dict[str, Any]] = field(default_factory=list)
     heal_links: list[str] = field(default_factory=list)
     flee_links: list[str] = field(default_factory=list)
@@ -372,7 +389,12 @@ class Game:
 
     def has_attack(self) -> bool:
         """Есть ли на странице кнопка удара («Бить ...» / «Бить врагов»)."""
-        return self.p.locator("a:has-text('Бить'), button:has-text('Бить')").count() > 0
+        if self.p.locator("a[href*='damage'], a[href*='attack']").count() > 0:
+            return True
+        for label in ATTACK_LABELS:
+            if self.p.locator(f"a:has-text('{label}'), button:has-text('{label}')").count() > 0:
+                return True
+        return False
 
     def claim_daily_award(self) -> bool:
         """Ежедневная награда на главной (ссылка awardLink).
@@ -778,10 +800,12 @@ class Game:
                 continue  # это умение, его разбираем отдельно
             flat = text.split("\n")[0].strip()
             low = normalize_ru(text)
-            if low.startswith(("бить", "атаковать", "ударить", "напасть", "жечь")):
+            if low.startswith(ATTACK_TEXT_PREFIXES):
                 # «Жечь энергию врагам» — тоже боевое действие (осада башни),
                 # без него агент не понимает, что бой продолжается
                 cs.attack_links.append(flat)
+                if href:
+                    cs.attack_hrefs.append(href)
                 if text.startswith("Бить"):
                     cs.enemy_name = flat[len("Бить") :].strip()
             elif low.startswith("лечить"):
@@ -1003,17 +1027,28 @@ class Game:
         self.human.pause("fight")
         return True
 
-    def click_attack(self) -> bool:
+    def click_attack(self, hrefs: list[str] | None = None) -> bool:
         """Кликнуть по боевой кнопке.
 
         На странице локации башни есть две кнопки: «Бить врагов» (даёт опыт,
         железо и бутылочки) и «Бить башню» (захват башни). Сначала бьём врагов.
         Wicket перерисовывает страницу после каждого клика, поэтому кнопка
         может «протухнуть» — тогда ищем её заново и пробуем ещё раз.
+
+        `hrefs` — ссылки, которые парсер боя уже опознал как удар. Их кликаем
+        первыми: это гарантирует, что детектор и клик смотрят на одну и ту же
+        кнопку (раньше словари расходились, и бой обрывался на «прервано»).
         """
-        hrefs = ("damageRandomEnemyLink", "damageTowerLink")
+        tokens: list[str] = []
+        for href in list(hrefs or []):
+            for token in re.findall(r"[A-Za-z]+Link", href or ""):
+                if token not in tokens:
+                    tokens.append(token)
+        for token in ATTACK_HREF_HINTS:
+            if token not in tokens:
+                tokens.append(token)
         for attempt in range(2):
-            for href in hrefs:
+            for href in tokens:
                 locator = self.p.locator(f"a[href*='{href}']")
                 if locator.count() == 0:
                     continue
@@ -1028,7 +1063,21 @@ class Game:
                 self._settle()
                 self.human.pause("fight")
                 return True
-            for label in ("Бить", "Атаковать", "Жечь", "Ударить"):
+            # Общий признак боевой ссылки: любое действие damage*/attack*.
+            locator = self.p.locator("a[href*='damage'], a[href*='attack']")
+            if locator.count():
+                try:
+                    target = locator.first
+                    target.scroll_into_view_if_needed(timeout=3000)
+                    self.human.move_mouse_to(self.p, target)
+                    self.human.pause("fight")
+                    target.click(timeout=8000)
+                    self._settle()
+                    self.human.pause("fight")
+                    return True
+                except Exception:  # noqa: BLE001
+                    pass
+            for label in ATTACK_LABELS:
                 locator = self.p.locator(f"a:has-text('{label}'), button:has-text('{label}')")
                 if locator.count() == 0:
                     continue
