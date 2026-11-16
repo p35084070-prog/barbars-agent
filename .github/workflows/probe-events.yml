@@ -1,0 +1,82 @@
+name: probe-events
+
+# Разведка страниц событий (Арена, Турнир, Выживание, Подземелья, Великие битвы,
+# Замки, Битва героев) и страницы башни: снимаем все ссылки, кнопки и текст,
+# чтобы понять, почему агент пишет «нет кнопки входа» и «бой не начался».
+# Только чтение, вход в игру.
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: 'Страницы через запятую (без https://barbars.ru)'
+        default: '/game/arena,/game/tournament/0/1,/game/survival,/game/dungeons,/games/greats,/castle/6,/castle/8,/game/battle,/game/towers'
+      heroes:
+        description: 'Каких героев опрашивать (keis,fw,sb)'
+        default: 'keis,fw,sb'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-events
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Учётные данные из секретов
+        env:
+          KEIS_LOGIN: ${{ secrets.BARBARS_KEIS_LOGIN }}
+          KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
+          FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
+          FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
+          SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+        run: |
+          mkdir -p credentials
+          printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
+          printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
+          chmod 600 credentials/*.txt
+
+      - name: Страницы событий
+        env:
+          URLS: ${{ github.event.inputs.urls }}
+          HEROES: ${{ github.event.inputs.heroes }}
+        run: |
+          set -e
+          for hero in $(echo "$HEROES" | tr ',' ' '); do
+            case "$hero" in
+              keis) cfg=deploy/config-actions-keis.json ;;
+              fw)   cfg=deploy/config-actions-firewhite.json ;;
+              sb)   cfg=deploy/config-actions-steelblue.json ;;
+              *) echo "пропускаем неизвестного героя $hero"; continue ;;
+            esac
+            for url in $(echo "$URLS" | tr ',' ' '); do
+              echo "===== $hero $url ====="
+              python -u tools/probe_user_page.py --config "$cfg" --label "${hero}${url//\//_}" --url "$url" || true
+            done
+          done
+
+      - name: Логи
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-events-${{ github.run_number }}
+          path: logs
+          retention-days: 7
