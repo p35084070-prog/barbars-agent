@@ -600,6 +600,17 @@ def parse_battlefields(html: str, text: str = "") -> dict[str, Any]:
     m = re.search(r"Мои очки полей[:\s]*(\d+)", text, re.IGNORECASE)
     if m:
         points = int(m.group(1))
+    # Бан за «заход в битву без сражения»: «Вход на поля для тебя закрыт на 2д. 16ч.»
+    banned = False
+    ban_text = ""
+    m = re.search(
+        r"(Вход на поля\s+для тебя закрыт[^\n]{0,60})",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        banned = True
+        ban_text = " ".join(m.group(1).split())
     join: list[dict[str, str]] = []
     # Навигация вокруг страницы полей — не вход в бой. Раньше «Зайти в алтарь»
     # (ссылка на алтарь клана) попадала в список входа, и агент «вступал» туда.
@@ -628,11 +639,23 @@ def parse_battlefields(html: str, text: str = "") -> dict[str, Any]:
             continue
         if href_hit or label_hit:
             join.append({"label": label, "href": href})
+    # Бой идёт, но кнопки входа нет: значит, мы не участник (или уже не успели).
+    # Заходить на страницу в этот момент опасно — игра засчитывает «заход в
+    # битву без сражения» и банит вход на 2+ дня.
+    # Если же мы сами в бою (есть боевая панель) — это не «заход без сражения».
+    fight_markers = ("ты ударил", "вернуться в бой", "покинуть бой", "бьёшь", "ты атакуешь")
+    in_combat = any(mark in text.lower() for mark in fight_markers)
     return {
         "countdown": countdown,
         "fights_today": fights_today,
         "points": points,
         "join": join,
+        "banned": banned,
+        "ban_text": ban_text,
+        "in_combat": in_combat,
+        # Бой идёт, а мы не участники: ещё один заход на страницу засчитается
+        # как «зашёл в битву и не сражался» → бан. Держим паузу.
+        "fight_live": (not banned and not countdown and not join and not in_combat),
         "text": text[:400],
     }
 

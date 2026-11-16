@@ -792,6 +792,8 @@ def _pick_battlefields(state: GameState, config: dict[str, Any]) -> Decision | N
     info = state.battlefields or {}
     if not info:
         return None
+    if info.get("banned"):
+        return None  # игра закрыла вход на поля («заходил и не сражался»)
     countdown = str(info.get("countdown", "") or "")
     join = info.get("join") or []
     seconds = respawn_seconds(countdown) if countdown else None

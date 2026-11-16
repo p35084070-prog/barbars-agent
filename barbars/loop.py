@@ -48,6 +48,8 @@ class Agent:
         self.farm_streak: dict[str, int] = {}
         # состояние Полей сражений между проверками (кэш)
         self.battlefields_cache: dict[str, Any] = {}
+        # когда последний раз видели идущий бой, в который не вступили
+        self.battlefields_fight_seen_at: float = 0.0
         # зал кланового босса: кэш состояния и время последней проверки
         self.raid_cache: dict[str, Any] = {}
         self.raid_checked_at: float = 0.0
@@ -719,6 +721,13 @@ class Agent:
             state.battlefields = self.battlefields_cache
             state.bg_points = int(self.battlefields_cache.get("points", 0) or 0)
             return
+        # Пауза после боя, в который мы не вступили: каждый заход на страницу
+        # во время идущего боя засчитывается игрой как «зашёл и не сражался».
+        fight_pause = float(cfg.get("fight_live_pause_min", 45)) * 60
+        if self.battlefields_fight_seen_at and (now - self.battlefields_fight_seen_at) < fight_pause:
+            state.battlefields = self.battlefields_cache
+            state.bg_points = int(self.battlefields_cache.get("points", 0) or 0)
+            return
         self.battlefields_checked_at = now
         try:
             info = self.game.battlefields_state()
@@ -730,6 +739,22 @@ class Agent:
         state.battlefields = info
         state.bg_points = int(info.get("points", 0) or 0)
         countdown = str(info.get("countdown", "") or "")
+        if info.get("banned"):
+            # Игра закрыла вход на поля: «Вход на поля для тебя закрыт на 2д. 16ч.»
+            # Заходить на страницу бессмысленно (и вредно), поэтому проверяем редко.
+            self.log(f"поля сражений: {info.get('ban_text') or 'вход закрыт игрой'}", "WARN")
+            self.battlefields_checked_at = now
+            return
+        if info.get("fight_live"):
+            # Бой идёт, а мы не участники: ещё один заход на страницу засчитается
+            # как «зашёл в битву и не сражался» → бан. Держим паузу.
+            self.log(
+                "поля сражений: бой идёт, мы не вступили — уходим со страницы, "
+                "чтобы не получить бан",
+                "WARN",
+            )
+            self.battlefields_fight_seen_at = now
+            return
         self.log(
             "поля сражений: "
             + (f"бой через {countdown}" if countdown else "бой идёт")
@@ -769,6 +794,9 @@ class Agent:
         while True:
             countdown = str(info.get("countdown", "") or "")
             text = str(info.get("text", "") or "").lower()
+            if info.get("banned"):
+                self.log(f"поля сражений: {info.get('ban_text') or 'вход закрыт игрой'}", "WARN")
+                return
             if "закрыт" in text and "очки полей" not in text and not info.get("join"):
                 self.log("поля сражений: вход закрыт игрой", "WARN")
                 return
