@@ -67,7 +67,14 @@ def main() -> int:
             out["rack_text"] = " ".join(game.body_text().split())[:200]
             # освобождаем рюкзак: иначе посылки не влезают
             out["stashed"] = game.stash_items(keep=2, limit=20)
-            out["cracked"] = game.crack_items(limit=20)
+            # разбор (ломание) вещей — только если явно разрешён в конфиге:
+            # правило игрока «дубли вещей не трогаем»
+            gear_cfg = config.get("gear", {}) or {}
+            if bool(gear_cfg.get("crack", True)):
+                out["cracked"] = game.crack_items(limit=20)
+            else:
+                out["cracked"] = 0
+                out["crack_skipped"] = "gear.crack=false"
             game.goto("https://barbars.ru/user/mail")
             out["mail_text"] = " ".join(game.body_text().split())[:600]
             links = []
