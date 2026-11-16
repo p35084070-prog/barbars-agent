@@ -60,7 +60,7 @@ jobs:
         run: |
           set -e
           mkdir -p credentials
-          # пригласитель: прямые ссылки на секреты (динамический ${{ secrets[...] }} пустой)
+          # пригласитель: прямые ссылки на секреты (динамический доступ пустой)
           case "$INVITER" in
             keis)      INV_LOGIN="${{ secrets.BARBARS_KEIS_LOGIN }}";      INV_PASS="${{ secrets.BARBARS_KEIS_PASSWORD }}" ;;
             firewhite) INV_LOGIN="${{ secrets.BARBARS_FIREWHITE_LOGIN }}"; INV_PASS="${{ secrets.BARBARS_FIREWHITE_PASSWORD }}" ;;
