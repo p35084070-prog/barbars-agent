@@ -1429,14 +1429,16 @@ def test_fight_without_attack_gives_up_early(tmp_path):
 
 def test_tower_repeats_the_location_attack_after_a_failed_round(tmp_path):
     # Медик в бою башни удара не имеет: после неудачного раунда выходим на
-    # страницу локации и жмём «Бить врагов» ещё раз.
+    # страницу локации и жмём боевую кнопку ещё раз («Бить врагов» /
+    # «Жечь энергию врагам»).
     a = agent(tmp_path)
     a.game.hero_fatigue.return_value = 0
     a.game.open_tower.return_value = "Долина Сражений"
     a._fight_loop = Mock(return_value="нет удара")
-    a.game.click_href.return_value = True
+    a.game.click_tower_attack.return_value = True
     a._do_tower(rules.Decision("tower"))
-    a.game.click_href.assert_any_call("damageRandomEnemyLink")
+    a.game.click_tower_attack.assert_called()
+    a.game.click_text.assert_any_call("Покинуть бой")
 
 
 def test_attack_hints_cover_tower_and_fight_buttons():
@@ -1447,3 +1449,15 @@ def test_attack_hints_cover_tower_and_fight_buttons():
         assert label in ATTACK_LABELS
     for prefix in ("бить", "атаковать", "ударить", "напасть", "жечь"):
         assert prefix in ATTACK_TEXT_PREFIXES
+
+
+@pytest.mark.parametrize("name", CONFIGS)
+def test_event_urls_point_to_real_pages(name):
+    # Проверено пробой 16.11: /game/dungeons — это список боссов, а обычные
+    # подземелья лежат на /game/dungeons/1/1 (там кнопки «Войти»).
+    cfg = config(name)
+    urls = {e["name"]: e["url"] for e in cfg["farm"]["events"]}
+    assert urls["Подземелья (Время)"] == "https://barbars.ru/game/dungeons/1/1"
+    assert urls["Арена"] == "https://barbars.ru/game/arena"
+    assert urls["Выживание"] == "https://barbars.ru/game/survival"
+    assert urls["Турнир героев"] == "https://barbars.ru/game/tournament/0/1"

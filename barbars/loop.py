@@ -1656,7 +1656,7 @@ class Agent:
                 # бой срывается по лимиту ходов. Выходим на страницу локации
                 # и жмём «Бить врагов» — это и есть основной фарм башни.
                 self._leave_fight()
-                if self.game.click_href("damageRandomEnemyLink"):
+                if self.game.click_tower_attack():
                     self.log("башня: повторный удар по врагу")
                     continue
                 break
@@ -1902,6 +1902,14 @@ class Agent:
         result = self.game.enter_activity(url, wait_sec=wait_sec)
         if not result.get("ok"):
             note = result.get("note") or result.get("stage") or "недоступно"
+            if result.get("wait_timer"):
+                # Глобальная битва с таймером («через 23:45:21») — входа ещё
+                # нет, это не поломка. Откладываем событие надолго и идём дальше.
+                self.farm_cooldown[name] = time.time() + max(retry, 60) * 60
+                self.farm_streak[name] = 0
+                self.log(f"событие «{name}»: {note} — вернёмся позже", "INFO")
+                self._maybe_tower()
+                return
             self.farm_cooldown[name] = time.time() + retry * 60
             self.farm_streak[name] = 0
             self.log(f"событие «{name}» недоступно: {note} (пропустим {retry} мин)", "INFO")

@@ -1097,6 +1097,33 @@ class Game:
                 self.reload()
         return False
 
+    def click_tower_attack(self) -> bool:
+        """Нажать боевую кнопку на странице локации башни.
+
+        У воина это «Бить врагов» (`damageRandomEnemyLink`). У медика удара
+        нет вовсе — только «Жечь энергию врагам»
+        (`energyDamageRandomEnemyLink`) и лечение. Поэтому ищем сначала
+        обычную атаку, потом любую боевую ссылку (в href есть «amage» или
+        «ttack» — регистр не важен), и лишь затем идём по подписям.
+        """
+        if self.click_href("damageRandomEnemyLink"):
+            return True
+        for pattern in ("amage", "ttack"):
+            locator = self.p.locator(f"a[href*='{pattern}']")
+            if locator.count():
+                try:
+                    target = locator.first
+                    target.scroll_into_view_if_needed(timeout=3000)
+                    self.human.move_mouse_to(self.p, target)
+                    self.human.pause("fight")
+                    target.click(timeout=8000)
+                    self._settle()
+                    self.human.pause("fight")
+                    return True
+                except Exception:  # noqa: BLE001
+                    continue
+        return self.click_attack()
+
     def donate_clan(self, kind: str = "iron", amount: int | None = None) -> int | None:
         """Вложить ресурсы в хранилище клана.
 
@@ -2861,12 +2888,17 @@ class Game:
             return result
 
         entered = False
-        # арена и выживание: если мы уже в очереди («Очередь: 1 из 8»), бой
-        # начнётся сам — ждём, ничего не нажимая (кнопка «Новый бой» сбросила бы
-        # очередь, и мы бы потеряли место)
+        # арена и выживание: страница с очередью («Очередь: 1 из 8») и кнопкой
+        # «Встать в очередь» (joinQueueLink). Раньше агент в очередь не вставал
+        # и просто ждал боя, которого не будет — «бой не начался за отведённое
+        # время». Теперь встаём в очередь и ждём, пока начнётся бой.
+        # Если мы УЖЕ в очереди (кнопки нет, но «Очередь:» есть) — ничего не
+        # нажимаем: «Новый бой» сбросил бы очередь, и мы бы потеряли место.
         text = self.body_text()
         if "Очередь:" in text:
             result["stage"] = "очередь"
+            if self.click_href("joinQueueLink"):
+                result["stage"] = "встали в очередь"
             deadline = time.time() + max(10, wait_sec)
             while time.time() < deadline:
                 if self.has_combat_button():
@@ -2877,7 +2909,26 @@ class Game:
             result["note"] = "бой не начался за отведённое время"
             return result
 
-        for label in ("Начать бой!", "Новый бой", "Войти в замок", "Войти", "Встать в очередь"):
+        # Глобальные битвы с таймером («Битва начнётся через: 23:45:21») —
+        # входа сейчас нет, ждать тут бессмысленно. Помечаем, чтобы агент не
+        # считал это поломкой и не тратил время на пустые попытки.
+        m_timer = re.search(r"через\s+(\d{1,2}:\d{2}(?::\d{2})?)", text)
+        if m_timer and not self.has_combat_button():
+            result["stage"] = "ждём таймер"
+            result["note"] = f"битва начнётся через {m_timer.group(1)}"
+            result["wait_timer"] = True
+            return result
+
+        # Турнир между забегами: страница с итогами прошлого турнира, входа
+        # нет до начала нового — это не поломка.
+        if "завершился" in text.lower() and not self.has_combat_button():
+            result["stage"] = "ждём турнир"
+            result["note"] = "турнир завершён, ждём следующий"
+            result["wait_timer"] = True
+            return result
+
+        for label in ("Начать бой!", "Новый бой", "Войти в замок", "Войти", "Встать в очередь",
+                      "Участвовать", "Принять участие", "В бой!"):
             # вход может быть платным (золото или серебро) — по правилам игрока
             # за вход не платим, поэтому такие кнопки пропускаем
             if self._click_any_text(label, avoid_gold=True, avoid_paid=True):

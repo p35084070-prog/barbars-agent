@@ -201,8 +201,7 @@
         "url": "https://barbars.ru/game/arena"
       },
       {
-        "name": "Турниры",
-        "url": "https://barbars.ru/game/contests"
+        "name": "Турнир героев", "url": "https://barbars.ru/game/tournament/0/1"
       },
       {
         "name": "Выживание",
@@ -210,7 +209,7 @@
       },
       {
         "name": "Подземелья (Время)",
-        "url": "https://barbars.ru/game/dungeons"
+        "url": "https://barbars.ru/game/dungeons/1/1"
       },
       {
         "name": "Великие битвы",
