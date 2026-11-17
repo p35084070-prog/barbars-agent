@@ -484,7 +484,41 @@ class Game:
         self.human.pause("page")
         return self.has_damage_attack()
 
-    def open_tower(self, max_attempts: int = 8) -> str | None:
+    def _tower_attempt(self, map_index: int, near_index: int | None) -> tuple[bool, str]:
+        """Зайти на карту башен и открыть локацию (и нужную сторону).
+
+        Возвращает (нашли_ли_удар, название_локации).
+        """
+        self.goto("https://barbars.ru/game/towers")
+        try:
+            links = self.p.locator("a[href*='locationLink']")
+            count = links.count()
+        except Exception:  # noqa: BLE001
+            return False, ""
+        if count == 0:
+            return False, ""
+        target = links.nth(min(map_index, count - 1))
+        name = self._link_text(target)
+        if self._try_tower_location(target):
+            return True, name
+        if near_index is None:
+            return False, name
+        # На странице локации есть соседние стороны: красная («Курган») —
+        # как раз там, где можно бить врагов.
+        try:
+            near = self.p.locator("a[href*='locationLink']")
+            near_count = near.count()
+        except Exception:  # noqa: BLE001
+            near_count = 0
+        if near_count == 0:
+            return False, name
+        near_target = near.nth(min(near_index, near_count - 1))
+        near_name = self._link_text(near_target)
+        if self._try_tower_location(near_target):
+            return True, near_name or name
+        return False, near_name or name
+
+    def open_tower(self, max_attempts: int = 6) -> str | None:
         """Открыть локацию башни, где можно бить врагов (/game/towers).
 
         Бой на башне бесплатный и длительный: капает опыт, железо, бутылочки
@@ -496,41 +530,37 @@ class Game:
         `locationLink` и упирался в «нет удара», хотя на соседней красной
         стороне удар был. Поэтому перебираем локации (и соседние стороны на
         странице локации), пока не найдём ту, где есть видимая кнопка удара.
+
+        Найденный маршрут запоминаем — в следующий раз сразу идём на красную
+        сторону. Если удара нет нигде (медик), не ищем 15 минут подряд.
         """
-        attempts = 0
-        last_name = ""
-        while attempts < max_attempts:
-            self.goto("https://barbars.ru/game/towers")
-            try:
-                links = self.p.locator("a[href*='locationLink']")
-                count = links.count()
-            except Exception:  # noqa: BLE001
-                break
-            if count == 0:
-                break
-            target = links.nth(min(attempts, count - 1))
-            name = self._link_text(target)
-            attempts += 1
-            if self._try_tower_location(target):
+        if time.time() < getattr(self, "_tower_no_attack_until", 0.0):
+            return None
+        route = getattr(self, "_tower_route", None)
+        if route:
+            ok, name = self._tower_attempt(route[0], route[1])
+            if ok:
                 return name or "башня"
-            last_name = name
-            # На странице локации есть соседние стороны: красная («Курган»)
-            # — как раз там, где можно бить врагов.
-            try:
-                near = self.p.locator("a[href*='locationLink']")
-                near_count = near.count()
-            except Exception:  # noqa: BLE001
-                near_count = 0
-            for index in range(min(near_count, 3)):
+        attempts = 0
+        map_index = 0
+        while attempts < max_attempts:
+            ok, name = self._tower_attempt(map_index, None)
+            attempts += 1
+            if ok:
+                self._tower_route = (map_index, None)
+                return name or "башня"
+            for near_index in range(3):
                 if attempts >= max_attempts:
                     break
-                near_target = near.nth(index)
-                near_name = self._link_text(near_target)
+                ok, name = self._tower_attempt(map_index, near_index)
                 attempts += 1
-                if self._try_tower_location(near_target):
-                    return near_name or last_name or "башня"
-                last_name = near_name
-        return last_name or None
+                if ok:
+                    self._tower_route = (map_index, near_index)
+                    return name or "башня"
+            map_index += 1
+        # Удара не нашлось нигде — не тратим время на повторный поиск
+        self._tower_no_attack_until = time.time() + 900
+        return None
 
     def has_text(self, needle: str) -> bool:
         return needle.lower() in self.body_text().lower()

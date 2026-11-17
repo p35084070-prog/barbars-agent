@@ -44,7 +44,7 @@ from urllib.parse import urljoin
 
 from playwright.sync_api import Frame, Page, sync_playwright
 
-from .driver import ATTACK_LABELS, Game, GameError
+from .driver import ATTACK_LABELS, Game, GameError, _is_visible
 
 IPHONE_UA = (
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 "
@@ -493,7 +493,33 @@ class OkGame(Game):
 
         `hrefs` — ссылки, которые парсер боя уже опознал как удар: кликаем
         их первыми, чтобы детектор и клик смотрели на одну кнопку.
+
+        Кликаем только ВИДИМЫЕ ссылки: на странице башни в разметке есть
+        скрытая (`display:none`) копия кнопки удара, клик по ней не срабатывает.
         """
+        tokens: list[str] = []
+        for href in list(hrefs or []):
+            for token in re.findall(r"[A-Za-z]+Link", href or ""):
+                if token not in tokens:
+                    tokens.append(token)
+        for token in tokens:
+            try:
+                candidates = self.p.locator(f"a[href*='{token}']").all()
+            except Exception:  # noqa: BLE001
+                candidates = []
+            for target in candidates:
+                try:
+                    if not _is_visible(target):
+                        continue
+                    target.scroll_into_view_if_needed(timeout=3000)
+                    self.human.move_mouse_to(self.p, target)
+                    self.human.pause("fight")
+                    target.click(timeout=8000)
+                    self._settle()
+                    self.human.pause("fight")
+                    return True
+                except Exception:  # noqa: BLE001
+                    continue
         for href in list(hrefs or []):
             for token in re.findall(r"[A-Za-z]+Link", href or ""):
                 selector = f"a[href*='{token}']"
@@ -504,6 +530,8 @@ class OkGame(Game):
         for label in ATTACK_LABELS:
             for target in self._find_text_elements((label,), prefix=True):
                 try:
+                    if not _is_visible(target):
+                        continue
                     target.scroll_into_view_if_needed(timeout=3000)
                     self.human.move_mouse_to(self.p, target)
                     self.human.pause("fight")
