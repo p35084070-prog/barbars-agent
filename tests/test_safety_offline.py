@@ -1554,16 +1554,16 @@ def test_timer_is_found_with_and_without_colon():
     assert find_timer("обычный текст без таймера") is None
 
 
-def test_medic_tower_is_skipped_without_damage_attack(tmp_path):
-    # У медика в башне только «Жечь энергию врагам» — урона нет, башня
-    # ему не подходит: лучше идти в события.
+def test_medic_stays_in_tower_with_energy_burn(tmp_path):
+    # У медика удара нет — только «Жечь энергию врагам». Но башня медику тоже
+    # капает опыт (за ночь он на нём поднялся), поэтому не выходим, а качаемся.
     a = agent(tmp_path)
     a.game.hero_fatigue.return_value = 0
     a.game.open_tower.return_value = "Долина Сражений"
     a.game.has_damage_attack.return_value = False
-    a._fight_loop = Mock()
+    a._fight_loop = Mock(return_value="победа")
     a._do_tower(rules.Decision("tower"))
-    a._fight_loop.assert_not_called()
+    a._fight_loop.assert_called()
     a.game.click_text.assert_any_call("Покинуть бой")
 
 

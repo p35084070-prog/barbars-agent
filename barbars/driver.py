@@ -451,10 +451,24 @@ class Game:
         return [t.strip() for t in self.p.locator("a").all_inner_texts() if t.strip()]
 
     def has_attack(self) -> bool:
-        """Есть ли на странице кнопка удара («Бить ...» / «Бить врагов»)."""
-        if self.p.locator("a[href*='damage'], a[href*='attack']").count() > 0:
+        """Есть ли на странице кнопка удара («Бить ...» / «Бить врагов»).
+
+        Считаем только видимые кнопки: у скрытых (`display:none`) ссылок
+        нажать нельзя.
+        """
+        prefixes = tuple(_norm_text(x) for x in ATTACK_TEXT_PREFIXES)
+        for element in self.p.locator("a").all():
+            try:
+                href = element.get_attribute("href") or ""
+                text = _norm_text(element.inner_text() or "")
+            except Exception:  # noqa: BLE001
+                continue
+            if "damage" not in href and "attack" not in href and not text.startswith(prefixes):
+                continue
+            if not _is_visible(element):
+                continue
             return True
-        return bool(self._find_text_elements(ATTACK_LABELS, prefix=True))
+        return False
 
     def claim_daily_award(self) -> bool:
         """Ежедневная награда на главной (ссылка awardLink).
@@ -471,38 +485,42 @@ class Game:
         except Exception:  # noqa: BLE001
             return ""
 
-    def _try_tower_location(self, target: Any) -> bool:
-        """Кликнуть по ссылке локации башни. True — на странице есть удар."""
+    def _try_tower_location(self, target: Any) -> tuple[bool, bool]:
+        """Кликнуть по ссылке локации башни.
+
+        Возвращает (есть_ли_удар_по_врагу, есть_ли_любое_боевое_действие).
+        У воина на красной стороне есть «Бить врагов», у медика — только
+        «Жечь энергию врагам» (урон не наносит, но опыт капает).
+        """
         try:
             target.scroll_into_view_if_needed(timeout=3000)
             self.human.move_mouse_to(self.p, target)
             self.human.pause("action")
             target.click(timeout=8000)
         except Exception:  # noqa: BLE001
-            return False
+            return False, False
         self._settle()
         self.human.pause("page")
-        return self.has_damage_attack()
+        return self.has_damage_attack(), self.has_attack()
 
-    def _tower_attempt(self, map_index: int, near_index: int | None) -> tuple[bool, str]:
+    def _tower_attempt(self, map_index: int, near_index: int | None) -> tuple[bool, bool, str]:
         """Зайти на карту башен и открыть локацию (и нужную сторону).
 
-        Возвращает (нашли_ли_удар, название_локации).
+        Возвращает (удар_по_врагу, любое_боевое_действие, название_локации).
         """
         self.goto("https://barbars.ru/game/towers")
         try:
             links = self.p.locator("a[href*='locationLink']")
             count = links.count()
         except Exception:  # noqa: BLE001
-            return False, ""
+            return False, False, ""
         if count == 0:
-            return False, ""
+            return False, False, ""
         target = links.nth(min(map_index, count - 1))
         name = self._link_text(target)
-        if self._try_tower_location(target):
-            return True, name
-        if near_index is None:
-            return False, name
+        damage, action = self._try_tower_location(target)
+        if damage or action or near_index is None:
+            return damage, action, name
         # На странице локации есть соседние стороны: красная («Курган») —
         # как раз там, где можно бить врагов.
         try:
@@ -511,12 +529,11 @@ class Game:
         except Exception:  # noqa: BLE001
             near_count = 0
         if near_count == 0:
-            return False, name
+            return damage, action, name
         near_target = near.nth(min(near_index, near_count - 1))
         near_name = self._link_text(near_target)
-        if self._try_tower_location(near_target):
-            return True, near_name or name
-        return False, near_name or name
+        near_damage, near_action = self._try_tower_location(near_target)
+        return near_damage, near_action, near_name or name
 
     def open_tower(self, max_attempts: int = 6) -> str | None:
         """Открыть локацию башни, где можно бить врагов (/game/towers).
@@ -524,42 +541,54 @@ class Game:
         Бой на башне бесплатный и длительный: капает опыт, железо, бутылочки
         и выпадают вещи. Возвращает название локации либо None.
 
-        У башни две стороны: синяя (оборона) — там только лечение и
-        «Жечь энергию», и красная («Курган») — там «Бить врагов»
-        (`damageRandomEnemyLink`). Раньше агент кликал первую ссылку
-        `locationLink` и упирался в «нет удара», хотя на соседней красной
-        стороне удар был. Поэтому перебираем локации (и соседние стороны на
-        странице локации), пока не найдём ту, где есть видимая кнопка удара.
+        У башни две стороны: синяя (оборона) — там лечение и «Жечь энергию»,
+        красная («Курган») — там «Бить врагов» (`damageRandomEnemyLink`).
+        Раньше агент кликал первую ссылку `locationLink` и упирался в
+        «нет удара», хотя на соседней красной стороне удар был. Поэтому
+        перебираем локации (и соседние стороны на странице локации), пока
+        не найдём ту, где есть видимая кнопка удара.
 
-        Найденный маршрут запоминаем — в следующий раз сразу идём на красную
-        сторону. Если удара нет нигде (медик), не ищем 15 минут подряд.
+        Если удара нет нигде (медик keis) — остаёмся там, где есть «Жечь
+        энергию врагам»: опыт с башни медику тоже капает.
+
+        Найденный маршрут запоминаем — в следующий раз сразу идём на нужную
+        сторону, а не ищем её заново.
         """
-        if time.time() < getattr(self, "_tower_no_attack_until", 0.0):
-            return None
         route = getattr(self, "_tower_route", None)
         if route:
-            ok, name = self._tower_attempt(route[0], route[1])
-            if ok:
+            damage, action, name = self._tower_attempt(route[0], route[1])
+            if damage:
+                return name or "башня"
+        fallback = getattr(self, "_tower_fallback", None)
+        if fallback:
+            damage, action, name = self._tower_attempt(fallback[0], fallback[1])
+            if damage or action:
                 return name or "башня"
         attempts = 0
         map_index = 0
+        spare: tuple[int, int | None, str] | None = None
         while attempts < max_attempts:
-            ok, name = self._tower_attempt(map_index, None)
+            damage, action, name = self._tower_attempt(map_index, None)
             attempts += 1
-            if ok:
+            if damage:
                 self._tower_route = (map_index, None)
                 return name or "башня"
+            if action and spare is None:
+                spare = (map_index, None, name)
             for near_index in range(3):
                 if attempts >= max_attempts:
                     break
-                ok, name = self._tower_attempt(map_index, near_index)
+                damage, action, name = self._tower_attempt(map_index, near_index)
                 attempts += 1
-                if ok:
+                if damage:
                     self._tower_route = (map_index, near_index)
                     return name or "башня"
+                if action and spare is None:
+                    spare = (map_index, near_index, name)
             map_index += 1
-        # Удара не нашлось нигде — не тратим время на повторный поиск
-        self._tower_no_attack_until = time.time() + 900
+        if spare:
+            self._tower_fallback = (spare[0], spare[1])
+            return spare[2] or "башня"
         return None
 
     def has_text(self, needle: str) -> bool:
@@ -3097,8 +3126,9 @@ class Game:
             if self.click_href("joinQueueLink"):
                 result["stage"] = "встали в очередь"
             # в очереди игроков мало, бой может начаться не сразу — ждём
-            # заметно дольше обычного окна события
-            deadline = time.time() + max(wait_sec, 600)
+            # заметно дольше обычного окна события, но не 10 минут: иначе
+            # события съедают всю сессию и до башни герой не доходит
+            deadline = time.time() + max(wait_sec, 300)
             while time.time() < deadline:
                 if self.has_combat_button():
                     result.update(ok=True, stage="fight")
