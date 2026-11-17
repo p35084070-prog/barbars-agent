@@ -486,6 +486,21 @@ def test_local_only_config_mirrors_cloud_tasks(local, cloud):
     assert a["clan_quest"] == b["clan_quest"]
 
 
+def test_failed_exp_purchase_drops_stale_option(tmp_path):
+    """Неудачная покупка опыта не должна повторяться каждый цикл.
+
+    У мудреца набор вариантов меняется: если вариант устарел и его больше нет,
+    агент обязан выкинуть его из кэша, иначе он будет биться в стену вместо
+    боёв и заданий.
+    """
+    a = agent(tmp_path)
+    a.exp_cache = [{"amount": 10000, "percent": 5.0, "currency": "iron"}]
+    a.game.buy_exp_with_iron.return_value = {"ok": False, "message": "варианта «10000 железа» нет"}
+    a._do_exp(rules.Decision("exp", target="10000", params={"amount": 10000, "percent": 5.0}))
+    assert a.exp_cache == []
+    a.game.buy_exp_with_iron.assert_called_once_with(10000)
+
+
 def test_watchdog_never_touches_playwright_from_watchdog_thread(tmp_path):
     """Сторож не должен закрывать браузер через Playwright.
 

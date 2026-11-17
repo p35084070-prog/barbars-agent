@@ -1865,6 +1865,13 @@ class Agent:
             self.log(f"мудрец: куплен опыт за {amount} железа ({percent}% прокачки)")
         else:
             self.log(f"мудрец: покупка опыта не удалась — {result.get('message')}", "WARN")
+            # Вариант мог устареть (у мудреца их набор меняется). Если оставить
+            # его в кэше, агент будет пробовать купить несуществующий вариант
+            # каждый цикл и не займётся боями и заданиями. Убираем вариант из
+            # кэша и перепроверяем список пораньше.
+            self.exp_cache = [o for o in self.exp_cache if o.get("amount") != amount]
+            interval = float(self.config.get("exp", {}).get("check_interval_min", 60)) * 60
+            self.exp_checked_at = time.time() - max(0.0, interval - 300)
 
     def _do_sell(self, decision: rules.Decision) -> None:
         """Выставление лота на аукционе ресурсов (мифрил/бутылочки)."""
