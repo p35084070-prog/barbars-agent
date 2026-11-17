@@ -29,7 +29,7 @@ PROTECTED_ITEM_TIERS = ("мифический", "легендарный", "эп�
 # обязаны использовать один и тот же список: раньше детектор ловил «Ударить»
 # и «Напасть», а клик искал только «Бить/Атаковать/Жечь/Ударить» и два
 # href — из-за этого бой обрывался на «прервано» и герой не получал опыта.
-ATTACK_LABELS = ("Бить", "Атаковать", "Атака", "Ударить", "Удар", "Напасть", "Жечь")
+ATTACK_LABELS = ("Бить", "Добивать", "Атаковать", "Атака", "Ударить", "Удар", "Напасть", "Жечь")
 # Порядок важен: сначала удар по врагу (даёт опыт), штурм башни («Бить
 # башню») — в самом конце: это не фарм, и по нему можно потратить ресурсы.
 ATTACK_HREF_HINTS = (
@@ -41,7 +41,8 @@ ATTACK_HREF_HINTS = (
     "damageTowerLink",
 )
 # Начало текста боевой ссылки — по нему combat() признаёт удар.
-ATTACK_TEXT_PREFIXES = ("бить", "атаковать", "атака", "ударить", "удар", "напасть", "жечь")
+# «Добивать» появляется после первого удара, когда враг ослаблен.
+ATTACK_TEXT_PREFIXES = ("бить", "добивать", "добить", "атаковать", "атака", "ударить", "удар", "напасть", "жечь")
 
 # Числовые значения в игре используют суффиксы: 52k = 52000, 1.5M = 1500000
 _NUM_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([kKmMgG]?)")
@@ -537,7 +538,7 @@ class Game:
         near_damage, near_action = self._try_tower_location(near_target)
         return near_damage, near_action, near_name or name
 
-    def open_tower(self, max_attempts: int = 6) -> str | None:
+    def open_tower(self, max_attempts: int = 12) -> str | None:
         """Открыть локацию башни, где можно бить врагов (/game/towers).
 
         Бой на башне бесплатный и длительный: капает опыт, железо, бутылочки
@@ -568,10 +569,18 @@ class Game:
                 return name or "башня"
         attempts = 0
         map_index = 0
+        tried = getattr(self, "_tower_tried", None)
+        if tried is None:
+            tried = set()
+            self._tower_tried = tried
         spare: tuple[int, int | None, str] | None = None
         while attempts < max_attempts:
+            if (map_index, None) in tried:
+                map_index += 1
+                continue
             damage, action, name = self._tower_attempt(map_index, None)
             attempts += 1
+            tried.add((map_index, None))
             if damage:
                 self._tower_route = (map_index, None)
                 return name or "башня"
@@ -580,8 +589,11 @@ class Game:
             for near_index in range(3):
                 if attempts >= max_attempts:
                     break
+                if (map_index, near_index) in tried:
+                    continue
                 damage, action, name = self._tower_attempt(map_index, near_index)
                 attempts += 1
+                tried.add((map_index, near_index))
                 if damage:
                     self._tower_route = (map_index, near_index)
                     return name or "башня"
@@ -961,7 +973,16 @@ class Game:
                 continue  # это умение, его разбираем отдельно
             flat = text.split("\n")[0].strip()
             low = normalize_ru(text)
-            if low.startswith(ATTACK_TEXT_PREFIXES):
+            # Удар опознаём и по подписи («Бить», «Добивать», «Жечь»), и по
+            # самой ссылке: после первого удара кнопка меняется на
+            # «Добивать <враг>» (`damageLastTargetLink`), и по подписи её
+            # раньше не узнавали — бой обрывался после первого удара.
+            href_low = href.lower()
+            is_attack = low.startswith(ATTACK_TEXT_PREFIXES) or (
+                ("damage" in href_low or "attack" in href_low)
+                and "damagetowerlink" not in href_low
+            )
+            if is_attack:
                 # «Жечь энергию врагам» — тоже боевое действие (осада башни),
                 # без него агент не понимает, что бой продолжается
                 cs.attack_links.append(flat)

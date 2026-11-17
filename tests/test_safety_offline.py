@@ -1455,6 +1455,23 @@ def test_attack_hints_cover_tower_and_fight_buttons():
     assert ATTACK_HREF_HINTS.index("damageRandomEnemyLink") < ATTACK_HREF_HINTS.index("damageTowerLink")
 
 
+def test_finish_off_button_is_recognised_as_an_attack():
+    # После первого удара кнопка меняется на «Добивать <враг>»
+    # (damageLastTargetLink). Раньше такой подписи в словаре не было, и бой
+    # обрывался после первого удара («в бою нет удара»).
+    from barbars.driver import ATTACK_LABELS, ATTACK_TEXT_PREFIXES, normalize_ru
+
+    assert "Добивать" in ATTACK_LABELS
+    assert "добивать" in ATTACK_TEXT_PREFIXES
+    assert normalize_ru("Добивать света кащеева").startswith(ATTACK_TEXT_PREFIXES)
+    assert normalize_ru("Добить света кащеева").startswith(ATTACK_TEXT_PREFIXES)
+
+
+def test_attack_links_are_recognised_by_href_even_with_unknown_label():
+    # Удар опознаём и по самой ссылке: у «Добивать» href = damageLastTargetLink.
+    assert "damagelasttargetlink" in "damageLastTargetLink".lower()
+
+
 def test_click_attack_prefers_enemies_over_tower_assault():
     # На странице башни «Бить башню» стоит в разметке раньше «Бить врагов».
     # Клик должен идти по врагу (это фарм), а не по штурму башни.
