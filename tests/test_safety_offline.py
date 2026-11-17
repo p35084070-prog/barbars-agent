@@ -458,9 +458,31 @@ HERO_CONFIGS = [
 
 @pytest.mark.parametrize("name", HERO_CONFIGS)
 def test_every_hero_takes_personal_and_clan_quests(name):
+    if not (ROOT / name).exists():
+        pytest.skip(f"{name} is a local-only config (gitignored), not shipped to CI")
     c = config(name)
     assert c["personal_quest"]["enabled"] is True
     assert c["clan_quest"]["enabled"] is True
+
+
+# Локальные конфиги keis/firewhite/vagojan в .gitignore, поэтому в CI их нет.
+# Их облачные копии обязаны нести те же блоки заданий.
+LOCAL_ONLY_CONFIG_MIRRORS = [
+    ("config.json", "deploy/config-cloud-keis.json"),
+    ("config-firewhite.json", "deploy/config-cloud-firewhite.json"),
+    ("config-vagojan.json", "deploy/config-cloud-vagojan.json"),
+]
+
+
+@pytest.mark.parametrize("local,cloud", LOCAL_ONLY_CONFIG_MIRRORS)
+def test_local_only_config_mirrors_cloud_tasks(local, cloud):
+    local_path = ROOT / local
+    if not local_path.exists():
+        pytest.skip(f"{local} is a local-only config (gitignored)")
+    a = json.loads(local_path.read_text(encoding="utf-8"))
+    b = config(cloud)
+    assert a["personal_quest"] == b["personal_quest"]
+    assert a["clan_quest"] == b["clan_quest"]
 
 
 @pytest.mark.parametrize("ids,allowed", [
