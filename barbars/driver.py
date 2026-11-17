@@ -819,6 +819,26 @@ class Game:
         print(f"[перезапуск] не удалось: {last_error}")
         return False
 
+    def return_to_fight(self) -> bool:
+        """Вернуться в бой, если игра увела на карту башни.
+
+        После действия в башне игра возвращает на страницу локации, где
+        боевая панели нет — только ссылка «Вернуться в бой»
+        (`currentGameLink`). Без неё агент не находит кнопку удара и
+        заканчивает бой ничьёй.
+        """
+        try:
+            link = self.p.locator("a[href*='currentGameLink']").first
+            if link.count() == 0:
+                return False
+            link.scroll_into_view_if_needed(timeout=3000)
+            link.click(timeout=8000)
+            self.p.wait_for_load_state("domcontentloaded", timeout=15000)
+            self._settle()
+            return True
+        except Exception:
+            return False
+
     @staticmethod
     def _reset_async_loop() -> None:
         """Снять «зависший» asyncio-цикл в текущем потоке.

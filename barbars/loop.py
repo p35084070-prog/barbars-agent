@@ -2320,6 +2320,12 @@ class Agent:
                     self.log("  в бою нет доступных действий — выходим")
                     self._leave_fight()
                     return done("нет действий")
+                # после действия игра иногда уводит на карту башни — там нет
+                # боевой панели, но есть ссылка «Вернуться в бой»
+                if self.game.return_to_fight():
+                    self.log("  вернулись в бой")
+                    time.sleep(1)
+                    continue
                 self.log("  нет доступных действий в бою — ждём")
                 self.game.reload()
                 time.sleep(2)

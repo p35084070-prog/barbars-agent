@@ -546,6 +546,56 @@ def test_local_only_config_mirrors_cloud_tasks(local, cloud):
     assert a["clan_quest"] == b["clan_quest"]
 
 
+class _FakeLink:
+    def __init__(self, present: bool):
+        self._present = present
+        self.clicked = False
+
+    def count(self) -> int:
+        return 1 if self._present else 0
+
+    def scroll_into_view_if_needed(self, timeout: int = 3000) -> None:
+        return None
+
+    def click(self, timeout: int = 8000) -> None:
+        self.clicked = True
+
+
+class _FakePage:
+    def __init__(self, present: bool):
+        self.link = _FakeLink(present)
+
+    def locator(self, selector: str):
+        return self
+
+    @property
+    def first(self):
+        return self.link
+
+    def wait_for_load_state(self, *a, **kw) -> None:
+        return None
+
+
+def _fake_game(present: bool) -> Game:
+    prof = str(Path(ROOT) / "tmp-profile-test")
+    g = Game({"profile_dir": prof}, prof)
+    g.page = _FakePage(present)
+    return g
+
+
+def test_return_to_fight_follows_current_game_link():
+    """После действия игра уводит на карту башни — там есть «Вернуться в бой»."""
+    g = _fake_game(True)
+    assert g.return_to_fight() is True
+    assert g.p.link.clicked is True
+
+
+def test_return_to_fight_is_noop_without_link():
+    g = _fake_game(False)
+    assert g.return_to_fight() is False
+    assert g.p.link.clicked is False
+
+
 def test_failed_exp_purchase_drops_stale_option(tmp_path):
     """Неудачная покупка опыта не должна повторяться каждый цикл.
 
