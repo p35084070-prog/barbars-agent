@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -732,6 +733,38 @@ class Game:
         except Exception:
             return False
 
+    def kill_browser_processes(self) -> int:
+        """Убить процессы браузера этого профиля, не трогая Playwright.
+
+        Вызывается из сторожевого потока агента: синхронный API Playwright
+        привязан к потоку, в котором создан, и обращение к нему из чужого
+        потока ломает восстановление («It looks like you are using Playwright
+        Sync API inside the asyncio loop» — после этого `start()` больше не
+        работает, и агент остаётся мёртвым до конца сессии). Поэтому из
+        чужого потока мы работаем только с процессами ОС: браузер умирает,
+        зависший вызов в основном потоке падает, а перезапуск делает уже
+        основной поток.
+        """
+        import subprocess
+
+        profile = self.profile_dir
+        if sys.platform.startswith("win"):
+            script = (
+                "$ErrorActionPreference='SilentlyContinue'; "
+                "Get-CimInstance Win32_Process | "
+                f"Where-Object {{ $_.CommandLine -like '*{profile}*' -and "
+                "($_.Name -like 'chrome*' -or $_.Name -like 'headless*') } | "
+                "ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
+            )
+            cmd = ["powershell", "-NoProfile", "-NonInteractive", "-Command", script]
+        else:
+            cmd = ["pkill", "-f", profile]
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=60)
+        except Exception:
+            return 0
+        return 1
+
     def _kill_stale_browsers(self) -> None:
         """Убить осиротевшие процессы Chrome, держащие наш профиль.
 
@@ -768,6 +801,7 @@ class Game:
         last_error = ""
         for attempt in range(1, 4):
             self._kill_stale_browsers()
+            self._reset_async_loop()
             time.sleep(3 + attempt * 2)
             try:
                 self.start(headless=headless)
@@ -784,6 +818,26 @@ class Game:
             print(f"[перезапуск] попытка {attempt}: вход не завершён")
         print(f"[перезапуск] не удалось: {last_error}")
         return False
+
+    @staticmethod
+    def _reset_async_loop() -> None:
+        """Снять «зависший» asyncio-цикл в текущем потоке.
+
+        Playwright отказывается стартовать, если в потоке видится работающий
+        event loop («It looks like you are using Playwright Sync API inside
+        the asyncio loop»). После аварийного перезапуска флаг в потоке может
+        остаться поднятым, и новый браузер уже не поднять. Сбрасываем его.
+        """
+        import asyncio
+
+        try:
+            asyncio._set_running_loop(None)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        try:
+            asyncio.set_event_loop(None)
+        except Exception:
+            pass
 
     def ensure_login(self, timeout_sec: int = 600) -> bool:
         """Если не авторизован — автовход, иначе ждём ручной вход пользователем."""

@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -483,6 +484,54 @@ def test_local_only_config_mirrors_cloud_tasks(local, cloud):
     b = config(cloud)
     assert a["personal_quest"] == b["personal_quest"]
     assert a["clan_quest"] == b["clan_quest"]
+
+
+def test_watchdog_never_touches_playwright_from_watchdog_thread(tmp_path):
+    """Сторож не должен закрывать браузер через Playwright.
+
+    Синхронный API Playwright привязан к потоку создания: вызов из сторожевого
+    потока ломает восстановление («Playwright Sync API inside the asyncio
+    loop»), и агент больше не поднимает браузер до конца сессии. Из чужого
+    потока можно только убивать процессы ОС.
+    """
+    a = agent(tmp_path)
+    a.in_long_op = False
+    a._long_op_started_at = 0.0
+    a._abort_cycle()
+    a.game.close.assert_not_called()
+    a.game.kill_browser_processes.assert_called_once()
+
+
+def test_long_operation_has_a_total_time_limit(tmp_path):
+    """Длинная операция (бой) может идти дольше лимита цикла, но не бесконечно."""
+    a = agent(tmp_path)
+    a.in_long_op = True
+    a._long_op_started_at = time.time()
+    a._watchdog = None
+    a._abort_cycle()
+    assert a.game.kill_browser_processes.call_count == 0  # ещё не превышен потолок
+
+    a._long_op_started_at = time.time() - 10_000  # очень долго
+    a._abort_cycle()
+    a.game.kill_browser_processes.assert_called_once()
+
+
+def test_fight_loop_marks_long_operation(tmp_path):
+    """Бой помечается длинной операцией — сторож не рвёт браузер посреди боя."""
+    a = agent(tmp_path)
+    seen = {}
+
+    def fake_inner(force=False, max_turns=0):
+        seen["in_long_op"] = a.in_long_op
+        seen["started"] = a._long_op_started_at
+        return "ок"
+
+    a._fight_loop_inner = fake_inner
+    assert a._fight_loop() == "ок"
+    assert seen["in_long_op"] is True
+    assert seen["started"] > 0
+    assert a.in_long_op is False
+    assert a._long_op_started_at == 0.0
 
 
 @pytest.mark.parametrize("ids,allowed", [

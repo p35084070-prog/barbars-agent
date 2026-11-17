@@ -58,6 +58,8 @@ class Agent:
         self.last_damage: int = 0
         # идёт ли сейчас длинная операция (рейд) — сторож цикла её не рвёт
         self.in_long_op: bool = False
+        # с какого момента началась длинная операция (потолок её длительности)
+        self._long_op_started_at: float = 0.0
         self._watchdog: threading.Timer | None = None
         # счётчик боёв в событиях: по нему чередуем башню, чтобы она была фоном
         self.activity_fights = 0
@@ -216,15 +218,25 @@ class Agent:
         перевзводим сторож и ждём дальше.
         """
         if self.in_long_op:
-            self.log("цикл идёт дольше лимита (длинная операция) — продолжаем", "WARN")
             limit = float(self.config.get("run", {}).get("cycle_max_sec", 300))
-            self._watchdog = threading.Timer(limit, self._abort_cycle)
-            self._watchdog.daemon = True
-            self._watchdog.start()
-            return
+            started = float(getattr(self, "_long_op_started_at", 0.0) or 0.0)
+            # длинная операция (бой) может честно идти дольше лимита цикла, но
+            # и она не должна висеть бесконечно — общий потолок 3x лимита
+            if started and time.time() - started < limit * 3:
+                self.log("цикл идёт дольше лимита (длинная операция) — продолжаем", "WARN")
+                self._watchdog = threading.Timer(limit, self._abort_cycle)
+                self._watchdog.daemon = True
+                self._watchdog.start()
+                return
         self.log("цикл завис дольше лимита — перезапускаю браузер", "WARN")
         try:
-            self.game.close()
+            # Из сторожевого потока нельзя вызывать Playwright: синхронный API
+            # привязан к потоку создания, и обращение из чужого потока ломает
+            # восстановление («Playwright Sync API inside the asyncio loop» —
+            # после этого браузер уже не поднять). Поэтому убиваем процессы ОС:
+            # зависший вызов в основном потоке упадёт, а перезапустит его уже
+            # основной поток.
+            self.game.kill_browser_processes()
         except Exception:
             pass
 
@@ -2132,6 +2144,18 @@ class Agent:
     def _fight_loop(self, force: bool = False, max_turns: int = 0) -> str:
         """Пошаговый бой. `force` — режим босса: не ждём энергию перед лечением
         и считаем нанесённый по боссу урон. `max_turns` — свой лимит ходов."""
+        # Бой может идти дольше лимита цикла (до max_turns ходов), поэтому
+        # помечаем его длинной операцией: сторож не должен рвать браузер посреди
+        # боя. Общее время длинной операции всё же ограничено (см. _abort_cycle).
+        self.in_long_op = True
+        self._long_op_started_at = time.time()
+        try:
+            return self._fight_loop_inner(force=force, max_turns=max_turns)
+        finally:
+            self.in_long_op = False
+            self._long_op_started_at = 0.0
+
+    def _fight_loop_inner(self, force: bool = False, max_turns: int = 0) -> str:
         turns = 0
         limit = max_turns or int(self.config.get("fight", {}).get("max_turns", 80))
         last_log = ""
