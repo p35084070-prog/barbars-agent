@@ -1,8 +1,8 @@
 {
-  "date": "2026-11-16",
+  "date": "2026-11-17",
   "sold": 0,
-  "exp": 1,
-  "gift": true,
+  "exp": 0,
+  "gift": false,
   "autocrack": false,
   "award": false,
   "auction": 0,
@@ -10,6 +10,5 @@
   "market_bought": [],
   "shop_buy_ids": [],
   "shop_slots": [],
-  "shop_bought": [],
-  "raid": 1
+  "shop_bought": []
 }
