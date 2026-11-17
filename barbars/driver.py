@@ -2894,12 +2894,17 @@ class Game:
         # время». Теперь встаём в очередь и ждём, пока начнётся бой.
         # Если мы УЖЕ в очереди (кнопки нет, но «Очередь:» есть) — ничего не
         # нажимаем: «Новый бой» сбросил бы очередь, и мы бы потеряли место.
+        # ВАЖНО: текст игры маскирует буквы латинскими омоглифами
+        # («Очередь» → «Очeредь»), поэтому ищем по нормализованному тексту.
         text = self.body_text()
-        if "Очередь:" in text:
+        norm = normalize_ru(text).lower()
+        if "очередь:" in norm:
             result["stage"] = "очередь"
             if self.click_href("joinQueueLink"):
                 result["stage"] = "встали в очередь"
-            deadline = time.time() + max(10, wait_sec)
+            # в очереди игроков мало, бой может начаться не сразу — ждём
+            # заметно дольше обычного окна события
+            deadline = time.time() + max(wait_sec, 600)
             while time.time() < deadline:
                 if self.has_combat_button():
                     result.update(ok=True, stage="fight")
@@ -2912,7 +2917,7 @@ class Game:
         # Глобальные битвы с таймером («Битва начнётся через: 23:45:21») —
         # входа сейчас нет, ждать тут бессмысленно. Помечаем, чтобы агент не
         # считал это поломкой и не тратил время на пустые попытки.
-        m_timer = re.search(r"через\s+(\d{1,2}:\d{2}(?::\d{2})?)", text)
+        m_timer = re.search(r"через\s+(\d{1,2}:\d{2}(?::\d{2})?)", norm)
         if m_timer and not self.has_combat_button():
             result["stage"] = "ждём таймер"
             result["note"] = f"битва начнётся через {m_timer.group(1)}"
@@ -2921,7 +2926,7 @@ class Game:
 
         # Турнир между забегами: страница с итогами прошлого турнира, входа
         # нет до начала нового — это не поломка.
-        if "завершился" in text.lower() and not self.has_combat_button():
+        if "завершил" in norm and not self.has_combat_button():
             result["stage"] = "ждём турнир"
             result["note"] = "турнир завершён, ждём следующий"
             result["wait_timer"] = True
@@ -2955,6 +2960,15 @@ class Game:
                 ready_clicked = True
                 result["stage"] = "Я готов!"
                 continue
+            # после входа страница может оказаться с таймером («Захват замка можно
+            # начать через 05:28:22») — это не поломка, ждём следующего окна
+            m_timer = re.search(r"через\s+(\d{1,2}:\d{2}(?::\d{2})?)",
+                                normalize_ru(self.body_text()).lower())
+            if m_timer:
+                result["stage"] = "ждём таймер"
+                result["note"] = f"начнётся через {m_timer.group(1)}"
+                result["wait_timer"] = True
+                return result
             self.reload()
             time.sleep(6)
         result["note"] = "бой не начался за отведённое время"
