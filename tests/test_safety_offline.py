@@ -1450,6 +1450,68 @@ def test_attack_hints_cover_tower_and_fight_buttons():
         assert label in ATTACK_LABELS
     for prefix in ("бить", "атаковать", "ударить", "напасть", "жечь"):
         assert prefix in ATTACK_TEXT_PREFIXES
+    # Штурм башни («Бить башню») — последний в списке: это не фарм
+    assert ATTACK_HREF_HINTS[-1] == "damageTowerLink"
+    assert ATTACK_HREF_HINTS.index("damageRandomEnemyLink") < ATTACK_HREF_HINTS.index("damageTowerLink")
+
+
+def test_click_attack_prefers_enemies_over_tower_assault():
+    # На странице башни «Бить башню» стоит в разметке раньше «Бить врагов».
+    # Клик должен идти по врагу (это фарм), а не по штурму башни.
+    clicked = []
+
+    class Link:
+        def __init__(self, href, text):
+            self.href = href
+            self.text = text
+
+        def get_attribute(self, name):
+            return self.href
+
+        def inner_text(self):
+            return self.text
+
+        def is_visible(self):
+            return True
+
+        def scroll_into_view_if_needed(self, timeout=None):
+            pass
+
+        def click(self, timeout=None):
+            clicked.append(self.href)
+
+    tower = Link("?wicket:interface=:9:actionPanel:damageTowerLink::ILinkListener::", "Бить башню (3777 хп)")
+    enemies = Link("?wicket:interface=:9:actionPanel:damageRandomEnemyLink::ILinkListener::", "Бить врагов")
+
+    class Loc:
+        def __init__(self, items):
+            self.items = items
+
+        def count(self):
+            return len(self.items)
+
+        def nth(self, index):
+            return self.items[index]
+
+        def all(self):
+            return list(self.items)
+
+    class Page:
+        def locator(self, selector):
+            if "damageTowerLink" in selector:
+                return Loc([tower])
+            if "damageRandomEnemyLink" in selector:
+                return Loc([enemies])
+            if "damage" in selector or "attack" in selector:
+                return Loc([tower, enemies])
+            return Loc([])
+
+    g = Game({}, ".")
+    g.page = Page()
+    g._settle = Mock()
+    g.human = Mock()
+    assert g.click_attack() is True
+    assert "damageRandomEnemyLink" in clicked[0]
 
 
 @pytest.mark.parametrize("name", CONFIGS)

@@ -30,13 +30,15 @@ PROTECTED_ITEM_TIERS = ("мифический", "легендарный", "эп�
 # и «Напасть», а клик искал только «Бить/Атаковать/Жечь/Ударить» и два
 # href — из-за этого бой обрывался на «прервано» и герой не получал опыта.
 ATTACK_LABELS = ("Бить", "Атаковать", "Атака", "Ударить", "Удар", "Напасть", "Жечь")
+# Порядок важен: сначала удар по врагу (даёт опыт), штурм башни («Бить
+# башню») — в самом конце: это не фарм, и по нему можно потратить ресурсы.
 ATTACK_HREF_HINTS = (
     "damageRandomEnemyLink",
-    "damageTowerLink",
     "damageOgreLink",
     "damageEnemyLink",
     "damageLink",
     "attackLink",
+    "damageTowerLink",
 )
 # Начало текста боевой ссылки — по нему combat() признаёт удар.
 ATTACK_TEXT_PREFIXES = ("бить", "атаковать", "атака", "ударить", "удар", "напасть", "жечь")
@@ -1200,6 +1202,10 @@ class Game:
         """
         tokens: list[str] = []
         for href in list(hrefs or []):
+            if "damageTowerLink" in (href or ""):
+                # «Бить башню» — это штурм башни, а не фарм: пропускаем,
+                # даже если парсер боя принял подпись за удар.
+                continue
             for token in re.findall(r"[A-Za-z]+Link", href or ""):
                 if token not in tokens:
                     tokens.append(token)
@@ -1223,9 +1229,14 @@ class Game:
                     self.human.pause("fight")
                     return True
             # Общий признак боевой ссылки: любое действие damage*/attack*.
+            # «Бить башню» (damageTowerLink) пропускаем: это штурм башни,
+            # а не фарм, и в разметке он стоит раньше удара по врагу.
             locator = self.p.locator("a[href*='damage'], a[href*='attack']")
             for target in locator.all():
                 try:
+                    href = target.get_attribute("href") or ""
+                    if "damageTowerLink" in href:
+                        continue
                     if not _is_visible(target):
                         continue
                     target.scroll_into_view_if_needed(timeout=3000)
