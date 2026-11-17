@@ -1565,3 +1565,89 @@ def test_medic_tower_is_skipped_without_damage_attack(tmp_path):
     a._do_tower(rules.Decision("tower"))
     a._fight_loop.assert_not_called()
     a.game.click_text.assert_any_call("Покинуть бой")
+
+
+class _TowerLoc:
+    def __init__(self, items):
+        self.items = items
+
+    def count(self):
+        return len(self.items)
+
+    def nth(self, index):
+        return self.items[index]
+
+    def all(self):
+        return list(self.items)
+
+
+def test_open_tower_tries_locations_until_attack_is_found():
+    # У башни две стороны: синяя (оборона) — удара нет, красная («Курган») —
+    # там «Бить врагов». Раньше кликали первую ссылку и получали «нет удара».
+    current = {"links": [], "attack": False}
+
+    class Link:
+        def __init__(self, name, after=(), attack=False):
+            self.name = name
+            self.after = after
+            self.attack = attack
+
+        def inner_text(self):
+            return self.name
+
+        def is_visible(self):
+            return True
+
+        def scroll_into_view_if_needed(self, timeout=None):
+            pass
+
+        def click(self, timeout=None):
+            current["links"] = list(self.after)
+            current["attack"] = self.attack
+
+    midgard = Link("Мидгард", after=[Link("Курган", after=[], attack=True)])
+    kurgan = Link("Курган", after=[], attack=True)
+    current["links"] = [midgard]
+
+    class Page:
+        def locator(self, selector):
+            if "locationLink" in selector:
+                return _TowerLoc(current["links"])
+            return _TowerLoc([])
+
+    g = Game({}, ".")
+    g.goto = Mock(side_effect=lambda url: current.update(links=[midgard]))
+    g._settle = Mock()
+    g.human = Mock()
+    g.has_damage_attack = Mock(side_effect=lambda: current["attack"])
+    g.page = Page()
+
+    assert g.open_tower() == "Курган"
+    assert kurgan is not None
+
+
+def test_hidden_attack_link_is_not_treated_as_damage_attack():
+    # Часть боевых ссылок есть в разметке, но спрятана (display:none) —
+    # нажать их нельзя, значит и удара на странице нет.
+    class Link:
+        def __init__(self, href, text, visible):
+            self.href = href
+            self.text = text
+            self.visible = visible
+
+        def get_attribute(self, name):
+            return self.href
+
+        def inner_text(self):
+            return self.text
+
+        def is_visible(self):
+            return self.visible
+
+    class Page:
+        def locator(self, selector):
+            return _TowerLoc([Link("?damageRandomEnemyLink::", "Бить врагов", False)])
+
+    g = Game({}, ".")
+    g.page = Page()
+    assert g.has_damage_attack() is False

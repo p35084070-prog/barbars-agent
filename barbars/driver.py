@@ -71,6 +71,16 @@ def _norm_text(value: str) -> str:
     return " ".join(normalize_ru(value).split())
 
 
+def _is_visible(element: Any) -> bool:
+    """Видима ли кнопка. Часть боевых ссылок есть в разметке, но спрятана."""
+    try:
+        return bool(element.is_visible())
+    except AttributeError:
+        return True  # нет метода (тестовые заглушки) — считаем видимым
+    except Exception:  # noqa: BLE001
+        return False
+
+
 # «Битва начнётся через:  08:49:40» — у таймеров игры бывает двоеточие
 # после «через», а сам текст может быть с омоглифами.
 _TIMER_RE = re.compile(r"через\s*:?\s*(\d{1,2}:\d{2}(?::\d{2})?)")
@@ -420,17 +430,22 @@ class Game:
         locator = self.p.locator(f"a[href*='{pattern}']")
         if locator.count() == 0:
             return False
-        target = locator.nth(min(nth, locator.count() - 1))
-        try:
-            target.scroll_into_view_if_needed(timeout=3000)
-            self.human.move_mouse_to(self.p, target)
+        # берём первую ВИДИМУю ссылку: часть боевых кнопок есть в разметке,
+        # но спрятана (display:none) — клик по такой молча провалится
+        for target in locator.all():
+            try:
+                if not _is_visible(target):
+                    continue
+                target.scroll_into_view_if_needed(timeout=3000)
+                self.human.move_mouse_to(self.p, target)
+                self.human.pause("action")
+                target.click(timeout=8000)
+            except Exception:
+                continue
+            self._settle()
             self.human.pause("action")
-            target.click(timeout=8000)
-        except Exception:
-            return False
-        self._settle()
-        self.human.pause("action")
-        return True
+            return True
+        return False
 
     def link_texts(self) -> list[str]:
         return [t.strip() for t in self.p.locator("a").all_inner_texts() if t.strip()]
@@ -450,32 +465,72 @@ class Game:
         self.goto("https://barbars.ru/")
         return self.click_href("awardLink")
 
-    def open_tower(self) -> str | None:
-        """Открыть первую доступную локацию башни (/game/towers).
-
-        Бой на башне бесплатный и длительный: капает опыт, железо, бутылочки
-        и выпадают вещи. Возвращает название локации либо None.
-        """
-        self.goto("https://barbars.ru/game/towers")
-        locator = self.p.locator("a[href*='locationLink']")
-        if locator.count() == 0:
-            return None
-        target = locator.first
-        name = ""
+    def _link_text(self, element: Any) -> str:
         try:
-            name = (target.inner_text() or "").strip()
-        except Exception:
-            name = ""
+            return (element.inner_text() or "").strip()
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _try_tower_location(self, target: Any) -> bool:
+        """Кликнуть по ссылке локации башни. True — на странице есть удар."""
         try:
             target.scroll_into_view_if_needed(timeout=3000)
             self.human.move_mouse_to(self.p, target)
             self.human.pause("action")
             target.click(timeout=8000)
-        except Exception:
-            return None
+        except Exception:  # noqa: BLE001
+            return False
         self._settle()
         self.human.pause("page")
-        return name or "башня"
+        return self.has_damage_attack()
+
+    def open_tower(self, max_attempts: int = 8) -> str | None:
+        """Открыть локацию башни, где можно бить врагов (/game/towers).
+
+        Бой на башне бесплатный и длительный: капает опыт, железо, бутылочки
+        и выпадают вещи. Возвращает название локации либо None.
+
+        У башни две стороны: синяя (оборона) — там только лечение и
+        «Жечь энергию», и красная («Курган») — там «Бить врагов»
+        (`damageRandomEnemyLink`). Раньше агент кликал первую ссылку
+        `locationLink` и упирался в «нет удара», хотя на соседней красной
+        стороне удар был. Поэтому перебираем локации (и соседние стороны на
+        странице локации), пока не найдём ту, где есть видимая кнопка удара.
+        """
+        attempts = 0
+        last_name = ""
+        while attempts < max_attempts:
+            self.goto("https://barbars.ru/game/towers")
+            try:
+                links = self.p.locator("a[href*='locationLink']")
+                count = links.count()
+            except Exception:  # noqa: BLE001
+                break
+            if count == 0:
+                break
+            target = links.nth(min(attempts, count - 1))
+            name = self._link_text(target)
+            attempts += 1
+            if self._try_tower_location(target):
+                return name or "башня"
+            last_name = name
+            # На странице локации есть соседние стороны: красная («Курган»)
+            # — как раз там, где можно бить врагов.
+            try:
+                near = self.p.locator("a[href*='locationLink']")
+                near_count = near.count()
+            except Exception:  # noqa: BLE001
+                near_count = 0
+            for index in range(min(near_count, 3)):
+                if attempts >= max_attempts:
+                    break
+                near_target = near.nth(index)
+                near_name = self._link_text(near_target)
+                attempts += 1
+                if self._try_tower_location(near_target):
+                    return near_name or last_name or "башня"
+                last_name = near_name
+        return last_name or None
 
     def has_text(self, needle: str) -> bool:
         return needle.lower() in self.body_text().lower()
@@ -1095,10 +1150,25 @@ class Game:
         for attempt in range(2):
             for href in tokens:
                 locator = self.p.locator(f"a[href*='{href}']")
-                if locator.count() == 0:
-                    continue
+                for target in locator.all():
+                    try:
+                        if not _is_visible(target):
+                            continue
+                        target.scroll_into_view_if_needed(timeout=3000)
+                        self.human.move_mouse_to(self.p, target)
+                        self.human.pause("fight")
+                        target.click(timeout=8000)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    self._settle()
+                    self.human.pause("fight")
+                    return True
+            # Общий признак боевой ссылки: любое действие damage*/attack*.
+            locator = self.p.locator("a[href*='damage'], a[href*='attack']")
+            for target in locator.all():
                 try:
-                    target = locator.first
+                    if not _is_visible(target):
+                        continue
                     target.scroll_into_view_if_needed(timeout=3000)
                     self.human.move_mouse_to(self.p, target)
                     self.human.pause("fight")
@@ -1108,23 +1178,11 @@ class Game:
                 self._settle()
                 self.human.pause("fight")
                 return True
-            # Общий признак боевой ссылки: любое действие damage*/attack*.
-            locator = self.p.locator("a[href*='damage'], a[href*='attack']")
-            if locator.count():
-                try:
-                    target = locator.first
-                    target.scroll_into_view_if_needed(timeout=3000)
-                    self.human.move_mouse_to(self.p, target)
-                    self.human.pause("fight")
-                    target.click(timeout=8000)
-                    self._settle()
-                    self.human.pause("fight")
-                    return True
-                except Exception:  # noqa: BLE001
-                    pass
             for label in ATTACK_LABELS:
                 for target in self._find_text_elements((label,), prefix=True):
                     try:
+                        if not _is_visible(target):
+                            continue
                         target.scroll_into_view_if_needed(timeout=3000)
                         self.human.move_mouse_to(self.p, target)
                         self.human.pause("fight")
@@ -1145,6 +1203,9 @@ class Game:
         Отличается от обычного «есть атака»: «Жечь энергию врагам» — это
         сжигание энергии, урона оно не наносит. У медика в башне других
         боевых кнопок нет вовсе, поэтому башня ему не подходит.
+
+        Считаем только ВИДИМЫЕ кнопки: у части страниц ссылки удара есть в
+        разметке, но спрятаны (`display:none`) — нажать их нельзя.
         """
         for element in self.p.locator("a").all():
             try:
@@ -1152,10 +1213,15 @@ class Game:
                 text = _norm_text(element.inner_text() or "")
             except Exception:  # noqa: BLE001
                 continue
-            if any(token in href for token in ("damageRandomEnemyLink", "damageOgreLink", "damageLastTargetLink")):
-                return True
-            if text.startswith(("бить", "ударить", "атаковать", "напасть")):
-                return True
+            hit = any(token in href for token in ("damageRandomEnemyLink", "damageOgreLink", "damageLastTargetLink"))
+            if not hit and not text.startswith(("бить", "ударить", "атаковать", "напасть")):
+                continue
+            try:
+                if not _is_visible(element):
+                    continue
+            except Exception:  # noqa: BLE001
+                continue
+            return True
         return False
 
     def click_tower_attack(self) -> bool:
