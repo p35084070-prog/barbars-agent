@@ -10,6 +10,7 @@ import json
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,10 @@ def main() -> int:
     parser.add_argument("--url", default="/user")
     parser.add_argument("--click-location", action="store_true",
                         help="перейти в локацию башни и снять страницу боя")
+    parser.add_argument("--click-text", action="append", default=[],
+                        help="кликнуть по ссылке с этим текстом (можно несколько раз)")
+    parser.add_argument("--wait-after", type=int, default=0,
+                        help="сколько секунд ждать после последнего клика")
     args = parser.parse_args()
 
     config = load_config(ROOT / args.config)
@@ -62,6 +67,20 @@ def main() -> int:
                 else:
                     out["click_error"] = "нет ссылок локаций"
             text = game.body_text()
+            for wanted in args.click_text:
+                loc = game.p.locator(f"a:has-text('{wanted}'), button:has-text('{wanted}')")
+                if loc.count():
+                    try:
+                        loc.first.click(timeout=8000)
+                        game._settle()
+                        out.setdefault("clicked_text", []).append(wanted)
+                    except Exception as exc:  # noqa: BLE001
+                        out.setdefault("click_errors", []).append(f"{wanted}: {str(exc).splitlines()[0][:120]}")
+                else:
+                    out.setdefault("click_errors", []).append(f"{wanted}: не найдено")
+            if args.wait_after:
+                time.sleep(args.wait_after)
+                text = game.body_text()
             lines = [l.strip() for l in text.splitlines() if l.strip()]
             out["lines_matched"] = [l for l in lines if KEY.search(l)][:40]
             out["head"] = lines[:12]
