@@ -50,6 +50,14 @@ jobs:
           printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
           chmod 600 credentials/*.txt
 
+      - name: "Башня — перебор локаций: где есть видимый «Бить врагов»"
+        continue-on-error: true
+        run: |
+          python -u tools/probe_user_page.py --config deploy/config-actions-firewhite.json \
+            --label fw-tower-scan --url /game/towers --tower-scan || true
+          python -u tools/probe_user_page.py --config deploy/config-actions-keis.json \
+            --label keis-tower-scan --url /game/towers --tower-scan || true
+
       - name: "Башня — воин: локация → «Бить врагов» → боевая панель"
         continue-on-error: true
         run: |

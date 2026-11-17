@@ -53,6 +53,86 @@ def click_by_text(game: object, wanted: str) -> bool:
     return False
 
 
+def tower_scan(game: object, max_map: int = 4, max_near: int = 3) -> list[dict]:
+    """Перебрать локации башни и найти страницу с ВИДИМОЙ кнопкой удара.
+
+    Повторяет логику агента (open_tower): карта башен → ссылка локации →
+    соседние стороны. Для каждой страницы записываем видимые боевые ссылки.
+    """
+    result: list[dict] = []
+
+    def visible_fights() -> list[dict]:
+        found: list[dict] = []
+        try:
+            links = game.p.locator("a").all()  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            return found
+        for link in links:
+            try:
+                href = link.get_attribute("href") or ""
+                text = " ".join((link.inner_text() or "").split())[:50]
+                if "damage" not in href and "attack" not in href:
+                    continue
+                if not link.is_visible():
+                    found.append({"text": text, "href": href[:70], "visible": False})
+                    continue
+                found.append({"text": text, "href": href[:70], "visible": True})
+            except Exception:  # noqa: BLE001
+                continue
+        return found
+
+    def click(element: object) -> bool:
+        try:
+            element.scroll_into_view_if_needed(timeout=3000)  # type: ignore[attr-defined]
+            element.click(timeout=8000)  # type: ignore[attr-defined]
+            game._settle()  # type: ignore[attr-defined]
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    for map_index in range(max_map):
+        game.goto("https://barbars.ru/game/towers")  # type: ignore[attr-defined]
+        try:
+            links = game.p.locator("a[href*='locationLink']").all()  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            break
+        if not links:
+            break
+        target = links[min(map_index, len(links) - 1)]
+        try:
+            name = " ".join((target.inner_text() or "").split())[:40]
+        except Exception:  # noqa: BLE001
+            name = ""
+        if not click(target):
+            continue
+        result.append({"where": f"map[{map_index}] {name}", "fights": visible_fights()})
+        for near_index in range(max_near):
+            game.goto("https://barbars.ru/game/towers")  # type: ignore[attr-defined]
+            try:
+                links = game.p.locator("a[href*='locationLink']").all()  # type: ignore[attr-defined]
+                near = game.p.locator("a[href*='locationLink']").all()  # type: ignore[attr-defined]
+            except Exception:  # noqa: BLE001
+                break
+            if not links:
+                break
+            if not click(links[min(map_index, len(links) - 1)]):
+                break
+            if not near:
+                break
+            near_target = near[min(near_index, len(near) - 1)]
+            try:
+                near_name = " ".join((near_target.inner_text() or "").split())[:40]
+            except Exception:  # noqa: BLE001
+                near_name = ""
+            if not click(near_target):
+                continue
+            result.append({
+                "where": f"map[{map_index}] -> near[{near_index}] {near_name}",
+                "fights": visible_fights(),
+            })
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
@@ -64,6 +144,8 @@ def main() -> int:
                         help="кликнуть по ссылке с этим текстом (можно несколько раз)")
     parser.add_argument("--wait-after", type=int, default=0,
                         help="сколько секунд ждать после последнего клика")
+    parser.add_argument("--tower-scan", action="store_true",
+                        help="перебрать локации башни и найти страницу с видимым ударом")
     args = parser.parse_args()
 
     config = load_config(ROOT / args.config)
@@ -85,6 +167,8 @@ def main() -> int:
                 print("PROBE_USER " + json.dumps(out, ensure_ascii=False), flush=True)
                 return 1
             game.goto("https://barbars.ru" + args.url)
+            if args.tower_scan:
+                out["tower_scan"] = tower_scan(game)
             if args.click_location:
                 loc = game.p.locator("a[href*='locationLink']")
                 if loc.count():
