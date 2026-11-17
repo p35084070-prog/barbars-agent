@@ -304,5 +304,12 @@
   },
   "state_dir": "logs/keis",
   "daily_file": "state/keis/daily.json",
-  "account": "keis"
+  "account": "keis",
+  "clan_quest": {
+    "enabled": true
+  },
+  "personal_quest": {
+    "enabled": true,
+    "prefer_modes": true
+  }
 }

@@ -55,6 +55,8 @@ class GameState:
     targets: list[pages.FightTarget] = field(default_factory=list)
     quests: list[pages.ClanQuest] = field(default_factory=list)
     active_quest: str = ""
+    # личные (ежедневные) задания: за выполненное дают опыт
+    personal_quests: list[pages.PersonalQuest] = field(default_factory=list)
     # прогресс активного задания (единственный точный счётчик опыта:
     # на странице героя опыт округлён до 0.01G, поэтому рост не виден)
     quest_progress: int | None = None
@@ -210,6 +212,13 @@ def collect_state(game: Game, config: dict[str, Any]) -> GameState:
         # просроченное задание надо отменить, иначе новое не взять
         state.quest_expired = pages.quest_expired(game)
         state.quest_progress, state.quest_progress_total = pages.quest_progress(game)
+
+    # 6. Личные (ежедневные) задания — награда за них и есть опыт героя.
+    if config.get("personal_quest", {}).get("enabled"):
+        try:
+            state.personal_quests = game.personal_quests()
+        except Exception:
+            state.personal_quests = []
     return state
 
 
@@ -294,25 +303,33 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
 
     # 5. Клановое задание — если активного нет, берём подходящее.
     #    Просроченное («Время истекло») сначала отменяем: иначе новое не взять.
-    if state.quest_expired:
-        return Decision("cancel_quest", reason="задание просрочено — отменяем, чтобы взять новое")
-    if not state.active_quest and state.quests:
-        wanted = _pick_quest(state)
-        return Decision("quest", target=wanted, params={"index": wanted.index}, reason="берём клановое задание")
+    if config.get("clan_quest", {}).get("enabled", True):
+        if state.quest_expired:
+            return Decision("cancel_quest", reason="задание просрочено — отменяем, чтобы взять новое")
+        if not state.active_quest and state.quests:
+            wanted = _pick_quest(state)
+            return Decision("quest", target=wanted, params={"index": wanted.index}, reason="берём клановое задание")
 
-    # 5a. Поля сражений: режим открыт по расписанию, очки за него нужны для
+    # 5a. Личное задание: готовая награда — это опыт, забираем сразу.
+    personal_quest_cfg = config.get("personal_quest", {})
+    if personal_quest_cfg.get("enabled"):
+        claim = _pick_personal_quest_claim(state)
+        if claim is not None:
+            return claim
+
+    # 5b. Поля сражений: режим открыт по расписанию, очки за него нужны для
     #     умений, поэтому бойёмся сразу, как только он открылся.
     battlefields = _pick_battlefields(state, config)
     if battlefields is not None:
         return battlefields
 
-    # 5b. Рейд на кланового босса (мифический дракон): общий бой на 10 героев,
+    # 5c. Рейд на кланового босса (мифический дракон): общий бой на 10 героев,
     #     поэтому собираемся вместе и бьём, когда пещера открыта.
     raid = _pick_raid(state, config)
     if raid is not None:
         return raid
 
-    # 5c. Прокачка параметров и мастерства железом (/user/master).
+    # 5d. Прокачка параметров и мастерства железом (/user/master).
     #     Стоит раньше боёв и фарма: пока хватает железа, вкладываем его в
     #     параметры (мастерство даёт +1% ко всем боевым параметрам за уровень),
     #     а когда железо кончится — агент возвращается к фарму.
@@ -323,6 +340,16 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
             return upgrade
 
     # 6. Бой — если есть бесплатные бои и герой не на нуле.
+    #    Сначала бой под незакрытое личное задание: за него капает опыт.
+    if personal_quest_cfg.get("enabled") and personal_quest_cfg.get("prefer_modes", True):
+        quest_target = _pick_quest_target(state)
+        if quest_target is not None:
+            return Decision(
+                "fight",
+                target=quest_target.title,
+                params={"href": quest_target.href},
+                reason="бой под личное задание (ради опыта)",
+            )
     target = _pick_target(state, config)
     if target is not None:
         return Decision("fight", target=target.title, params={"href": target.href}, reason="используем бесплатный бой")
@@ -1045,6 +1072,76 @@ def _pick_quest(state: GameState) -> pages.ClanQuest:
     return state.quests[0]
 
 
+# Режим личного задания → тип боя (для «выполнить задание» со ссылкой на
+# раздел, а не на конкретный бой: /game/dungeons → подземелья и т.п.).
+QUEST_MODE_KIND = {
+    "dungeons": "dungeon",
+    "arena": "arena",
+    "survival": "survival",
+    "contests": "contests",
+    "tournament": "contests",
+    "bg": "battlefields",
+    "combat": "castles",
+}
+
+
+def _pick_personal_quest_claim(state: GameState) -> Decision | None:
+    """Личное задание с готовой наградой — забираем (это и есть опыт).
+
+    В игре задания выдаются сами, поэтому «взять» нельзя: можно только
+    выполнить (боями) и забрать награду ссылкой «получить награду».
+    """
+    ready = [q for q in state.personal_quests if q.ready_to_claim]
+    if not ready:
+        return None
+    # сперва самое жирное — там больше опыта
+    ready.sort(key=lambda q: (q.xp_reward, q.progress_total or 0), reverse=True)
+    quest = ready[0]
+    return Decision(
+        "personal_quest_claim",
+        target=quest.title,
+        params={"href": quest.claim_href, "xp": quest.xp_reward},
+        reason=f"задание «{quest.title}» выполнено — забираем награду ({quest.xp_reward} опыта)",
+    )
+
+
+def _pick_quest_target(state: GameState) -> pages.FightTarget | None:
+    """Бой, который продвигает незакрытое личное задание.
+
+    У задания есть ссылка «выполнить задание» — это режим, где идёт
+    прогресс (выживание, арена, пещеры…). Если такой режим есть среди
+    доступных боёв, идём туда: за выполненное задание дают опыт.
+    """
+    for quest in state.personal_quests:
+        if quest.claimed or quest.done or not quest.action_href:
+            continue
+        path = quest.action_href.rstrip("/").split("/")[-1].lower()
+        # сначала точное совпадение ссылки боя
+        for t in state.targets:
+            if t.href.rstrip("/").split("/")[-1].lower() == path:
+                if _target_allowed(state, t.kind):
+                    return t
+        # иначе — режим по названию («dungeons» → подземелья, «bg» → поля сражений)
+        kind = QUEST_MODE_KIND.get(path)
+        if not kind:
+            continue
+        for t in state.targets:
+            if t.kind == kind and _target_allowed(state, t.kind):
+                return t
+    return None
+
+
+def _target_allowed(state: GameState, kind: str) -> bool:
+    """Можно ли сейчас идти в бой этого типа (нужны бесплатные попытки)."""
+    if kind == "duel":
+        return state.free_duel > 0
+    if kind == "dungeon":
+        return state.free_dungeon > 0
+    if kind == "tower":
+        return state.free_dungeon > 0 and state.tire == 0
+    return True
+
+
 def _pick_target(state: GameState, config: dict[str, Any]) -> pages.FightTarget | None:
     """Какой бой взять: приоритет из конфига, иначе — по типу и остатку попыток."""
     order = config.get("targets", ["dungeon", "tower", "duel", "arena", "survival", "greats", "contests"])
@@ -1055,12 +1152,8 @@ def _pick_target(state: GameState, config: dict[str, Any]) -> pages.FightTarget 
         options = by_kind.get(kind) or []
         if not options:
             continue
-        # дуэли и подземелья — только если есть бесплатные попытки
-        if kind == "duel" and state.free_duel <= 0:
-            continue
-        if kind == "dungeon" and state.free_dungeon <= 0:
-            continue
-        if kind == "tower" and (state.free_dungeon <= 0 or state.tire != 0):
+        # дуэли, подземелья и башня — только если есть бесплатные попытки
+        if not _target_allowed(state, kind):
             continue
         options.sort(key=lambda t: (t.fights_left is None, -(t.fights_left or 0)))
         return options[0]

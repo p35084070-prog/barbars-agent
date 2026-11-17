@@ -201,7 +201,8 @@
         "url": "https://barbars.ru/game/arena"
       },
       {
-        "name": "Турнир героев", "url": "https://barbars.ru/game/tournament/0/1"
+        "name": "Турнир героев",
+        "url": "https://barbars.ru/game/tournament/0/1"
       },
       {
         "name": "Выживание",
@@ -381,5 +382,12 @@
     "name": "qdal",
     "class": "воин",
     "guild_id": 16675
+  },
+  "clan_quest": {
+    "enabled": true
+  },
+  "personal_quest": {
+    "enabled": true,
+    "prefer_modes": true
   }
 }

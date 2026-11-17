@@ -1141,6 +1141,47 @@ class Game:
         self._settle()
         return True
 
+    def personal_quests(self) -> list["pages.PersonalQuest"]:
+        """Личные (ежедневные) задания героя: обычные + продвинутые.
+
+        Задания в игре выдаются сами, кнопки «Взять» нет. Прогресс идёт от
+        боёв, а за выполненное дают опыт — его надо забрать («получить награду»).
+        """
+        from . import pages
+
+        out: list[pages.PersonalQuest] = []
+        self.goto("https://barbars.ru/user/quests")
+        out += pages.personal_quests(self.p.content())
+        self.goto("https://barbars.ru/user/quests/new/0/1")
+        out += pages.personal_quests(self.p.content(), advanced=True)
+        return out
+
+    def claim_personal_quest(self, href: str, title: str = "") -> bool:
+        """Забрать награду за выполненное личное задание (это и есть опыт).
+
+        Возвращает False, если после клика задание всё ещё ждёт награды —
+        тогда не будем кликать по нему каждый цикл.
+        """
+        if not href:
+            return False
+        from . import pages
+
+        url = urljoin("https://barbars.ru/user/quests", href)
+        try:
+            self.goto(url)
+        except Exception:
+            return False
+        if not title:
+            return True
+        try:
+            after = pages.personal_quests(self.p.content())
+        except Exception:
+            return True
+        for quest in after:
+            if quest.title == title and quest.claim_href and not quest.claimed:
+                return False  # награда не забралась
+        return True
+
     def spend_talent(self, talent_name: str) -> tuple[bool, str]:
         """Потратить очко таланта.
 

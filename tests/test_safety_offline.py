@@ -337,6 +337,132 @@ def test_cloud_policies(name):
     assert c["fight"]["prefer_heal"] == (c["account"] == "keis")
 
 
+# --- личные (ежедневные) задания: за них дают опыт -------------------------
+
+QUEST_HTML = """
+<ul>
+<li><div class="hr"></div><div class="mb5 white">Проведи 5 боёв на выживание</div>
+<span class="white">Прогресс:</span> <span class="minor"><span>1</span> из <span>5</span>
+<span class="minor">(<span>20</span>%)</span></span>
+<div class="mt5"> Награда: <span class="info">
+<img src="/images/icons/bottle.png" alt="" border="0"/><span>2</span>
+<img src="/images/icons/star_default.png" alt="" border="0"/><span class="mr2">250.0K</span>(опыта) </span></div>
+<a class="cbtn bli w180 mt5" href="../game/survival"><span class="be"><span class="bc money">выполнить задание</span></span></a></li>
+<li><div class="hr"></div><div class="mb5 white">Проведи бой на полях сражений</div>
+<span class="white">Прогресс:</span> <span class="minor"><span>1</span> из <span>1</span>
+<span class="minor">(<span>100</span>%)</span></span>
+<div class="mt5"> Награда: <span class="info"><img src="/images/icons/star_default.png" alt="" border="0"/>
+<span class="mr2">1.25M</span>(опыта) </span></div>
+<a class="cbtn bli w180 mt5" href="../?wicket:interface=:3:quests:4:questLink::ILinkListener::&amp;action=17"><span class="be"><span class="bc money">получить награду</span></span></a></li>
+</ul>
+"""
+
+
+def test_personal_quest_parsing_progress_reward_and_links():
+    quests = pages.personal_quests(QUEST_HTML)
+    assert len(quests) == 2
+    first, second = quests
+    assert first.title == "Проведи 5 боёв на выживание"
+    assert (first.progress_cur, first.progress_total) == (1, 5)
+    assert first.xp_reward == 250000          # число бутылок в опыт не попало
+    assert first.action_href.endswith("/game/survival")
+    assert not first.claim_href and not first.ready_to_claim
+    assert second.progress_cur == second.progress_total == 1
+    assert second.xp_reward == 1250000
+    assert "questLink" in second.claim_href
+    assert second.ready_to_claim and second.done
+
+
+def test_personal_quest_without_reward_link_is_not_claimed():
+    quest = pages.PersonalQuest(title="Выполни 7 обычных ежедневных заданий", progress_cur=0, progress_total=7)
+    assert not quest.ready_to_claim
+    assert not quest.done
+
+
+def _quest_state(**kw):
+    state = rules.GameState(
+        hp=1000, max_hp=3698, energy=3000, max_energy=3748, level=20, klass="медик",
+        iron=1_000_000, mifril=40, gold=28, silver=76, bottles=290, talent_points=0,
+        free_dungeon=2, free_duel=3, altar_bonus=12.5, altar_expires_in_min=60, tire=0,
+    )
+    for key, value in kw.items():
+        setattr(state, key, value)
+    return state
+
+
+def test_ready_personal_quest_is_claimed_before_anything_else():
+    quest = pages.PersonalQuest(
+        title="Проведи бой на полях сражений", progress_cur=1, progress_total=1,
+        reward_text="1.25M (опыта)", xp_reward=1250000, action_href="../game/bg",
+        claim_href="../?wicket:interface=:3:quests:4:questLink::ILinkListener::&action=17",
+    )
+    state = _quest_state(personal_quests=[quest])
+    decision = rules.decide(state, config())
+    assert decision.action == "personal_quest_claim", decision
+    assert decision.params["xp"] == 1250000
+    assert "questLink" in decision.params["href"]
+
+
+def test_claimed_personal_quest_is_not_taken_again():
+    quest = pages.PersonalQuest(
+        title="Проведи бой на полях сражений", progress_cur=1, progress_total=1,
+        xp_reward=1250000, claim_href="../?wicket:interface=:3:quests:4:questLink::ILinkListener::",
+        claimed=True,
+    )
+    state = _quest_state(personal_quests=[quest])
+    decision = rules.decide(state, config())
+    assert decision.action != "personal_quest_claim", decision
+
+
+def test_fight_follows_unfinished_personal_quest_mode():
+    quest = pages.PersonalQuest(
+        title="Проведи 5 боёв на выживание", progress_cur=1, progress_total=5,
+        action_href="../game/survival",
+    )
+    state = _quest_state(
+        personal_quests=[quest],
+        targets=[pages.FightTarget("Башня призраков", "game/ogreDungeon", "tower", 2),
+                 pages.FightTarget("Выживание", "game/survival", "survival", 3)],
+    )
+    decision = rules.decide(state, config())
+    assert decision.action == "fight", decision
+    assert decision.params["href"] == "game/survival", decision
+
+
+def test_without_personal_quests_the_standard_target_is_used():
+    cfg = config()
+    cfg["farm"]["enabled"] = False  # фарм-события имеют приоритет над боями
+    cfg["autocrack"]["enabled"] = False
+    state = _quest_state(targets=[pages.FightTarget("Башня призраков", "game/ogreDungeon", "tower", 2)])
+    decision = rules.decide(state, cfg)
+    assert decision.action == "fight", decision
+    assert decision.params["href"] == "game/ogreDungeon", decision
+
+
+HERO_CONFIGS = [
+    "config.json",
+    "config-firewhite.json",
+    "config-vagojan.json",
+    "config-ok.json",
+    "config-ok2.json",
+    "deploy/config-actions-keis.json",
+    "deploy/config-actions-firewhite.json",
+    "deploy/config-actions-pandei.json",
+    "deploy/config-actions-steelblue.json",
+    "deploy/config-actions-vagojan.json",
+    "deploy/config-cloud-keis.json",
+    "deploy/config-cloud-firewhite.json",
+    "deploy/config-cloud-vagojan.json",
+]
+
+
+@pytest.mark.parametrize("name", HERO_CONFIGS)
+def test_every_hero_takes_personal_and_clan_quests(name):
+    c = config(name)
+    assert c["personal_quest"]["enabled"] is True
+    assert c["clan_quest"]["enabled"] is True
+
+
 @pytest.mark.parametrize("ids,allowed", [
     (PARTY_IDS, True),
     (("905853", "31389504", "1286381", "1596900"), False),

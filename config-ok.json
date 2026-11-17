@@ -201,7 +201,8 @@
         "url": "https://barbars.ru/game/arena"
       },
       {
-        "name": "Турнир героев", "url": "https://barbars.ru/game/tournament/0/1"
+        "name": "Турнир героев",
+        "url": "https://barbars.ru/game/tournament/0/1"
       },
       {
         "name": "Выживание",
@@ -376,5 +377,12 @@
     "enabled": true,
     "check_interval_min": 5
   },
-  "paths_relative_to": "repository"
+  "paths_relative_to": "repository",
+  "clan_quest": {
+    "enabled": true
+  },
+  "personal_quest": {
+    "enabled": true,
+    "prefer_modes": true
+  }
 }

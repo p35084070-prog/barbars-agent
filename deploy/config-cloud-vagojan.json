@@ -296,5 +296,12 @@
     "check_interval_min": 60,
     "keep_iron": 20000
   },
-  "daily_file": "state/vagojan/daily.json"
+  "daily_file": "state/vagojan/daily.json",
+  "clan_quest": {
+    "enabled": true
+  },
+  "personal_quest": {
+    "enabled": true,
+    "prefer_modes": true
+  }
 }

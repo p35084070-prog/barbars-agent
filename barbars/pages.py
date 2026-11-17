@@ -28,6 +28,35 @@ class ClanQuest:
 
 
 @dataclass
+class PersonalQuest:
+    """Личное (ежедневное) задание героя: страница «Мои задания» /user/quests.
+
+    В игре задания выдаются сами каждый день — кнопки «Взять» нет. Прогресс
+    идёт от самих боёв (выживание, арена, боссы, турниры), а за выполненное
+    задание дают опыт — его надо забрать кнопкой «получить награду».
+    """
+
+    title: str
+    progress_cur: int | None = None
+    progress_total: int | None = None
+    reward_text: str = ""
+    xp_reward: int = 0
+    action_href: str = ""   # «выполнить задание» — куда идти ради прогресса
+    claim_href: str = ""    # «получить награду» — ссылка wicket
+    claimed: bool = False   # награда уже получена
+    advanced: bool = False  # продвинутое задание (вкладка /user/quests/new/0/1)
+
+    @property
+    def done(self) -> bool:
+        return bool(self.progress_total) and (self.progress_cur or 0) >= self.progress_total
+
+    @property
+    def ready_to_claim(self) -> bool:
+        """Награда готова: прогресс 100% и есть ссылка «получить награду»."""
+        return bool(self.claim_href) and not self.claimed and self.done
+
+
+@dataclass
 class Talent:
     name: str
     spent: int | None = None
@@ -200,6 +229,66 @@ def quest_progress(game: Game) -> tuple[int | None, int | None]:
     if not m:
         return None, None
     return parse_amount(m.group(1)), parse_amount(m.group(2))
+
+
+def _strip_tags(html: str) -> str:
+    """Текст без разметки, схлопнутые пробелы."""
+    return " ".join(re.sub(r"<[^>]+>", " ", html).split())
+
+
+def personal_quests(html: str, *, advanced: bool = False) -> list[PersonalQuest]:
+    """Личные (ежедневные) задания со страницы «Мои задания» (/user/quests).
+
+    Разметка задания:
+        <li><div class="mb5 white">Проведи 5 боёв на выживание</div>
+        <span class="white">Прогресс:</span> <span class="minor"><span>1</span>
+        из <span>5</span> ...</span>
+        <div class="mt5"> Награда: ... <span class="mr2">250.0K</span>(опыта) </div>
+        <a ... href="../game/survival">выполнить задание</a></li>
+
+    Готовую награду забирают ссылкой «получить награду» — это и есть опыт.
+    """
+    out: list[PersonalQuest] = []
+    for block in re.split(r"<li[^>]*>", html):
+        if "Прогресс" not in block and "Награда" not in block:
+            continue
+        m = re.search(r'<div class="mb5 white">(.*?)</div>', block, re.S)
+        title = _strip_tags(m.group(1)) if m else ""
+        if not title:
+            continue
+        cur = total = None
+        pm = re.search(r"Прогресс:.*?<span>(\d+)</span>\s*из\s*<span>(\d+)</span>", block, re.S)
+        if pm:
+            cur, total = int(pm.group(1)), int(pm.group(2))
+        rm = re.search(r"Награда:(.*?)</div>", block, re.S)
+        reward = _strip_tags(rm.group(1)) if rm else ""
+        xp = 0
+        # число опыта — то, что стоит прямо перед «(опыта)»;
+        # перед ним в награде может быть ещё и число бутылок/камней
+        xm = re.search(r"([\d][\d.,]*[KkMmG]?)\s*\(опыта\)", reward)
+        if xm:
+            xp = parse_amount(xm.group(1))
+        action = claim = ""
+        for am in re.finditer(r'<a[^>]+href="([^"]+)"[^>]*>(.*?)</a>', block, re.S):
+            label = _strip_tags(am.group(2)).lower()
+            if "выполнить задание" in label:
+                action = am.group(1)
+            elif "получить награду" in label:
+                claim = am.group(1)
+        out.append(
+            PersonalQuest(
+                title=title,
+                progress_cur=cur,
+                progress_total=total,
+                reward_text=reward,
+                xp_reward=xp,
+                action_href=action,
+                claim_href=claim,
+                claimed="Награда получена" in block,
+                advanced=advanced,
+            )
+        )
+    return out
 
 
 def talents(game: Game) -> list[Talent]:

@@ -104,6 +104,8 @@ class Agent:
         # аналогично для клановых заданий: если «Взять задание» недоступно
         # (задание занято другим игроком), возвращаемся к нему позже
         self.quest_blocked_until: float = 0.0
+        # личные задания: если награда не забирается — не кликаем каждый цикл
+        self.personal_quest_blocked_until: float = 0.0
         # рюкзак: если разгрузить его не вышло (сундук полон и надеть нечего),
         # повторять тот же шаг бессмысленно — он блокирует фарм. Ждём полчаса.
         self.gear_blocked_until: float = 0.0
@@ -275,6 +277,8 @@ class Agent:
         state.autocrack_kind = self.autocrack_kind
         if self.quest_blocked_until > time.time():
             state.quests = []
+        if self.personal_quest_blocked_until > time.time():
+            state.personal_quests = []
         if self.gear_blocked_until > time.time():
             # пауза действует, только пока содержимое рюкзака/сундука не изменилось:
             # пришёл новый дроп — снова пробуем надеть/разобрать
@@ -417,6 +421,8 @@ class Agent:
             self._do_talent(state)
         elif decision.action == "quest":
             self._do_quest(decision)
+        elif decision.action == "personal_quest_claim":
+            self._do_personal_quest_claim(decision)
         elif decision.action == "cancel_quest":
             self._do_cancel_quest()
         elif decision.action == "fight":
@@ -2094,6 +2100,19 @@ class Agent:
         else:
             self.quest_blocked_until = time.time() + 900
             self.log("задание не взято (кнопка не найдена) — вернусь к заданиям через 15 мин")
+
+    def _do_personal_quest_claim(self, decision: rules.Decision) -> None:
+        """Забрать награду за выполненное личное задание — это и есть опыт."""
+        href = decision.params.get("href")
+        xp = decision.params.get("xp")
+        if not href:
+            self.log("у личного задания нет ссылки на награду")
+            return
+        if self.game.claim_personal_quest(href, decision.target):
+            self.log(f"награда за личное задание «{decision.target}» получена ({xp} опыта)")
+        else:
+            self.personal_quest_blocked_until = time.time() + 900
+            self.log(f"не удалось забрать награду за «{decision.target}» — вернусь через 15 мин", "WARN")
 
     def _do_fight(self, decision: rules.Decision) -> None:
         href = decision.params.get("href")

@@ -374,5 +374,12 @@
   "state_dir": "logs/keis",
   "daily_file": "state/keis/daily.json",
   "account": "keis",
-  "paths_relative_to": "repository"
+  "paths_relative_to": "repository",
+  "clan_quest": {
+    "enabled": true
+  },
+  "personal_quest": {
+    "enabled": true,
+    "prefer_modes": true
+  }
 }
