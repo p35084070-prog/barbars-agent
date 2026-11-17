@@ -3,7 +3,7 @@
   "sold": 0,
   "exp": 0,
   "gift": true,
-  "autocrack": false,
+  "autocrack": true,
   "award": true,
   "auction": 0,
   "market": 0,
