@@ -1651,3 +1651,48 @@ def test_hidden_attack_link_is_not_treated_as_damage_attack():
     g = Game({}, ".")
     g.page = Page()
     assert g.has_damage_attack() is False
+
+
+def test_dungeon_entry_uses_the_cave_name_link_not_the_voyti_label():
+    # На странице «Пещеры и драконы» подпись «Войти» — пустой <span> без
+    # обработчика, вход только по ссылке с названием пещеры.
+    clicked = []
+
+    class Link:
+        def __init__(self, href, text):
+            self.href = href
+            self.text = text
+
+        def get_attribute(self, name):
+            return self.href
+
+        def inner_text(self):
+            return self.text
+
+        def is_visible(self):
+            return True
+
+        def scroll_into_view_if_needed(self, timeout=None):
+            pass
+
+        def click(self, timeout=None):
+            clicked.append(self.text)
+
+    links = [
+        Link("../../../game/dungeons/1/2", "клановые"),
+        Link("../../../game/cts", "испытания"),
+        Link("../../../game/guardian", ""),
+        Link("../../../game/guardian", "Пещерный стражник"),
+        Link("/user", "Мой герой"),
+    ]
+
+    class Page:
+        def locator(self, selector):
+            return _TowerLoc(links)
+
+    g = Game({}, ".")
+    g.page = Page()
+    g._settle = Mock()
+    g.human = Mock()
+    assert g._click_first_game_link(skip_texts=("клановые", "общие", "испытания")) is True
+    assert clicked == ["Пещерный стражник"]

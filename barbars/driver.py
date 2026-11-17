@@ -3027,6 +3027,41 @@ class Game:
                 return True
         return False
 
+    def _click_first_game_link(self, skip_texts: tuple[str, ...] = ()) -> bool:
+        """Кликнуть по первой ссылке на игровую страницу (вход в подземелье).
+
+        На странице «Пещеры и драконы» подпись «Войти» — обычный <span> без
+        обработчика, а реальный вход — ссылка с названием пещеры
+        (`<a href="../../../game/guardian">Пещерный стражник</a>`).
+        """
+        skip = {_norm_text(text) for text in skip_texts}
+        candidates: list[tuple[bool, Any]] = []
+        try:
+            links = self.p.locator("a").all()
+        except Exception:  # noqa: BLE001
+            return False
+        for link in links:
+            try:
+                href = link.get_attribute("href") or ""
+                text = _norm_text(link.inner_text() or "")
+            except Exception:  # noqa: BLE001
+                continue
+            if "/game/" not in href or text in skip:
+                continue
+            candidates.append((bool(text), link))
+        for _, link in sorted(candidates, key=lambda item: not item[0]):
+            try:
+                link.scroll_into_view_if_needed(timeout=3000)
+                self.human.move_mouse_to(self.p, link)
+                self.human.pause("action")
+                link.click(timeout=8000)
+            except Exception:  # noqa: BLE001
+                continue
+            self._settle()
+            self.human.pause("action")
+            return True
+        return False
+
     def enter_activity(self, url: str, wait_sec: int = 90) -> dict[str, Any]:
         """Зайти в активность и дождаться боя.
 
@@ -3091,8 +3126,16 @@ class Game:
             result["wait_timer"] = True
             return result
 
+        # Список подземелий: вход — не подпись «Войти» (это пустой <span>),
+        # а ссылка с названием пещеры. Кликаем по ней.
+        if "dungeons" in url and self._click_first_game_link(skip_texts=("клановые", "общие", "испытания")):
+            entered = True
+            result["stage"] = "вход в подземелье"
+
         for label in ("Начать бой!", "Новый бой", "Войти в замок", "Войти", "Встать в очередь",
                       "Участвовать", "Принять участие", "В бой!"):
+            if entered:
+                break
             # вход может быть платным (золото или серебро) — по правилам игрока
             # за вход не платим, поэтому такие кнопки пропускаем
             if self._click_any_text(label, avoid_gold=True, avoid_paid=True):
