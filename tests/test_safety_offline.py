@@ -440,6 +440,66 @@ def test_without_personal_quests_the_standard_target_is_used():
     assert decision.params["href"] == "game/ogreDungeon", decision
 
 
+def _farm_cfg(events):
+    return {"enabled": True, "wait_sec": 120, "events": events}
+
+
+ARENA_EVENT = {"name": "Арена", "url": "https://barbars.ru/game/arena"}
+SURVIVAL_EVENT = {"name": "Выживание", "url": "https://barbars.ru/game/survival"}
+TOURNAMENT_EVENT = {"name": "Турнир героев", "url": "https://barbars.ru/game/tournament/0/1"}
+CASTLE_EVENT = {"name": "Замок: Зеркало боли", "url": "https://barbars.ru/castle/6"}
+
+
+def test_farm_event_follows_personal_quest_mode():
+    """Событие выбирается по режиму личного задания — ради опыта."""
+    quest = pages.PersonalQuest(
+        title="Проведи 5 боёв на арене", progress_cur=3, progress_total=5,
+        action_href="../game/arena",
+    )
+    state = _quest_state(personal_quests=[quest])
+    decision = rules._pick_farm(state, {"personal_quest": {"enabled": True, "prefer_modes": True}, "farm": _farm_cfg([SURVIVAL_EVENT, ARENA_EVENT])})
+    assert decision is not None
+    assert decision.action == "activity"
+    assert decision.params["url"] == ARENA_EVENT["url"]
+    assert "заданию" in decision.reason
+
+
+def test_farm_event_prefers_quest_closest_to_reward():
+    """Из двух подходящих режимов берём тот, где до награды меньше шагов."""
+    near = pages.PersonalQuest(
+        title="Проведи 5 боёв на арене", progress_cur=4, progress_total=5,
+        action_href="../game/arena", xp_reward=680000,
+    )
+    far = pages.PersonalQuest(
+        title="Победи 3 клановых босса", progress_cur=0, progress_total=3,
+        action_href="../game/tournament", xp_reward=20_400_000,
+    )
+    state = _quest_state(personal_quests=[far, near])
+    decision = rules._pick_farm(state, {"personal_quest": {"enabled": True, "prefer_modes": True}, "farm": _farm_cfg([TOURNAMENT_EVENT, ARENA_EVENT])})
+    assert decision.params["url"] == ARENA_EVENT["url"]
+
+
+def test_farm_event_for_castle_quest():
+    """Бой на захвате замка — это события в разделах /castle/."""
+    quest = pages.PersonalQuest(
+        title="Проведи бой на захвате замка", progress_cur=0, progress_total=1,
+        action_href="../castle/combat",
+    )
+    state = _quest_state(personal_quests=[quest])
+    decision = rules._pick_farm(state, {"personal_quest": {"enabled": True, "prefer_modes": True}, "farm": _farm_cfg([ARENA_EVENT, CASTLE_EVENT])})
+    assert decision.params["url"] == CASTLE_EVENT["url"]
+
+
+def test_farm_event_ignores_finished_quest():
+    quest = pages.PersonalQuest(
+        title="Проведи 5 боёв на арене", progress_cur=5, progress_total=5,
+        action_href="../game/arena", claimed=True,
+    )
+    state = _quest_state(personal_quests=[quest])
+    decision = rules._pick_farm(state, {"personal_quest": {"enabled": True, "prefer_modes": True}, "farm": _farm_cfg([SURVIVAL_EVENT, ARENA_EVENT])})
+    assert decision.params["url"] == SURVIVAL_EVENT["url"]
+
+
 HERO_CONFIGS = [
     "config.json",
     "config-firewhite.json",

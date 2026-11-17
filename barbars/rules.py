@@ -504,6 +504,19 @@ def _pick_farm(state: GameState, config: dict[str, Any]) -> Decision | None:
     farm_cfg = config.get("farm", {})
     if not farm_cfg.get("enabled", True):
         return None
+    wait_sec = int(farm_cfg.get("wait_sec", 120))
+    # Сначала — событие, которое требует открытое личное задание: за него
+    # капает опыт, и до награды там ближе всего.
+    quest_cfg = config.get("personal_quest", {})
+    if quest_cfg.get("enabled") and quest_cfg.get("prefer_modes", True):
+        event = _pick_quest_event(state, farm_cfg)
+        if event is not None:
+            return Decision(
+                "activity",
+                target=event.get("name", ""),
+                params={"url": event.get("url", ""), "wait_sec": wait_sec},
+                reason=f"фармим событие по личному заданию: {event.get('name', '')}",
+            )
     skip = set(state.farm_skip or [])
     for event in farm_cfg.get("events", []):
         name = event.get("name", "")
@@ -513,9 +526,50 @@ def _pick_farm(state: GameState, config: dict[str, Any]) -> Decision | None:
         return Decision(
             "activity",
             target=name,
-            params={"url": url, "wait_sec": int(farm_cfg.get("wait_sec", 120))},
+            params={"url": url, "wait_sec": wait_sec},
             reason=f"фармим событие: {name}",
         )
+    return None
+
+
+def _pick_quest_event(state: GameState, farm_cfg: dict[str, Any]) -> dict[str, Any] | None:
+    """Событие, которое продвигает личное задание (ближе всего к награде).
+
+    У задания ссылка «выполнить задание» указывает на режим (арена,
+    выживание, подземелья, турнир…). События из конфига — это те же режимы,
+    только с адресом. Сопоставляем их по имени режима в адресе.
+    """
+    skip = set(state.farm_skip or [])
+    events = [
+        e for e in farm_cfg.get("events", []) if e.get("url") and e.get("name") not in skip
+    ]
+    if not events:
+        return None
+    quests = [
+        q for q in state.personal_quests
+        if not q.claimed and not q.done and q.action_href
+    ]
+    if not quests:
+        return None
+    # сперва задания, где осталось меньше шагов — награда придёт быстрее
+    quests.sort(
+        key=lambda q: (
+            (q.progress_total or 0) - (q.progress_cur or 0),
+            -(q.xp_reward or 0),
+        )
+    )
+    for quest in quests:
+        path = quest.action_href.rstrip("/").split("/")[-1].lower()
+        if not path:
+            continue
+        for event in events:
+            url = event["url"].lower().rstrip("/")
+            if path == "combat":
+                # бой на захвате замка — это события в разделах /castle/
+                if "/castle/" in url:
+                    return event
+            elif f"/{path}" in url:
+                return event
     return None
 
 
