@@ -1648,6 +1648,13 @@ class Agent:
         if not name:
             self.log("башня: не удалось открыть локацию", "WARN")
             return
+        if not self.game.has_damage_attack():
+            # У медика в башне нет удара — только «Жечь энергию врагам»
+            # (сжигание энергии, урона не наносит). Башня ему не подходит,
+            # идём за опытом в события и дуэли.
+            self.log("башня: нет кнопки удара (только «Жечь энергию») — пропускаем")
+            self.game.click_text("Покинуть бой")
+            return
         for index in range(max(1, rounds)):
             outcome = self._fight_loop(max_turns=tower_turns)
             self.log(f"башня «{name}»: раунд {index + 1}/{rounds} — {outcome}")

@@ -17,10 +17,40 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from barbars.driver import Game  # noqa: E402
+from barbars.driver import Game, _norm_text  # noqa: E402
 from run import load_config  # noqa: E402
 
 KEY = re.compile(r"устал|вынос|башн|труд|отдых|%|железо|мифрил", re.IGNORECASE)
+
+
+def click_by_text(game: object, wanted: str) -> bool:
+    """Кликнуть по элементу с текстом с учётом омоглифов игры.
+
+    Игра маскирует часть букв латинскими («Войти» → «Boйти»), поэтому
+    обычный `:has-text()` по сырому тексту такие кнопки не находит.
+    """
+    want = _norm_text(wanted)
+    for tag in ("a", "button", "input", "span", "div"):
+        try:
+            elements = game.p.locator(tag).all()  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            continue
+        for element in elements:
+            try:
+                raw = element.inner_text() or ""
+                if not raw and tag == "input":
+                    raw = element.get_attribute("value") or ""
+            except Exception:  # noqa: BLE001
+                continue
+            if _norm_text(raw).startswith(want):
+                try:
+                    element.scroll_into_view_if_needed(timeout=3000)
+                    element.click(timeout=8000)
+                    game._settle()  # type: ignore[attr-defined]
+                    return True
+                except Exception:  # noqa: BLE001
+                    continue
+    return False
 
 
 def main() -> int:
@@ -68,14 +98,8 @@ def main() -> int:
                     out["click_error"] = "нет ссылок локаций"
             text = game.body_text()
             for wanted in args.click_text:
-                loc = game.p.locator(f"a:has-text('{wanted}'), button:has-text('{wanted}')")
-                if loc.count():
-                    try:
-                        loc.first.click(timeout=8000)
-                        game._settle()
-                        out.setdefault("clicked_text", []).append(wanted)
-                    except Exception as exc:  # noqa: BLE001
-                        out.setdefault("click_errors", []).append(f"{wanted}: {str(exc).splitlines()[0][:120]}")
+                if click_by_text(game, wanted):
+                    out.setdefault("clicked_text", []).append(wanted)
                 else:
                     out.setdefault("click_errors", []).append(f"{wanted}: не найдено")
             if args.wait_after:

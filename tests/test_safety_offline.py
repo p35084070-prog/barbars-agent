@@ -1525,3 +1525,43 @@ def test_share_money_can_be_enabled_explicitly():
     state = rules.GameState(level=80, gold=0, silver=72)
     decision = rules._pick_share_money(state, cfg)
     assert decision is not None and decision.action == "share_money"
+
+
+def test_homoglyph_buttons_are_matched_after_normalization():
+    # Игра маскирует буквы латинскими омоглифами: обычный CSS-поиск по тексту
+    # такие кнопки («Boйти», «гoтoво») не находит вообще.
+    # Реальные примеры из живых страниц игры (проба 17.11):
+    #   «Версерк» -> «Бepcepк», «готово» -> «гoтoво», «Мидгард» -> «Мидгaрд»,
+    #   «Север» -> «Cевер», «Этот» -> «nЭтот», «Ледник» -> «Лeдник».
+    from barbars.driver import _norm_text
+
+    assert _norm_text("Boйти") == _norm_text("Войти")
+    assert _norm_text("гoтoво") == _norm_text("готово")
+    assert _norm_text("Мидгaрд") == _norm_text("Мидгард")
+    assert _norm_text("Cевер") == _norm_text("Север")
+    assert _norm_text("nЭтот") == _norm_text("нЭтот")
+    assert _norm_text("Лeдник") == _norm_text("Ледник")
+    assert _norm_text("Бepcepк") == _norm_text("Берсерк")
+    assert _norm_text("Встать  в  очередь") == "встать в очередь"
+
+
+def test_timer_is_found_with_and_without_colon():
+    from barbars.driver import find_timer
+
+    assert find_timer("Битва начнётся через:  08:49:40") == "08:49:40"
+    assert find_timer("Битва начнётся через 23:46:37") == "23:46:37"
+    assert find_timer("Захват замка можно начать через 05:28:22") == "05:28:22"
+    assert find_timer("обычный текст без таймера") is None
+
+
+def test_medic_tower_is_skipped_without_damage_attack(tmp_path):
+    # У медика в башне только «Жечь энергию врагам» — урона нет, башня
+    # ему не подходит: лучше идти в события.
+    a = agent(tmp_path)
+    a.game.hero_fatigue.return_value = 0
+    a.game.open_tower.return_value = "Долина Сражений"
+    a.game.has_damage_attack.return_value = False
+    a._fight_loop = Mock()
+    a._do_tower(rules.Decision("tower"))
+    a._fight_loop.assert_not_called()
+    a.game.click_text.assert_any_call("Покинуть бой")

@@ -48,11 +48,15 @@ _NUM_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([kKmMgG]?)")
 NAME_BLOCK_RE = re.compile(r"item/id/(\d+)\"><span>([^<]{2,60})</span>", re.S)
 
 # Игра маскирует часть букв латинскими омоглифами: «Версерк» -> «Bepcepк»,
-# «готово» -> «гoтoво». Для сравнения приводим латиницу к кириллице.
+# «готово» -> «гoтoво», «Север» -> «Cевер», «Этот» -> «nЭтот».
+# Для сравнения приводим латиницу к кириллице.
+# Набор подмен собран по реальным страницам игры (проба 17.11): наблюдались
+# a, c, e, o, p, x, n, k, t — плюс заглавные E, C, K, T (регистр снимаем
+# через .lower() до перевода, поэтому одной таблицы достаточно).
 _HOMOGLYPHS = str.maketrans(
     {
         "a": "а", "c": "с", "e": "е", "o": "о", "p": "р", "x": "х", "y": "у",
-        "k": "к", "m": "м", "t": "т", "b": "в", "h": "н",
+        "k": "к", "m": "м", "t": "т", "b": "в", "h": "н", "n": "н",
     }
 )
 
@@ -60,6 +64,22 @@ _HOMOGLYPHS = str.maketrans(
 def normalize_ru(text: str) -> str:
     """Латинские омоглифы -> кириллица (для сравнения строк игры)."""
     return text.lower().translate(_HOMOGLYPHS)
+
+
+def _norm_text(value: str) -> str:
+    """Нормализованный текст для сравнения: омоглифы, пробелы, регистр."""
+    return " ".join(normalize_ru(value).split())
+
+
+# «Битва начнётся через:  08:49:40» — у таймеров игры бывает двоеточие
+# после «через», а сам текст может быть с омоглифами.
+_TIMER_RE = re.compile(r"через\s*:?\s*(\d{1,2}:\d{2}(?::\d{2})?)")
+
+
+def find_timer(text: str) -> str | None:
+    """Найти в тексте обратный отсчёт («через 08:49:40»). None — таймера нет."""
+    match = _TIMER_RE.search(normalize_ru(text).lower())
+    return match.group(1) if match else None
 
 
 def parse_amount(raw: str | None) -> int:
@@ -328,6 +348,47 @@ class Game:
 
     # ------------------------------------------------------------------ primitives
 
+    def _find_text_elements(
+        self,
+        labels: tuple[str, ...],
+        *,
+        prefix: bool = False,
+        tags: tuple[str, ...] = ("a", "button", "span", "div", "li", "input"),
+    ) -> list[Any]:
+        """Найти элементы по тексту с учётом омоглифов игры.
+
+        Игра подменяет часть букв латинскими («Войти» → «Boйти»,
+        «готово» → «гoтoво», «Север» → «Cевер»), поэтому обычный
+        CSS-поиск по тексту такие кнопки не находит вообще. Сравниваем
+        нормализованный текст.
+        """
+        wanted = [_norm_text(label) for label in labels if label]
+        if not wanted:
+            return []
+        found: list[Any] = []
+        for tag in tags:
+            try:
+                elements = self.p.locator(tag).all()
+            except Exception:  # noqa: BLE001
+                continue
+            for element in elements:
+                try:
+                    raw = element.inner_text() or ""
+                    if not raw and tag == "input":
+                        # <input type="submit" value="Войти"> — текста нет,
+                        # подпись лежит в атрибуте value
+                        raw = element.get_attribute("value") or ""
+                except Exception:  # noqa: BLE001
+                    continue
+                text = _norm_text(raw)
+                if not text:
+                    continue
+                for want in wanted:
+                    if text.startswith(want) if prefix else text == want:
+                        found.append(element)
+                        break
+        return found
+
     def click_text(
         self,
         text: str,
@@ -338,21 +399,8 @@ class Game:
         timeout: int = 8000,
     ) -> bool:
         """Кликнуть по элементу с указанным текстом. False — не нашли."""
-        for tag in tags:
-            selectors = []
-            if exact:
-                selectors.append(f"{tag}[value='{text}']")
-                selectors.append(f"{tag}:text-is('{text}')")
-            else:
-                selectors.append(f"{tag}:text-is('{text}')")
-                selectors.append(f"{tag}:has-text('{text}')")
-            for sel in selectors:
-                locator = self.p.locator(sel)
-                count = locator.count()
-                if count == 0:
-                    continue
-                index = min(nth, count - 1)
-                target = locator.nth(index)
+        for selector_text in ({text} if exact else {text}):
+            for target in self._find_text_elements((selector_text,), prefix=False, tags=tags):
                 try:
                     target.scroll_into_view_if_needed(timeout=3000)
                     self.human.move_mouse_to(self.p, target)
@@ -391,10 +439,7 @@ class Game:
         """Есть ли на странице кнопка удара («Бить ...» / «Бить врагов»)."""
         if self.p.locator("a[href*='damage'], a[href*='attack']").count() > 0:
             return True
-        for label in ATTACK_LABELS:
-            if self.p.locator(f"a:has-text('{label}'), button:has-text('{label}')").count() > 0:
-                return True
-        return False
+        return bool(self._find_text_elements(ATTACK_LABELS, prefix=True))
 
     def claim_daily_award(self) -> bool:
         """Ежедневная награда на главной (ссылка awardLink).
@@ -1078,23 +1123,39 @@ class Game:
                 except Exception:  # noqa: BLE001
                     pass
             for label in ATTACK_LABELS:
-                locator = self.p.locator(f"a:has-text('{label}'), button:has-text('{label}')")
-                if locator.count() == 0:
-                    continue
-                try:
-                    target = locator.first
-                    target.scroll_into_view_if_needed(timeout=3000)
-                    self.human.move_mouse_to(self.p, target)
+                for target in self._find_text_elements((label,), prefix=True):
+                    try:
+                        target.scroll_into_view_if_needed(timeout=3000)
+                        self.human.move_mouse_to(self.p, target)
+                        self.human.pause("fight")
+                        target.click(timeout=8000)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    self._settle()
                     self.human.pause("fight")
-                    target.click(timeout=8000)
-                except Exception:  # noqa: BLE001
-                    continue
-                self._settle()
-                self.human.pause("fight")
-                return True
+                    return True
             if attempt == 0:
                 # Страница перерисовалась — перечитаем её и попробуем снова.
                 self.reload()
+        return False
+
+    def has_damage_attack(self) -> bool:
+        """Есть ли кнопка, наносящая УРОН.
+
+        Отличается от обычного «есть атака»: «Жечь энергию врагам» — это
+        сжигание энергии, урона оно не наносит. У медика в башне других
+        боевых кнопок нет вовсе, поэтому башня ему не подходит.
+        """
+        for element in self.p.locator("a").all():
+            try:
+                href = element.get_attribute("href") or ""
+                text = _norm_text(element.inner_text() or "")
+            except Exception:  # noqa: BLE001
+                continue
+            if any(token in href for token in ("damageRandomEnemyLink", "damageOgreLink", "damageLastTargetLink")):
+                return True
+            if text.startswith(("бить", "ударить", "атаковать", "напасть")):
+                return True
         return False
 
     def click_tower_attack(self) -> bool:
@@ -2853,18 +2914,20 @@ class Game:
                 continue
             if "damageLastTargetLink" in href or "damageOgreLink" in href:
                 return True
-            if text.startswith(("Бить", "Атаковать", "Жечь", "Ударить", "Атака")):
+            # текст сравниваем нормализованно: игра маскирует буквы
+            if _norm_text(text).startswith(tuple(_norm_text(x) for x in ATTACK_TEXT_PREFIXES)):
                 return True
         return False
 
     def _combat_costs_gold(self) -> bool:
         """Кнопка боя рядом с ценой в золоте — такой бой платный."""
+        prefixes = tuple(_norm_text(x) for x in ATTACK_TEXT_PREFIXES)
         for link in self.p.locator("a").all():
             try:
                 text = (link.inner_text() or "").strip()
             except Exception:
                 continue
-            if text.startswith(("Бить", "Атаковать", "Ударить", "Жечь")) and self._near_gold(link):
+            if _norm_text(text).startswith(prefixes) and self._near_gold(link):
                 return True
         return False
 
@@ -2917,10 +2980,10 @@ class Game:
         # Глобальные битвы с таймером («Битва начнётся через: 23:45:21») —
         # входа сейчас нет, ждать тут бессмысленно. Помечаем, чтобы агент не
         # считал это поломкой и не тратил время на пустые попытки.
-        m_timer = re.search(r"через\s+(\d{1,2}:\d{2}(?::\d{2})?)", norm)
+        m_timer = find_timer(text)
         if m_timer and not self.has_combat_button():
             result["stage"] = "ждём таймер"
-            result["note"] = f"битва начнётся через {m_timer.group(1)}"
+            result["note"] = f"битва начнётся через {m_timer}"
             result["wait_timer"] = True
             return result
 
@@ -2962,11 +3025,10 @@ class Game:
                 continue
             # после входа страница может оказаться с таймером («Захват замка можно
             # начать через 05:28:22») — это не поломка, ждём следующего окна
-            m_timer = re.search(r"через\s+(\d{1,2}:\d{2}(?::\d{2})?)",
-                                normalize_ru(self.body_text()).lower())
+            m_timer = find_timer(self.body_text())
             if m_timer:
                 result["stage"] = "ждём таймер"
-                result["note"] = f"начнётся через {m_timer.group(1)}"
+                result["note"] = f"начнётся через {m_timer}"
                 result["wait_timer"] = True
                 return result
             self.reload()
@@ -3013,38 +3075,30 @@ class Game:
         """Кликнуть по элементу с текстом — не только <a>, но и span/div/button.
 
         В игре кнопки входа («Встать в очередь», «Войти в замок») — обычные
-        <span>/<div> с обработчиком, а не ссылки. При `avoid_gold` платные
-        кнопки (рядом золото) пропускаются — золото тратить нельзя;
+        <span>/<div> с обработчиком, а не ссылки, и текст в них может быть
+        с омоглифами — ищем по нормализованному тексту. При `avoid_gold`
+        платные кнопки (рядом золото) пропускаются — золото тратить нельзя;
         `avoid_paid` — то же для серебра.
         """
-        for tag in ("a", "button", "span", "div", "li", "input"):
+        for target in self._find_text_elements((label,), prefix=True):
             try:
-                locator = self.p.locator(f"{tag}:has-text('{label}')")
-                count = locator.count()
+                text = (target.inner_text() or "").strip()
             except Exception:
                 continue
-            for index in range(min(count, 6)):
-                target = locator.nth(index)
-                try:
-                    text = (target.inner_text() or "").strip()
-                except Exception:
-                    continue
-                if label not in text or len(text) > len(label) + 40:
-                    continue
-                if avoid_paid and self._near_paid(target):
-                    continue
-                if avoid_gold and self._near_gold(target):
-                    continue
-                try:
-                    target.scroll_into_view_if_needed(timeout=3000)
-                    self.human.move_mouse_to(self.p, target)
-                    self.human.pause("action")
-                    target.click(timeout=8000)
-                except Exception:
-                    continue
-                self._settle()
+            if avoid_paid and self._near_paid(target):
+                continue
+            if avoid_gold and self._near_gold(target):
+                continue
+            try:
+                target.scroll_into_view_if_needed(timeout=3000)
+                self.human.move_mouse_to(self.p, target)
                 self.human.pause("action")
-                return True
+                target.click(timeout=8000)
+            except Exception:
+                continue
+            self._settle()
+            self.human.pause("action")
+            return True
         return False
 
     def dump_page(self, name: str, out_dir: str | Path) -> Path:

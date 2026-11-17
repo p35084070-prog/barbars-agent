@@ -502,17 +502,28 @@ class OkGame(Game):
                     self.human.pause("fight")
                     return True
         for label in ATTACK_LABELS:
-            selector = f"a:has-text('{label}'), button:has-text('{label}')"
-            if self._click_selector(selector):
-                self._settle()
-                self.human.pause("fight")
-                return True
+            for target in self._find_text_elements((label,), prefix=True):
+                try:
+                    target.scroll_into_view_if_needed(timeout=3000)
+                    self.human.move_mouse_to(self.p, target)
+                    self.human.pause("fight")
+                    target.click(timeout=8000)
+                    self._settle()
+                    self.human.pause("fight")
+                    return True
+                except Exception:  # noqa: BLE001
+                    continue
         return False
 
     def click_text(self, text: str, *, exact: bool = False, nth: int = 0,
                    tags: tuple[str, ...] = ("a", "button", "input"),
                    timeout: int = 8000) -> bool:
-        """Кликнуть по элементу с указанным текстом (с повтором на новом кадре)."""
+        """Кликнуть по элементу с указанным текстом (с повтором на новом кадре).
+
+        Игра маскирует буквы латинскими омоглифами («Войти» → «Boйти»),
+        поэтому сначала пробуем обычный CSS-поиск, а если не нашли —
+        ищем по нормализованному тексту.
+        """
         for tag in tags:
             selectors: list[str] = []
             if exact:
@@ -526,6 +537,17 @@ class OkGame(Game):
                     self._settle()
                     self.human.pause("action")
                     return True
+        for target in self._find_text_elements((text,), prefix=not exact, tags=tags):
+            try:
+                target.scroll_into_view_if_needed(timeout=3000)
+                self.human.move_mouse_to(self.p, target)
+                self.human.pause("action")
+                target.click(timeout=timeout)
+            except Exception:  # noqa: BLE001
+                continue
+            self._settle()
+            self.human.pause("action")
+            return True
         return False
 
     # ------------------------------------------------------------------ навигация
