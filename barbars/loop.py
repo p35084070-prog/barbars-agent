@@ -575,6 +575,48 @@ class Agent:
             cracked += int(res.get("cracked", 0))
             dropped += int(res.get("dropped", 0))
         counts = self.game.bag_counts()
+        # Сундук полон — это тупик для прокачки: игра пишет «В сундуке мало
+        # места!», дроп не помещается, и опыт героя перестаёт расти (замер
+        # 18.11: Pandei 20/20, qdal 20/20, keis 25/25 — опыт стоял, хотя
+        # герои бились). Освобождаем место, ничего не разбирая.
+        chest_total = int(counts.get("chest_total", 0) or 0)
+        chest_used = int(counts.get("chest_used", 0) or 0)
+        if chest_total and chest_used >= chest_total:
+            worn_slots: dict[str, int] = {}
+            try:
+                for item in self.game.worn_gear():
+                    slot = str(item.get("slot", "") or "")
+                    if slot:
+                        worn_slots[slot] = max(
+                            worn_slots.get(slot, 0), int(item.get("level", 0) or 0))
+            except Exception as exc:  # noqa: BLE001
+                self.log(f"сундук: не удалось прочитать надетое — {exc}", "WARN")
+            free = self.game.free_chest_space(
+                limit=int(gear_cfg.get("chest_free_limit", 10)),
+                worn=worn_slots,
+            )
+            freed = int(free.get("worn", 0)) + int(free.get("moved", 0)) + int(free.get("stored", 0))
+            if freed:
+                self.log(
+                    f"сундук: освобождено {freed} (надето {free.get('worn')}, "
+                    f"в рюкзак {free.get('moved')}, в хранилище {free.get('stored')})"
+                )
+                # перенесённое в рюкзак обрабатываем: «Лучше» надеть, хлам разобрать
+                if crack:
+                    cracked += self.game.crack_items(
+                        limit=int(gear_cfg.get("crack_limit", 10)),
+                        keep_better=True,
+                        keep_mythic=True,
+                        keep_tiers=keep_tiers,
+                    )
+                worn += int(self.game.equip_better_items(limit=max_equip) or 0)
+                counts = self.game.bag_counts()
+            else:
+                self.log(
+                    "сундук полон и освободить нечего — новый дроп не поместится, "
+                    "опыт расти не будет",
+                    "WARN",
+                )
         # лишние мифические вещи (дубли по слотам) — на витрину, их не разобрать
         sold = 0
         if sell_store:

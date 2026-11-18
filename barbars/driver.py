@@ -3012,6 +3012,120 @@ class Game:
             cracked += 1
         return cracked
 
+    def _chest_item_blocks(self) -> list[dict[str, Any]]:
+        """Вещи в сундуке: имя, уровень, слот, индекс и доступные действия.
+
+        Страница `/user/store` даёт для каждой вещи ссылки `wearLink`
+        («надеть»), `toRackLink` («в рюкзак») и иногда
+        `sendToGuildStorageLinkPanel:sendLink` («в хранилище» — клановое).
+        """
+        from . import pages
+
+        self.goto("https://barbars.ru/user/store")
+        html = self.p.content()
+        out: list[dict[str, Any]] = []
+        for chunk, index in self._item_blocks(html):
+            name = ""
+            m = re.search(r'item/id/\d+"><span>([^<]{2,60})</span>', chunk)
+            if m:
+                name = m.group(1).strip()
+            level = 0
+            m = re.search(r"(\d+)\s*ур", re.sub("<[^>]+>", " ", chunk))
+            if m:
+                level = int(m.group(1))
+            slot, _kind = pages.slot_of(name)
+            out.append({
+                "index": index,
+                "name": name,
+                "level": level,
+                "slot": slot,
+                "better": "Лучше" in chunk,
+                "wear": f"items:{index}:wearLink" in chunk,
+                "to_rack": f"items:{index}:toRackLink" in chunk,
+                "to_storage": f"items:{index}:sendToGuildStorageLinkPanel:sendLink" in chunk,
+            })
+        return out
+
+    def _page_bag_free(self) -> int:
+        """Сколько свободных мест в рюкзаке (по строке «Открыть рюкзак (N/M)»)."""
+        text = self.body_text()
+        m = re.search(r"Открыть рюкзак\s*\((\d+)\s*/\s*(\d+)\)", text)
+        if not m:
+            return 0
+        return max(0, int(m.group(2)) - int(m.group(1)))
+
+    def free_chest_space(
+        self,
+        limit: int = 10,
+        worn: dict[str, int] | None = None,
+    ) -> dict[str, int]:
+        """Освободить место в сундуке, ничего не разбирая и не выбрасывая.
+
+        Полный сундук — тупик для прокачки: игра пишет «В сундуке мало места!»,
+        дроп не помещается, и опыт героя перестаёт расти (замер 18.11: у
+        Pandei сундук 20/20, опыт стоял на 36.08G при 139 ударах в башне за
+        1,5 часа; то же у qdal 20/20 и keis 25/25).
+
+        Порядок:
+          1) надеть «Лучше» из сундука (`wearLink`);
+          2) надеть вещь, которая в своём слоте сильнее надетой;
+          3) перенести вещи в рюкзак (`toRackLink`), если там есть место —
+             рюкзак потом разберут (хлам) или надевают;
+          4) отправить в клановое хранилище (`sendLink`).
+
+        `worn` — словарь {слот: уровень надетой вещи}; в него пишем новые.
+        """
+        out = {"worn": 0, "moved": 0, "stored": 0}
+        worn = worn if worn is not None else {}
+        for _ in range(max(1, limit)):
+            items = self._chest_item_blocks()
+            if not items:
+                break
+            bag_free = self._page_bag_free()
+            target: tuple[dict[str, Any], str] | None = None
+            for it in items:
+                if it["better"] and it["wear"]:
+                    target = (it, "wear")
+                    break
+            if target is None:
+                for it in items:
+                    if not it["wear"] or not it["slot"]:
+                        continue
+                    cur = int(worn.get(it["slot"], 0) or 0)
+                    if cur and it["level"] > cur:
+                        target = (it, "wear")
+                        break
+            if target is None and bag_free > 0:
+                for it in items:
+                    if it["to_rack"]:
+                        target = (it, "rack")
+                        break
+            if target is None:
+                for it in items:
+                    if it["to_storage"]:
+                        target = (it, "storage")
+                        break
+            if target is None:
+                break
+            it, kind = target
+            href = {
+                "wear": f"items:{it['index']}:wearLink",
+                "rack": f"items:{it['index']}:toRackLink",
+                "storage": f"items:{it['index']}:sendToGuildStorageLinkPanel:sendLink",
+            }[kind]
+            if not self.click_href(href):
+                break
+            if kind == "wear":
+                self.confirm_if_needed()
+                if it["slot"]:
+                    worn[it["slot"]] = max(int(worn.get(it["slot"], 0) or 0), int(it["level"] or 0))
+                out["worn"] += 1
+            elif kind == "rack":
+                out["moved"] += 1
+            else:
+                out["stored"] += 1
+        return out
+
     def clean_chest(
         self,
         limit: int = 10,

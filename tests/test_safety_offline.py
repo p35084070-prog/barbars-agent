@@ -1715,6 +1715,101 @@ def test_live_config_has_chest_cleanup_mode():
     assert cfg["gear"]["chest_cleanup"] in ("crack", "drop", "off")
 
 
+# ------------------------------------------------- полный сундук = опыт не растёт
+# Замер 18.11: игра пишет «В сундуке мало места!», дроп не помещается, и опыт
+# героя стоит (Pandei 20/20, qdal 20/20, keis 25/25). Место освобождаем без
+# разбора вещей: надеть «Лучше», перенести в рюкзак, отдать в клановое хранилище.
+
+def _chest_item(index=0, name="Пояс Берсерка", level=25, better=False, wear=True,
+                rack=True, storage=False):
+    links = []
+    if wear:
+        links.append(
+            f'<a href="../?wicket:interface=:4:items:{index}:wearLink::ILinkListener::">надеть</a>')
+    if rack:
+        links.append(
+            f'<a href="../?wicket:interface=:4:items:{index}:toRackLink::ILinkListener::">в рюкзак</a>')
+    if storage:
+        links.append(
+            f'<a href="../?wicket:interface=:4:items:{index}:sendToGuildStorageLinkPanel:sendLink::ILinkListener::">в хранилище</a>')
+    mark = '<span>Лучше (+8)</span>' if better else ""
+    return (
+        '<div class="hr"></div><div>'
+        + "".join(links)
+        + f'<a href="../item/id/123"><span>{name}</span></a>'
+        + f'<span>{level} ур, личный</span>{mark}</div>'
+    )
+
+
+def _free_chest_game(pages_html, bag_text="Открыть рюкзак (10/20)"):
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.content.side_effect = pages_html
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    g.confirm_if_needed = Mock(return_value=True)
+    g.body_text = Mock(return_value=bag_text)
+    return g
+
+
+def test_free_chest_space_wears_better_item():
+    html = _chest_item(better=True)
+    g = _free_chest_game([html, html, html])
+    res = g.free_chest_space(limit=1)
+    assert res["worn"] == 1
+    g.click_href.assert_called_once_with("items:0:wearLink")
+
+
+def test_free_chest_space_moves_item_to_bag():
+    # «Лучше» нет, рюкзак свободен — переносим вещь в рюкзак.
+    html = _chest_item()
+    g = _free_chest_game([html, html, html])
+    res = g.free_chest_space(limit=1)
+    assert res["moved"] == 1 and res["worn"] == 0
+    g.click_href.assert_called_once_with("items:0:toRackLink")
+
+
+def test_free_chest_space_never_wears_weaker_item():
+    # В сундуке вещь слабее надетой в том же слоте — надевать её нельзя,
+    # рюкзак полон → ничего не делаем.
+    html = _chest_item(name="Пояс Берсерка", level=25)
+    g = _free_chest_game([html, html, html], bag_text="Открыть рюкзак (20/20)")
+    res = g.free_chest_space(limit=1, worn={"пояс": 55})
+    assert res == {"worn": 0, "moved": 0, "stored": 0}
+    g.click_href.assert_not_called()
+
+
+def test_free_chest_space_sends_item_to_clan_storage():
+    # Рюкзак полон, а вещь принимает клановое хранилище — отправляем туда.
+    html = _chest_item(name="Сапфир энергии", level=0, wear=False, rack=True, storage=True)
+    g = _free_chest_game([html, html, html], bag_text="Открыть рюкзак (20/20)")
+    res = g.free_chest_space(limit=1)
+    assert res["moved"] == 0
+    assert res["stored"] == 1
+    g.click_href.assert_called_once_with(
+        "items:0:sendToGuildStorageLinkPanel:sendLink")
+
+
+def test_loop_frees_chest_when_it_is_full(tmp_path):
+    a = _gear_agent(tmp_path, "off")
+    a.game.bag_counts.return_value = {
+        "bag_used": 10, "bag_total": 20, "chest_used": 20, "chest_total": 20}
+    a.game.worn_gear.return_value = [{"name": "Пояс Берсерка", "slot": "пояс", "level": "55"}]
+    a.game.free_chest_space.return_value = {"worn": 0, "moved": 4, "stored": 0}
+    a.game.equip_better_items.return_value = 0
+    a.game.crack_items.return_value = 0
+    a._do_gear(rules.Decision("gear", params={"crack": False, "crack_chest": False}))
+    a.game.free_chest_space.assert_called_once()
+
+
+def test_loop_does_not_touch_chest_with_free_space(tmp_path):
+    a = _gear_agent(tmp_path, "off")
+    a.game.bag_counts.return_value = {
+        "bag_used": 2, "bag_total": 20, "chest_used": 11, "chest_total": 20}
+    a._do_gear(rules.Decision("gear", params={"crack": False, "crack_chest": False}))
+    a.game.free_chest_space.assert_not_called()
+
+
 # ---------------------------------------------------------------- бой: удар
 
 

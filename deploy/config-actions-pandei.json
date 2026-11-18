@@ -272,7 +272,7 @@
     "enabled": true,
     "keep_bag": 2,
     "max_equip": 12,
-    "crack": false,
+    "crack": true,
     "crack_limit": 15,
     "crack_chest": false,
     "crack_chest_limit": 15,
