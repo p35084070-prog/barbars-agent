@@ -3,5 +3,5 @@
     "max_hp": 1287,
     "max_energy": 1778
   },
-  "tower_paused": false
+  "tower_paused": true
 }
