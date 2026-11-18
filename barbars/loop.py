@@ -2169,6 +2169,7 @@ class Agent:
         stale_energy_checks = 0
         stalls = 0
         no_attack_turns = 0
+        off_page_turns = 0
         last_energy = None
         damage = 0
         healing = 0
@@ -2226,6 +2227,17 @@ class Agent:
             if cs.finished and not cs.attack_links and not cs.heal_links:
                 self.log("  бой окончен")
                 return done("исход неизвестен" if force else "окончен")
+            if not force and not getattr(cs, "on_fight_page", True):
+                # Игра увела с боя (бой закончился): боевой панели на странице
+                # нет и вернуться некуда. Раньше агент ждал здесь 8 ходов в
+                # пустоту и писал «нет удара» — теперь выходим сразу.
+                off_page_turns += 1
+                if off_page_turns >= 2:
+                    self.log("  бой окончен: боевой панели на странице нет")
+                    self._leave_fight()
+                    return done("окончен")
+            else:
+                off_page_turns = 0
             if not force:
                 # Обычный бой без удара (у медика в башне удара нет) — дальше
                 # идти бессмысленно: герой только лечится и стоит до лимита

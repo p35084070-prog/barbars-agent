@@ -226,6 +226,9 @@ class CombatState:
     log_lines: list[str] = field(default_factory=list)
     finished: bool = False
     victory: bool | None = None
+    # True — мы на странице боя (панель/журнал/«Вернуться в бой»).
+    # По умолчанию True: combat() выставляет его по факту страницы.
+    on_fight_page: bool = True
     raid_evidence: dict[str, Any] = field(default_factory=dict)
 
 
@@ -819,6 +822,13 @@ class Game:
         print(f"[перезапуск] не удалось: {last_error}")
         return False
 
+    def _has_return_to_fight_link(self) -> bool:
+        """Есть ли на странице ссылка «Вернуться в бой» (`currentGameLink`)."""
+        try:
+            return self.p.locator("a[href*='currentGameLink']").count() > 0
+        except Exception:  # noqa: BLE001
+            return False
+
     def return_to_fight(self) -> bool:
         """Вернуться в бой, если игра увела на карту башни.
 
@@ -1107,6 +1117,13 @@ class Game:
             cs.victory = False
         elif re.search(r"Победа|ты победил|побеждён", tail, re.IGNORECASE):
             cs.victory = True
+        # Есть ли мы вообще на странице боя: боевая панель, журнал боя или
+        # ссылка «Вернуться в бой». Если нет — бой закончился (обычно игра
+        # уводит на карту/главную), и ждать тут бессмысленно.
+        cs.on_fight_page = bool(
+            cs.attack_links or cs.heal_links or cs.flee_links or cs.potion_links
+            or cs.log_lines or self._has_return_to_fight_link()
+        )
         html = self.p.content()
         if "dragon_mif.png" in html or "дракон" in normalize_ru(cs.title):
             from .raid_evidence import parse_dragon_evidence

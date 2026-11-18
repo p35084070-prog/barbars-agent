@@ -1767,6 +1767,20 @@ def test_tower_repeats_the_location_attack_after_a_failed_round(tmp_path):
     a.game.click_text.assert_any_call("Покинуть бой")
 
 
+def test_fight_ends_quietly_when_the_game_leaves_the_fight_page(tmp_path):
+    # Бой закончился, игра увела на карту: боевой панели нет и вернуться
+    # некуда. Раньше агент ждал 8 ходов впустую и писал «нет удара».
+    a = agent(tmp_path)
+    a.game.combat.side_effect = [
+        CombatState(attack_links=["Бить врага"], our_hp=100, our_energy=100),
+        CombatState(our_hp=100, our_energy=100, on_fight_page=False),
+        CombatState(our_hp=100, our_energy=100, on_fight_page=False),
+    ]
+    a.game.status.return_value = Status(hp=100, energy=100)
+    with patch("barbars.loop.time.sleep"):
+        assert a._fight_loop(max_turns=50) == "окончен"
+
+
 def test_attack_hints_cover_tower_and_fight_buttons():
     from barbars.driver import ATTACK_HREF_HINTS, ATTACK_LABELS, ATTACK_TEXT_PREFIXES
     assert "damageRandomEnemyLink" in ATTACK_HREF_HINTS
