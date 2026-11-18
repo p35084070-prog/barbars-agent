@@ -91,6 +91,18 @@ jobs:
             --headless \
             --duration ${{ github.event.inputs.duration || '330' }}
 
+      - name: Сессия ОК снова живая — закрываем issue
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE='Сессия ОК протухла: обновите секрет OK_SESSION_B64'
+          for number in $(gh issue list --repo "${{ github.repository }}" --state open \
+            --search "in:title $TITLE" --json number --jq '.[].number'); do
+            gh issue close "$number" --repo "${{ github.repository }}" \
+              --comment 'Сессия ОК снова работает — закрываем.' || true
+          done
+
       - name: Сохранить дневные счётчики
         if: always()
         run: |
@@ -119,6 +131,14 @@ jobs:
         run: |
           TITLE='Сессия ОК протухла: обновите секрет OK_SESSION_B64'
           BODY='Агент не смог открыть игру через ОК (сессия из секрета недействительна). Обновите секрет: на ПК `python tools\\ok_phone.py` → `python tools\\ok_export_cookies.py` → `gh secret set OK_SESSION_B64 --repo p35084070-prog/barbars-agent --body (Get-Content state\\ok-session.b64 -Raw).Trim()`.'
+          # не плодим issue: сессия может протухать на сутки, а крон запускает
+          # агента каждые 20 минут
+          existing=$(gh issue list --repo "${{ github.repository }}" --state open \
+            --search "in:title $TITLE" --json number --jq '.[].number' | head -n 1)
+          if [ -n "$existing" ]; then
+            echo "::error::$TITLE (issue #$existing уже открыт)"
+            exit 0
+          fi
           gh issue create --repo "${{ github.repository }}" \
             --title "$TITLE" --body "$BODY" \
             || echo 'не удалось создать issue'
