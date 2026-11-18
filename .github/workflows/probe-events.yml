@@ -50,11 +50,14 @@ jobs:
           FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
           SB_LOGIN: ${{ secrets.BARBARS_STEELBLUE_LOGIN }}
           SB_PASS: ${{ secrets.BARBARS_STEELBLUE_PASSWORD }}
+          PD_LOGIN: ${{ secrets.BARBARS_PANDEI_LOGIN }}
+          PD_PASS: ${{ secrets.BARBARS_PANDEI_PASSWORD }}
         run: |
           mkdir -p credentials
           printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
           printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
           printf '%s\n%s\n' "$SB_LOGIN" "$SB_PASS" > credentials/steelblue.txt
+          printf '%s\n%s\n' "$PD_LOGIN" "$PD_PASS" > credentials/pandei.txt
           chmod 600 credentials/*.txt
 
       - name: Страницы событий
@@ -69,6 +72,7 @@ jobs:
               keis) cfg=deploy/config-actions-keis.json ;;
               fw)   cfg=deploy/config-actions-firewhite.json ;;
               sb)   cfg=deploy/config-actions-steelblue.json ;;
+              pd)   cfg=deploy/config-actions-pandei.json ;;
               *) echo "пропускаем неизвестного героя $hero"; continue ;;
             esac
             for url in $(echo "$URLS" | tr ',' ' '); do
