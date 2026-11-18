@@ -1152,12 +1152,14 @@ def test_respawn_mode_restores_active_battle(tmp_path):
 
 @pytest.mark.parametrize("name", CONFIGS)
 def test_live_configs_have_raid_armed_for_five(name):
-    # Рейд на мифического дракона был на паузе с 16.11 по 18.11.2026 (пещера
-    # закрыта для Pandei — замок «новичок» до ~18.11 06:03 UTC, отряд из 5 без
-    # него не собирается). 18.11 рейд включён обратно: состав из 5 героев,
-    # лидер keis, стартует только полный отряд.
+    # Рейд на мифического дракона на паузе с 16.11.2026 и снова с 18.11
+    # 06:07 UTC: у Pandei замок «новичок» в клане — игра пишет «можешь купить
+    # Премиум или подождать 23:42:21», то есть клановое подземелье открыто
+    # лишь ~19.11 06:06 UTC. `party_ready` требует все 5 героев, значит отряд
+    # без Pandei не начнёт бой, и остальные четверо только зря ждали бы в зале.
+    # Состав отряда в конфиге остаётся целым — 19.11 вернуть `enabled: true`.
     cfg = config(name)
-    assert cfg["raid"]["enabled"] is True
+    assert cfg["raid"]["enabled"] is False
     assert cfg["raid"]["every_respawn"] is False
     assert cfg["raid"]["max_fights_per_day"] == 0
     assert cfg["raid"]["party"], "состав рейда должен остаться в конфиге"
