@@ -80,7 +80,7 @@ jobs:
               if [ "$url" = "$CLICK_URL" ]; then
                 python -u tools/probe_user_page.py --config "$cfg" --label "${hero}${url//\//_}" --url "$url" --click-location || true
               else
-                python -u tools/probe_user_page.py --config "$cfg" --label "${hero}${url//\//_}" --url "$url" || true
+                python -u tools/probe_user_page.py --config "$cfg" --label "${hero}${url//\//_}" --url "$url" --lines 60 || true
               fi
             done
           done

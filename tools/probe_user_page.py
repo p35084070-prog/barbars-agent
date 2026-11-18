@@ -144,6 +144,8 @@ def main() -> int:
                         help="кликнуть по ссылке с этим текстом (можно несколько раз)")
     parser.add_argument("--wait-after", type=int, default=0,
                         help="сколько секунд ждать после последнего клика")
+    parser.add_argument("--lines", type=int, default=12,
+                        help="сколько строк страницы показать (для страниц клана нужно больше)")
     parser.add_argument("--tower-scan", action="store_true",
                         help="перебрать локации башни и найти страницу с видимым ударом")
     args = parser.parse_args()
@@ -191,7 +193,7 @@ def main() -> int:
                 text = game.body_text()
             lines = [l.strip() for l in text.splitlines() if l.strip()]
             out["lines_matched"] = [l for l in lines if KEY.search(l)][:40]
-            out["head"] = lines[:12]
+            out["head"] = lines[:max(1, args.lines)]
             if "bg" in args.url:
                 from barbars import pages
 
