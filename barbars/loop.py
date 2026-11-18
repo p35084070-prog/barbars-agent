@@ -2206,6 +2206,7 @@ class Agent:
 
     def _fight_loop_inner(self, force: bool = False, max_turns: int = 0) -> str:
         turns = 0
+        attacks = 0
         limit = max_turns or int(self.config.get("fight", {}).get("max_turns", 80))
         last_log = ""
         stale_energy_checks = 0
@@ -2236,6 +2237,14 @@ class Agent:
             if self.deadline and time.time() >= self.deadline:
                 self.log("  выходим по лимиту времени")
                 return done("время вышло")
+            # Сколько итераций ждём действия, которого нет на странице.
+            # Если мы уже УДАРИЛИ в этом бою — значит ждём СВОЕГО хода: игра
+            # показывает кнопку удара только в свой ход, и такие паузы бывают
+            # по 5-7 итераций (18.11: дуэли и ущелье големов у qdal — агент
+            # выходил за секунду до своего хода, бой без добычи). Если ударов
+            # не было ни одного (медик в башне, только лечение) — выходим быстро.
+            patience = int(self.config.get("fight", {}).get("no_attack_patience", 20))
+            no_action_limit = patience if attacks else 8
             cs = self.game.combat()
             if force:
                 self._record_raid_evidence(cs)
@@ -2288,7 +2297,7 @@ class Agent:
                     no_attack_turns = 0
                 else:
                     no_attack_turns += 1
-                    if no_attack_turns >= 8:
+                    if no_attack_turns >= no_action_limit:
                         self.log("  в бою нет удара — выходим, чтобы не простаивать")
                         self._leave_fight()
                         return done("нет удара")
@@ -2311,6 +2320,7 @@ class Agent:
             self.game.human.pause("fight")
             if decision.action == "attack":
                 turns += 1
+                attacks += 1
                 if not self.game.click_attack(cs.attack_hrefs):
                     self.log("  не удалось ударить")
                     self._leave_fight()
@@ -2370,7 +2380,7 @@ class Agent:
                 # В бою нет ни удара, ни умения (например, незнакомая вёрстка):
                 # ждать бесконечно нельзя — иначе агент встанет на этом бою.
                 stalls += 1
-                if stalls >= 8:
+                if stalls >= no_action_limit:
                     self.log("  в бою нет доступных действий — выходим")
                     self._leave_fight()
                     return done("нет действий")

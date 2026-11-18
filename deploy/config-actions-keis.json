@@ -231,7 +231,8 @@
     "energy_attack_threshold": 0.85,
     "energy_wait_sec": 2,
     "max_turns": 100,
-    "prefer_heal": true
+    "prefer_heal": true,
+    "no_attack_patience": 20
   },
   "targets": [
     "dungeon",

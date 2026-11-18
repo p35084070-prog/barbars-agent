@@ -1710,6 +1710,37 @@ def test_loop_leaves_chest_alone_when_disabled(tmp_path):
     a.game.clean_chest.assert_not_called()
 
 
+def test_fight_waits_for_own_turn_after_a_hit(tmp_path):
+    """18.11: после удара игра прячет кнопку до нашего хода — паузы бывают по
+    5-7 итераций. Старых 8 итераций не хватало: агент выходил из дуэли и
+    ущелья големов за секунду до своего хода — бой без добычи."""
+    a = agent(tmp_path)
+    a.game.combat.side_effect = (
+        [CombatState(attack_links=["Бить врага"], our_hp=100, our_energy=100)]
+        + [CombatState(attack_links=[], our_hp=100, our_energy=100) for _ in range(40)]
+    )
+    a.game.status.return_value = Status(hp=100, energy=100)
+    a.game.click_attack.return_value = True
+    a.game.return_to_fight.return_value = False
+    with patch('barbars.loop.time.sleep'):
+        out = a._fight_loop(force=False, max_turns=40)
+    assert out == "нет удара"
+    assert a.game.combat.call_count >= 15  # выдержал паузу, а не сдался на 8-й
+
+
+def test_fight_without_any_hit_gives_up_quickly(tmp_path):
+    """Медик, у которого удара нет совсем, не должен висеть в бою."""
+    a = agent(tmp_path)
+    a.game.combat.side_effect = [
+        CombatState(attack_links=[], our_hp=100, our_energy=100) for _ in range(30)]
+    a.game.status.return_value = Status(hp=100, energy=100)
+    a.game.return_to_fight.return_value = False
+    with patch('barbars.loop.time.sleep'):
+        out = a._fight_loop(force=False, max_turns=30)
+    assert out == "нет удара"
+    assert a.game.combat.call_count <= 10
+
+
 def test_live_config_has_chest_cleanup_mode():
     cfg = json.loads((ROOT / "deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
     assert cfg["gear"]["chest_cleanup"] in ("crack", "drop", "off")
