@@ -1152,14 +1152,13 @@ def test_respawn_mode_restores_active_battle(tmp_path):
 
 @pytest.mark.parametrize("name", CONFIGS)
 def test_live_configs_have_raid_armed_for_five(name):
-    # Рейд на мифического дракона на паузе с 16.11.2026 и снова с 18.11
-    # 06:07 UTC: у Pandei замок «новичок» в клане — игра пишет «можешь купить
-    # Премиум или подождать 23:42:21», то есть клановое подземелье открыто
-    # лишь ~19.11 06:06 UTC. `party_ready` требует все 5 героев, значит отряд
-    # без Pandei не начнёт бой, и остальные четверо только зря ждали бы в зале.
-    # Состав отряда в конфиге остаётся целым — 19.11 вернуть `enabled: true`.
+    # 19.11 20:10-20:17 UTC: пещера открыта — проба зала (read-only) показала
+    # closed=false, hp=100, can_start=true, locked_out=false и 5 убийств
+    # дракона кланом; замок «новичок» у Pandei снят. Рейд снова включён во
+    # всех конфигах участников отряда. Состав отряда прежний: 5 героев,
+    # лидер keis (он же единственный, кто нажимает «Начать бой!»).
     cfg = config(name)
-    assert cfg["raid"]["enabled"] is False
+    assert cfg["raid"]["enabled"] is True
     assert cfg["raid"]["every_respawn"] is False
     assert cfg["raid"]["max_fights_per_day"] == 0
     assert cfg["raid"]["party"], "состав рейда должен остаться в конфиге"
@@ -1168,12 +1167,23 @@ def test_live_configs_have_raid_armed_for_five(name):
     assert cfg["raid"]["leader"] == "keis"
 
 
+def test_steelblue_stays_out_of_the_raid():
+    # steelblue в отряд не входит (5 героев: keis, firewhite, ok, ok2, pandei) —
+    # его рейд остаётся выключенным, иначе он зря стоял бы в зале.
+    cfg = config("deploy/config-actions-steelblue.json")
+    assert cfg["raid"]["enabled"] is False
+
+
 @pytest.mark.parametrize("name", CONFIGS)
-def test_raid_decision_is_silent_while_paused(name):
-    # Пока рейд на паузе, планировщик не должен предлагать поход в пещеру.
+def test_raid_decision_is_offered_when_room_is_open(name):
+    # Рейд включён: при открытом зале планировщик предлагает поход в пещеру.
     from barbars import rules
     cfg = config(name)
-    assert rules._pick_raid(rules.GameState(raid={"hp": 100, "ready": [], "waiting": []}), cfg) is None
+    decision = rules._pick_raid(
+        rules.GameState(raid={"hp": 100, "ready": [], "waiting": []}), cfg)
+    assert decision is not None
+    assert decision.action == "raid"
+    assert decision.params["min_party"] == 5
 
 
 @pytest.mark.parametrize("icon,tier", [

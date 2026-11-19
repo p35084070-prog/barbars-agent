@@ -932,7 +932,10 @@ def _pick_raid(state: GameState, config: dict[str, Any]) -> Decision | None:
     interval = int(cfg.get("repeat_min", 30)) * 60
     if state.raid_last_at and (time.time() - state.raid_last_at) < interval:
         return None
-    if int(state.raid_today or 0) >= int(cfg.get("max_fights_per_day", 10)):
+    # `max_fights_per_day: 0` в конфигах означает «без ограничения» (как
+    # `gear.max_equip`), а не «лимит 0»: иначе рейд не планировался бы никогда.
+    max_fights = int(cfg.get("max_fights_per_day", 10) or 0)
+    if max_fights > 0 and int(state.raid_today or 0) >= max_fights:
         return None
     url = str(cfg.get("url", "https://barbars.ru/game/dragonDungeon"))
     ready = len(info.get("ready") or [])
