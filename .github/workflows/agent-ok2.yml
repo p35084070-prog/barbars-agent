@@ -72,6 +72,11 @@ jobs:
         env:
           OK2_SESSION_B64: ${{ secrets.OK2_SESSION_B64 }}
         run: |
+          # Метку времени ставим ЗДЕСЬ, до восстановления сессии: если сессия
+          # протухла и агент не поднялся, шаг «Следующий сеанс» не должен
+          # перезапускать его по кругу (20.11: пять прогонов подряд за минуту,
+          # раннеры заняты, остальные агенты стоят в очереди).
+          echo "SESSION_START=$(date +%s)" >> $GITHUB_ENV
           if [ -s state/ok2/ok-session.b64 ]; then
             echo "сессия получена автовходом ($(wc -c < state/ok2/ok-session.b64) байт)"
             exit 0
@@ -87,7 +92,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "SESSION_START=$(date +%s)" >> $GITHUB_ENV
           python -u run.py --config config-ok2.json play-ok \
             --headless \
             --duration ${{ github.event.inputs.duration || '330' }}
@@ -127,6 +131,10 @@ jobs:
           # значит не поднялись (сессия ОК протухла, креды неверны): тогда
           # цепочку не продолжаем, подхватит cron.
           now=$(date +%s); start=${SESSION_START:-0}
+          if [ "$start" -eq 0 ]; then
+            echo "сеанс не стартовал (сессия/креды) — цепочку не продолжаем (подстрахует cron)"
+            exit 0
+          fi
           if [ $((now - start)) -lt 180 ]; then
             echo "сеанс короче 3 минут — цепочку не продолжаем (подстрахует cron)"
             exit 0
