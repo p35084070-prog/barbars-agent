@@ -1230,6 +1230,14 @@ class CombatPolicy:
         self.energy_threshold = cfg.get("energy_attack_threshold", 0.85)
         self.max_turns = cfg.get("max_turns", 80)
         self.prefer_heal = cfg.get("prefer_heal", False)
+        # Настройки боя с боссом (рейд на дракона). Обычный бой в башне
+        # оставляем как есть: там выгодно подождать заряд меча.
+        raid = config.get("raid", {}) or {}
+        self.raid_potion_below = int(raid.get("potion_below_hp", 70))
+        self.raid_shield_below = int(raid.get("shield_below_hp", 85))
+        self.raid_dodge_below = int(raid.get("dodge_below_hp", 60))
+        self.raid_wait_energy = bool(raid.get("wait_energy", False))
+        self.raid_always_heal = bool(raid.get("always_heal", True))
 
     def choose(self, cs: CombatState, status: Status, state: GameState, force: bool = False) -> Decision:
         """Что нажать в этом ходе."""
@@ -1241,11 +1249,15 @@ class CombatPolicy:
         max_hp = state.max_hp or cs.our_hp or 0
         hp_ratio = (cs.our_hp or 0) / max_hp if max_hp else 1.0
 
-        # Зелье при низком здоровье.
-        if cs.potion_links and hp_ratio * 100 < self.potion_below:
+        # Зелье при низком здоровье. В рейде порог выше: дракон бьёт на
+        # 2759, а HP наших героев 1300-2300 — не успев выпить, воин мёртв.
+        potion_below = self.raid_potion_below if force else self.potion_below
+        if cs.potion_links and hp_ratio * 100 < potion_below:
             return Decision("potion", params={"text": cs.potion_links[0]}, reason="хилка на низком HP")
 
-        if force and self.prefer_heal and cs.heal_links:
+        if force and cs.heal_links and (self.prefer_heal or self.raid_always_heal):
+            # В рейде медик лечит всегда: без лечения воины падают от одного
+            # удара дракона (2759 урона при HP 1300-2300).
             return Decision("heal", params={"text": cs.heal_links[0]}, reason="медик лечит отряд")
 
         # Умения: сначала «увеличивает урон» перед ударом, затем защита.
@@ -1255,9 +1267,11 @@ class CombatPolicy:
 
         if boost:
             return Decision("ability", target=boost["name"], params={"href": boost["href"]}, reason="буст урона")
-        if shield and hp_ratio * 100 < 70:
+        shield_below = self.raid_shield_below if force else 70
+        dodge_below = self.raid_dodge_below if force else 45
+        if shield and hp_ratio * 100 < shield_below:
             return Decision("ability", target=shield["name"], params={"href": shield["href"]}, reason="щит при низком HP")
-        if dodge and hp_ratio * 100 < 45:
+        if dodge and hp_ratio * 100 < dodge_below:
             return Decision("ability", target=dodge["name"], params={"href": dodge["href"]}, reason="уклонение при низком HP")
 
         # Критическое здоровье — отступаем, а не продолжаем бить.
@@ -1278,6 +1292,11 @@ class CombatPolicy:
         energy_now = cs.our_energy or 0
         energy_known = bool(cs.our_energy) and energy_now > 0
         need_energy = not (force and not cs.attack_links)
+        if force and not self.raid_wait_energy:
+            # В рейде ждать заряд меча нельзя: пока воин стоит и ждёт, дракон
+            # бьёт (2759 урона) и убивает героя. 19.11 и 20.11 отряд погибал
+            # именно так, не успев ударить.
+            need_energy = False
         if need_energy and energy_known and energy_max and energy_now < energy_max * self.energy_threshold:
             return Decision("wait_energy", reason=f"ждём энергию {energy_now}/{energy_max}")
 

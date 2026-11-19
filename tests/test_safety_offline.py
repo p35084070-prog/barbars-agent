@@ -175,8 +175,11 @@ def test_raid_keeps_initial_energy_ceiling_before_first_state_collection(tmp_pat
     a.game.status.return_value = Status(hp=100, energy=100)
     with patch('barbars.loop.time.sleep'):
         assert a._fight_loop(force=True, max_turns=5) == 'победа'
-    a.game.click_attack.assert_called_once()
-    a.game.reload.assert_called_once()
+    # В рейде не ждём заряд меча: дракон бьёт на 2759, и воин, стоящий в
+    # ожидании, погибает раньше, чем успевает ударить (20.11). Поэтому оба
+    # хода — удар, а не ожидание энергии.
+    assert a.game.click_attack.call_count == 2
+    a.game.reload.assert_not_called()
     assert a.runtime['raid_active']['energy_ceiling'] == 1000
 
 
@@ -189,8 +192,10 @@ def test_saved_maximum_survives_partial_charge_at_restart(tmp_path):
     a.game.status.return_value = Status(hp=100, energy=700)
     with patch('barbars.loop.time.sleep'):
         a._fight_loop(force=True, max_turns=5)
-    a.game.click_attack.assert_not_called()
-    a.game.reload.assert_called_once()
+    # Энергия неполная, но в рейде это не мешает удару: лучше ударить слабее,
+    # чем стоять и умереть от следующего удара дракона.
+    a.game.click_attack.assert_called_once()
+    a.game.reload.assert_not_called()
 
 
 def test_live_combat_rows_without_clock2_and_actual_polechil_word():
@@ -2071,6 +2076,42 @@ def test_known_low_energy_still_waits():
     state = rules.GameState(max_hp=100, max_energy=3000)
     decision = _policy().choose(cs, Status(hp=100, energy=100), state)
     assert decision.action == "wait_energy"
+
+
+def test_raid_attacks_without_waiting_for_energy():
+    # 19.11 и 20.11: в бою с драконом воин ждал полного заряда меча, а дракон
+    # бил на 2759 — наши герои (HP 1300-2300) гибли, не успев ударить.
+    cfg = config()
+    cfg["raid"] = {"enabled": True}
+    cs = CombatState(attack_links=["Бить дракона"], our_hp=2000, our_energy=100)
+    state = rules.GameState(max_hp=2288, max_energy=2483)
+    decision = _policy(cfg).choose(cs, Status(hp=2000, energy=100), state, force=True)
+    assert decision.action == "attack"
+
+
+def test_raid_uses_potion_earlier_than_normal_fight():
+    # В рейде порог хилки выше: один удар дракона (2759) убивает героя,
+    # ждать HP ниже 25% — значит умереть.
+    cfg = config()
+    cfg["raid"] = {"enabled": True}
+    cs = CombatState(attack_links=["Бить дракона"], potion_links=["Пить бутылочку"],
+                     our_hp=1000, our_energy=2000)
+    state = rules.GameState(max_hp=2288, max_energy=2483)
+    policy = _policy(cfg)
+    assert policy.choose(cs, Status(hp=1000, energy=2000), state, force=True).action == "potion"
+    # В обычном бою (башня) тот же HP — не пьём.
+    assert policy.choose(cs, Status(hp=1000, energy=2000), state).action != "potion"
+
+
+def test_raid_medic_heals_without_prefer_heal_flag():
+    # Медик в рейде лечит всегда: без лечения воины падают от одного удара.
+    cfg = config()
+    cfg["raid"] = {"enabled": True}
+    cfg["fight"] = {"prefer_heal": False}
+    cs = CombatState(heal_links=["Лечить союзников"], our_hp=2288, our_energy=2000)
+    state = rules.GameState(max_hp=2288, max_energy=2483)
+    decision = _policy(cfg).choose(cs, Status(hp=2288, energy=2000), state, force=True)
+    assert decision.action == "heal"
 
 
 def test_fight_without_attack_gives_up_early(tmp_path):
