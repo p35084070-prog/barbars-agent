@@ -13,7 +13,15 @@ from typing import Any
 from . import pages, rules
 from .driver import Game
 from .llm import ClaudeAdvisor
-from .safety import RepairBudget, SpawnWitness, atomic_json, party_ready, raid_window, respawn_seconds
+from .safety import (
+    RepairBudget,
+    SpawnWitness,
+    atomic_json,
+    party_ready,
+    raid_window,
+    respawn_seconds,
+    room_strength_ok,
+)
 from .raid_evidence import record_sample
 
 
@@ -1256,14 +1264,32 @@ class Agent:
                     self.runtime["raid_roster"] = info.get("ready", [])
                     self._save_runtime()
                     self.log("рейд: после возрождения готовые: " + ", ".join(p.get("name", "?") for p in info.get("ready", [])))
+                if (party_ready(info, cfg) and not room_strength_ok(info, cfg)
+                        and time.time() - getattr(self, "room_wait_logged_at", 0) >= 60):
+                    # Наших героев мало для дракона — ждём клановых ветеранов.
+                    self.room_wait_logged_at = time.time()
+                    total = len(info.get("ready") or []) + len(info.get("waiting") or [])
+                    self.log(f"рейд: в зале {total} героев, ждём ещё до {cfg.get('min_room_size')} — дракону нужны силы")
+                wait_for = int(cfg.get("strength_wait_sec", 0) or 0)
+                since = float(self.runtime.get("raid_assembly_since") or 0)
+                waited_long = bool(wait_for and since and time.time() - since >= wait_for)
+                if waited_long:
+                    # Ветераны так и не подошли — ждать бессмысленно, начинаем
+                    # со своими: лучше попытка, чем ничего. Помечаем в логе.
+                    if not getattr(self, "strength_timeout_logged", False):
+                        self.strength_timeout_logged = True
+                        total = len(info.get("ready") or []) + len(info.get("waiting") or [])
+                        self.log(f"рейд: ждали силы {wait_for} с, в зале {total} героев — начинаем со своими")
                 if (self._raid_can_start(cfg)
                         and info.get("can_start") and info.get("hp") is not None
-                        and info["hp"] > 0 and party_ready(info, cfg)):
+                        and info["hp"] > 0 and party_ready(info, cfg)
+                        and (room_strength_ok(info, cfg) or waited_long)):
                     kills_before = self.game.raid_clan_kills()
                     # Revalidate the party after the read-only counter request.
                     info = self.game.raid_room(url)
                     if not (info.get("can_start") and not info.get("closed") and not info.get("locked_out")
-                            and info.get("hp") is not None and info["hp"] > 0 and party_ready(info, cfg)):
+                            and info.get("hp") is not None and info["hp"] > 0 and party_ready(info, cfg)
+                            and (room_strength_ok(info, cfg) or waited_long)):
                         continue
                     self.runtime["raid_active"] = {"started_at": time.time(), "party": info["ready"], "expected_party": cfg.get("party", []), "mode": "every_respawn",
                                                    "boss_initial_hp_pct": info["hp"], "initiator": self.account,

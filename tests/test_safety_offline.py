@@ -2078,6 +2078,19 @@ def test_known_low_energy_still_waits():
     assert decision.action == "wait_energy"
 
 
+def test_room_strength_requires_enough_heroes():
+    # Дракону нужны «десять хорошо вооружённых бойцов»: наши 6 не добивают
+    # (19.11 и 20.11 — дракон до 52-71% HP, все воины погибли).
+    from barbars.safety import room_strength_ok
+    cfg = {"min_room_size": 10}
+    six = {"ready": [{"id": str(i)} for i in range(6)], "waiting": []}
+    assert not room_strength_ok(six, cfg)
+    full = {"ready": [{"id": str(i)} for i in range(6)], "waiting": [{"id": str(i)} for i in range(10, 14)]}
+    assert room_strength_ok(full, cfg)
+    # Настройка не задана — ждать нечего.
+    assert room_strength_ok(six, {"min_room_size": 0})
+
+
 def test_raid_fight_reloads_the_room_before_the_battle_panel(tmp_path):
     # 20.11: после «Начать бой!» страница остаётся залом («Ты начал бой»),
     # и агент писал «нет действий» — боевая панель появляется только после

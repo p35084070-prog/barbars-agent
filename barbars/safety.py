@@ -64,6 +64,28 @@ def party_ready(info: dict, cfg: dict) -> bool:
     return len(matched) >= int(cfg.get("min_party", 3))
 
 
+def room_strength_ok(info: dict, cfg: dict) -> bool:
+    """Хватает ли силы в зале, чтобы начать бой с драконом.
+
+    Справка игры: «Чтобы убить дракона потребуется десять хорошо
+    вооружённых бойцов». Зал вмещает 10 героев («Кто здесь [N из 10]»).
+    Наши 6 героев дракона не добивают: 19.11 и 20.11 отряд довёл его
+    лишь до 52-71% HP, и все воины погибли от одного удара (2759 урона).
+    Клановые ветераны (рейзик, dsared, prediktor, edgards) ставят рекорд
+    05:21 — то есть дракона убивают именно с ними.
+
+    Поэтому бой начинаем, только когда в зале хватает героев. Если
+    `min_room_size` не задана (0) — ждём только наших.
+    """
+    need = int(cfg.get("min_room_size", 0) or 0)
+    if need <= 0:
+        return True
+    ready = info.get("ready") or []
+    waiting = info.get("waiting") or []
+    total = len(ready) + len(waiting)
+    return total >= need
+
+
 def atomic_json(path: Path, value: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".")

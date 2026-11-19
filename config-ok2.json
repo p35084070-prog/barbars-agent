@@ -129,7 +129,9 @@
     "potion_below_hp": 70,
     "shield_below_hp": 85,
     "dodge_below_hp": 60,
-    "always_heal": true
+    "always_heal": true,
+    "min_room_size": 10,
+    "strength_wait_sec": 900
   },
   "tower_farm": {
     "enabled": true,
