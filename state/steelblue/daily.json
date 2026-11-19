@@ -2,7 +2,7 @@
   "date": "2026-11-19",
   "sold": 0,
   "exp": 0,
-  "gift": false,
+  "gift": true,
   "autocrack": true,
   "award": false,
   "auction": 0,
