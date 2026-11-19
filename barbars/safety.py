@@ -32,23 +32,35 @@ def respawn_seconds(value: str) -> int | None:
 
 
 def party_ready(info: dict, cfg: dict) -> bool:
-    """Match every configured hero individually; strangers cannot replace a medic."""
+    """Match our heroes in the boss room; strangers cannot replace a medic.
+
+    The raid is a shared boss: every body adds damage, but our healer is
+    what makes the attempt worth it. So the rule is:
+      - наш медик обязан быть готов (иначе бой бессмыслен);
+      - готовы должны быть не меньше `min_party` наших героев.
+
+    Раньше требовались ВСЕ перечисленные герои: один не дошёл (замок
+    «новичок», задержка ОК-канала) — и отряд не начинал бой, хотя остальные
+    четверо уже стояли в зале. Теперь отсутствие одного бойца не блокирует
+    убийство, но и чужие герои в счёт не идут.
+    """
     from .pages import cyr_normalize
 
     party = cfg.get("party") or []
     if len(party) < 3 or sum(p.get("role") == "medic" for p in party) != 1:
         return False
     ready = info.get("ready") or []
-    matched = set()
+    matched: list[tuple[dict, str]] = []
     for member in party:
         aliases = {cyr_normalize(n) for n in member.get("names", [])}
-        matches = [str(p.get("id")) for p in ready if p.get("role") == member.get("role") and (
+        hits = [str(p.get("id")) for p in ready if p.get("role") == member.get("role") and (
             str(p.get("id")) == str(member["id"]) if member.get("id")
             else cyr_normalize(p.get("name", "")) in aliases
         )]
-        if len(matches) != 1 or matches[0] in matched:
-            return False
-        matched.add(matches[0])
+        if len(hits) == 1 and all(hits[0] != hero_id for _, hero_id in matched):
+            matched.append((member, hits[0]))
+    if not any(member.get("role") == "medic" for member, _ in matched):
+        return False
     return len(matched) >= int(cfg.get("min_party", 3))
 
 

@@ -311,12 +311,12 @@ def agent(tmp_path, name=CONFIGS[0]):
     return Agent(game, cfg, tmp_path / "logs")
 
 
-PARTY_IDS = ("905853", "31389504", "1286381", "1596900", "11604269")
+PARTY_IDS = ("905853", "31389504", "1286381", "1596900", "11604269", "31390082")
 
 
 def room(ids=PARTY_IDS, ready=True):
     names = {"905853": "keis", "31389504": "firewhite", "1286381": "vagojan",
-             "1596900": "qdal", "11604269": "Pandei"}
+             "1596900": "qdal", "11604269": "Pandei", "31390082": "steel blue ii"}
     rows = "".join(f'<div><a href="../user/id/{i};jsessionid=REMOVED"><span>{names.get(i, "stranger")}</span></a>'
                    + ('<img src="/images/icons/check_green.png">' if ready else "")
                    + ('<img src="blue_healer.png">' if i == "905853" else '<img src="blue_warrior.png">') + "</div>" for i in ids)
@@ -661,6 +661,10 @@ def test_fight_loop_marks_long_operation(tmp_path):
 
 @pytest.mark.parametrize("ids,allowed", [
     (PARTY_IDS, True),
+    # минус Steel Blue: пятерых достаточно (медик + 4 бойца)
+    (("905853", "31389504", "1286381", "1596900", "11604269"), True),
+    # минус Pandei: тоже пятеро
+    (("905853", "31389504", "1286381", "1596900", "31390082"), True),
     (("905853", "31389504", "1286381", "1596900"), False),
     (("905853", "31389504", "1286381"), False),
     (("905853", "31389504"), False),
@@ -670,6 +674,16 @@ def test_fight_loop_marks_long_operation(tmp_path):
 ])
 def test_exact_party(ids, allowed):
     assert party_ready(room(ids), config()["raid"]) is allowed
+
+
+def test_party_starts_without_one_fighter_but_needs_the_medic():
+    """Один боец не дошёл — бой всё равно начинается, но наш медик обязателен."""
+    cfg = config()["raid"]
+    five = room(("905853", "31389504", "1286381", "1596900", "11604269"))
+    assert party_ready(five, cfg) is True
+    # без нашего медика (вместо keis — чужой герой) бой не начинаем
+    without_medic = room(("31389504", "1286381", "1596900", "11604269", "31390082"))
+    assert party_ready(without_medic, cfg) is False
 
 
 def test_not_ready_and_unknown():
@@ -1150,28 +1164,44 @@ def test_respawn_mode_restores_active_battle(tmp_path):
     a.game.raid_start.assert_not_called()
 
 
-@pytest.mark.parametrize("name", CONFIGS)
+# Все, кто ходит в рейд на мифического дракона.
+RAID_CONFIGS = [
+    "deploy/config-actions-keis.json",
+    "deploy/config-actions-firewhite.json",
+    "deploy/config-actions-pandei.json",
+    "deploy/config-actions-steelblue.json",
+    "config-ok.json",
+    "config-ok2.json",
+]
+
+
+@pytest.mark.parametrize("name", RAID_CONFIGS)
 def test_live_configs_have_raid_armed_for_five(name):
-    # 19.11 20:10-20:17 UTC: пещера открыта — проба зала (read-only) показала
-    # closed=false, hp=100, can_start=true, locked_out=false и 5 убийств
-    # дракона кланом; замок «новичок» у Pandei снят. Рейд снова включён во
-    # всех конфигах участников отряда. Состав отряда прежний: 5 героев,
-    # лидер keis (он же единственный, кто нажимает «Начать бой!»).
+    # 20.11: по требованию игрока в рейд вступают все шесть героев:
+    # keis (медик), firewhite, vagojan (аккаунт ok), qdal (аккаунт ok2),
+    # pandei и steel blue ii. Заходим в пещеру сразу, как только дракон
+    # возрождается (`every_respawn`), лидер — keis (он единственный, кто
+    # жмёт «Начать бой!»: в зале это доступно ветерану клана и выше).
     cfg = config(name)
     assert cfg["raid"]["enabled"] is True
-    assert cfg["raid"]["every_respawn"] is False
+    assert cfg["raid"]["every_respawn"] is True
     assert cfg["raid"]["max_fights_per_day"] == 0
     assert cfg["raid"]["party"], "состав рейда должен остаться в конфиге"
     assert cfg["raid"]["min_party"] == 5
-    assert len(cfg["raid"]["party"]) == 5
+    assert len(cfg["raid"]["party"]) == 6
+    assert {p["id"] for p in cfg["raid"]["party"]} == set(PARTY_IDS)
+    assert sum(1 for p in cfg["raid"]["party"] if p.get("role") == "medic") == 1
     assert cfg["raid"]["leader"] == "keis"
 
 
-def test_steelblue_stays_out_of_the_raid():
-    # steelblue в отряд не входит (5 героев: keis, firewhite, ok, ok2, pandei) —
-    # его рейд остаётся выключенным, иначе он зря стоял бы в зале.
+def test_steelblue_is_in_the_raid_party():
+    # 20.11 по требованию игрока Steel Blue тоже ходит в рейд: отряд из шести
+    # героев (keis — медик, firewhite, vagojan, qdal, pandei, steel blue ii).
     cfg = config("deploy/config-actions-steelblue.json")
-    assert cfg["raid"]["enabled"] is False
+    assert cfg["raid"]["enabled"] is True
+    assert cfg["raid"]["every_respawn"] is True
+    assert "31390082" in {p["id"] for p in cfg["raid"]["party"]}
+    assert len(cfg["raid"]["party"]) == 6
 
 
 @pytest.mark.parametrize("name", CONFIGS)
@@ -1507,10 +1537,10 @@ def test_auto_equip_requires_explicit_flag():
 
 
 def test_steelblue_config_is_valid_and_keeps_gold_rules():
-    """Конфиг пятого героя: золото не тратим, рейд и вклады выключены."""
+    """Конфиг пятого героя: золото не тратим, рейд включён, вклады выключены."""
     cfg = json.loads(Path("deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
     assert cfg["account"] == "steelblue"
-    assert cfg["raid"]["enabled"] is False
+    assert cfg["raid"]["enabled"] is True
     assert cfg["spend"]["clan_donate"]["enabled"] is False
     assert cfg["altar"]["enabled"] is False
     assert cfg["shop"]["enabled"] is False

@@ -94,11 +94,21 @@
         ],
         "role": "warrior",
         "id": "11604269"
+      },
+      {
+        "account": "steelblue",
+        "names": [
+          "Steel Blue ii",
+          "steel blue ii",
+          "Стил Блу"
+        ],
+        "role": "warrior",
+        "id": "31390082"
       }
     ],
     "assembly_sec": 600,
     "room_check_sec": 8,
-    "every_respawn": false,
+    "every_respawn": true,
     "respawn_lead_sec": 300,
     "stuck_grace_sec": 600,
     "assembly_max_sec": 1800,
