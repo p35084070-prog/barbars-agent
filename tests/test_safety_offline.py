@@ -822,6 +822,58 @@ def test_confirmed_result_counted_once(tmp_path):
     assert agent(tmp_path).runtime["last_raid"]["outcome"] == "победа"
 
 
+def test_finished_raid_fight_returns_to_farming(tmp_path):
+    # 19.11 после поражения четверо стояли в бою по 10 минут: бой закончился,
+    # а состояние рейда оставалось активным, и герои не фармили.
+    a = agent(tmp_path)
+    a.config["raid"]["enabled"] = True
+    a.runtime["raid_active"] = {
+        "window": 10, "started_at": 18001,
+        "observed_combat": True,
+        "death_observed": True,
+        "latest_evidence": {"terminal": "поражение", "terminal_evidence": ["Все воины убиты"]},
+        "samples": [{"at": 1799999999.0}],
+    }
+    a.game.raid_room.return_value = {"valid": True, "closed": True, "in_fight": False}
+    a._raid_fight = Mock()
+    with patch("barbars.loop.time.time", return_value=18001), patch("barbars.loop.time.sleep"):
+        a._do_raid(rules.Decision("raid"), rules.GameState())
+    assert "raid_active" not in a.runtime
+    assert a.runtime["last_raid"]["outcome"] == "поражение"
+    a._raid_fight.assert_not_called()
+
+
+def test_finished_raid_without_terminal_still_returns_to_farming(tmp_path):
+    # Пещера ушла в откат, а терминального сообщения герой не увидел (умерли
+    # без «Все воины убиты»): попытка всё равно окончена.
+    a = agent(tmp_path)
+    a.config["raid"]["enabled"] = True
+    a.runtime["raid_active"] = {
+        "window": 10, "started_at": 18001,
+        "observed_combat": True,
+        "samples": [{"at": 1799999999.0}],
+    }
+    a.game.raid_room.return_value = {"valid": True, "closed": True, "in_fight": False}
+    a._raid_fight = Mock()
+    with patch("barbars.loop.time.time", return_value=18001), patch("barbars.loop.time.sleep"):
+        a._do_raid(rules.Decision("raid"), rules.GameState())
+    assert "raid_active" not in a.runtime
+    assert a.runtime["last_raid"]["outcome"] == "окончен"
+
+
+def test_raid_without_fight_keeps_waiting(tmp_path):
+    # Бой ещё не начинался — состояние рейда не трогаем, ждём дальше.
+    a = agent(tmp_path)
+    a.config["raid"]["enabled"] = True
+    a.runtime["raid_active"] = {"window": 10, "started_at": 18001}
+    a.game.raid_room.return_value = {"valid": True, "closed": False, "in_fight": False}
+    a._raid_fight = Mock()
+    with patch("barbars.loop.time.time", return_value=18001), patch("barbars.loop.time.sleep"):
+        a._do_raid(rules.Decision("raid"), rules.GameState())
+    assert a.runtime["raid_active"]
+    a._raid_fight.assert_not_called()
+
+
 @pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], True), (CONFIGS[2], False), (CONFIGS[3], False)])
 def test_only_starters_start_with_actual_party(tmp_path, name, starts):
     # Начать бой могут только ветераны клана: keis (лидер) и firewhite

@@ -1019,6 +1019,26 @@ class Agent:
                 if info.get("in_fight"):
                     self._raid_fight()
                     return
+                active = self.runtime.get("raid_active") or {}
+                fought = bool(active.get("observed_combat")) or bool(active.get("death_observed"))
+                evidence = active.get("latest_evidence") or {}
+                terminal = evidence.get("terminal")
+                # Бой идёт, если приходят свежие замеры; давно нет замеров и мы
+                # не в бою — бой закончился (иначе ждали бы до 600 с без фарма).
+                samples = active.get("samples") or []
+                stale = bool(samples) and (time.time() - float(samples[-1].get("at", 0) or 0)) > 90
+                if fought and (active.get("death_observed") or terminal
+                               or info.get("closed") or stale):
+                    # Бой уже был и он закончился: мы погибли, сервер показал
+                    # «Все воины убиты» или пещера ушла в откат. Раньше агент
+                    # ждал тут до конца окна (age > 600) и не фармил: 19.11
+                    # после поражения четверо стояли в бою по 10 минут, и опыт
+                    # героев стоял.
+                    outcome = "поражение" if (active.get("death_observed") or terminal == "поражение") else "окончен"
+                    self._finish_raid(outcome, info.get("hp"))
+                    self.game.click_text("Покинуть бой")
+                    self.log("рейд: бой окончен — возвращаемся к фарму")
+                    return
                 cs = self.game.combat()
                 if cs.victory is not None:
                     self._raid_fight()
