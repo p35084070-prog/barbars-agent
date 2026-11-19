@@ -116,7 +116,12 @@
     "starters": [
       "keis",
       "firewhite"
-    ]
+    ],
+    "wait_energy": false,
+    "potion_below_hp": 70,
+    "shield_below_hp": 85,
+    "dodge_below_hp": 60,
+    "always_heal": true
   },
   "tower_farm": {
     "enabled": true,
