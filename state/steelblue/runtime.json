@@ -3,5 +3,525 @@
     "max_hp": 1309,
     "max_energy": 1805
   },
-  "tower_paused": false
+  "tower_paused": false,
+  "raid_wait_for_closed": false,
+  "raid_wait_for_closed_since": 0,
+  "raid_roster": [
+    {
+      "id": "905853",
+      "name": "keis",
+      "role": "medic"
+    },
+    {
+      "id": "1286381",
+      "name": "vagojan",
+      "role": "warrior"
+    },
+    {
+      "id": "11604269",
+      "name": "pandei",
+      "role": "warrior"
+    },
+    {
+      "id": "1596900",
+      "name": "qdal",
+      "role": "warrior"
+    },
+    {
+      "id": "31390082",
+      "name": "steel blue ii",
+      "role": "warrior"
+    }
+  ],
+  "raid_next_check_at": 1795127640.4751887,
+  "raid_guard_until": 1795126386.626168,
+  "raid_reopen_at": 1795126356.626168,
+  "raid_published_reopen_at": 1795126356.8101928,
+  "raid_assembly_since": 1795126363.5952785,
+  "raid_active": {
+    "started_at": 1795127124.9225879,
+    "party": [
+      {
+        "id": "905853",
+        "name": "keis",
+        "role": "medic"
+      },
+      {
+        "id": "1286381",
+        "name": "vagojan",
+        "role": "warrior"
+      },
+      {
+        "id": "11604269",
+        "name": "pandei",
+        "role": "warrior"
+      },
+      {
+        "id": "1596900",
+        "name": "qdal",
+        "role": "warrior"
+      },
+      {
+        "id": "31390082",
+        "name": "steel blue ii",
+        "role": "warrior"
+      }
+    ],
+    "expected_party": [
+      {
+        "account": "keis",
+        "names": [
+          "Кейс",
+          "KACE",
+          "keis"
+        ],
+        "role": "medic",
+        "id": "905853"
+      },
+      {
+        "account": "firewhite",
+        "names": [
+          "Firewall",
+          "firewhite",
+          "fire white ii"
+        ],
+        "role": "warrior",
+        "id": "31389504"
+      },
+      {
+        "account": "ok",
+        "names": [
+          "Вагиджан",
+          "WG",
+          "vagojan"
+        ],
+        "role": "warrior",
+        "id": "1286381"
+      },
+      {
+        "account": "ok2",
+        "names": [
+          "qdal",
+          "Qdle",
+          "Кёндл"
+        ],
+        "role": "warrior",
+        "id": "1596900"
+      },
+      {
+        "account": "pandei",
+        "names": [
+          "Pandei",
+          "pandei"
+        ],
+        "role": "warrior",
+        "id": "11604269"
+      },
+      {
+        "account": "steelblue",
+        "names": [
+          "Steel Blue ii",
+          "steel blue ii",
+          "Стил Блу"
+        ],
+        "role": "warrior",
+        "id": "31390082"
+      }
+    ],
+    "mode": "every_respawn",
+    "combat_log_window": [],
+    "recent_events": [
+      "keis начал бой"
+    ],
+    "boss_initial_hp_pct": 100.0,
+    "boss_last_hp_pct": 100.0,
+    "boss_min_hp_pct": 88.0,
+    "latest_evidence": {
+      "boss_hp_pct": 100.0,
+      "warriors_alive": 5,
+      "medics_alive": 1,
+      "combat_clock": "00:00",
+      "our_hp": 1309,
+      "our_energy": 1805,
+      "terminal": null,
+      "personal_dead": false,
+      "terminal_evidence": [],
+      "notices": [
+        "Мифический дракон",
+        "Начать бой может ветеран клана и выше"
+      ],
+      "at": 1795127628.474027
+    },
+    "sample_signature": [
+      100.0,
+      5,
+      1,
+      null,
+      false
+    ],
+    "sample_logged_at": 1795127628.474027,
+    "samples": [
+      {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 4,
+        "medics_alive": 0,
+        "combat_clock": "00:07",
+        "our_hp": 1309,
+        "our_energy": 1805,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон"
+        ],
+        "at": 1795127124.9906664
+      },
+      {
+        "boss_hp_pct": 99.0,
+        "warriors_alive": 3,
+        "medics_alive": 0,
+        "combat_clock": "00:19",
+        "our_hp": 562,
+        "our_energy": 1655,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 323",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127138.7062063
+      },
+      {
+        "boss_hp_pct": 98.0,
+        "warriors_alive": 2,
+        "medics_alive": 0,
+        "combat_clock": "00:26",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127145.8437688
+      },
+      {
+        "boss_hp_pct": 97.0,
+        "warriors_alive": 2,
+        "medics_alive": 0,
+        "combat_clock": "00:32",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127151.222218
+      },
+      {
+        "boss_hp_pct": 96.0,
+        "warriors_alive": 2,
+        "medics_alive": 0,
+        "combat_clock": "00:40",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127159.7828672
+      },
+      {
+        "boss_hp_pct": 95.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "00:45",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127164.2771673
+      },
+      {
+        "boss_hp_pct": 94.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "00:59",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127178.6306307
+      },
+      {
+        "boss_hp_pct": 93.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "01:08",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127186.926808
+      },
+      {
+        "boss_hp_pct": 92.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "01:12",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127190.976933
+      },
+      {
+        "boss_hp_pct": 91.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "01:26",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127205.72337
+      },
+      {
+        "boss_hp_pct": 90.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "01:30",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127209.5982344
+      },
+      {
+        "boss_hp_pct": 89.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "01:44",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127223.639188
+      },
+      {
+        "boss_hp_pct": 88.0,
+        "warriors_alive": 1,
+        "medics_alive": 0,
+        "combat_clock": "01:48",
+        "our_hp": 0,
+        "our_energy": null,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "qdal погиб от удара дракона",
+          "steel blue ii погиб от удара дракона",
+          "Дракон ударил тебя на 256",
+          "Дракон ударил тебя на 323",
+          "Ты ударил дракона на 323",
+          "vagojan погиб от удара дракона",
+          "Дракон ударил тебя на 278",
+          "Дракон ударил тебя на 277"
+        ],
+        "at": 1795127227.4328475
+      },
+      {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 2,
+        "medics_alive": 0,
+        "combat_clock": "00:00",
+        "our_hp": 1309,
+        "our_energy": 1805,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Начать бой может ветеран клана и выше"
+        ],
+        "at": 1795127559.9088254
+      },
+      {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 5,
+        "medics_alive": 1,
+        "combat_clock": "00:00",
+        "our_hp": 1309,
+        "our_energy": 1805,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Начать бой может ветеран клана и выше"
+        ],
+        "at": 1795127573.6354165
+      },
+      {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 5,
+        "medics_alive": 1,
+        "combat_clock": "00:00",
+        "our_hp": 1309,
+        "our_energy": 1805,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Начать бой может ветеран клана и выше"
+        ],
+        "at": 1795127601.596353
+      },
+      {
+        "boss_hp_pct": 100.0,
+        "warriors_alive": 5,
+        "medics_alive": 1,
+        "combat_clock": "00:00",
+        "our_hp": 1309,
+        "our_energy": 1805,
+        "terminal": null,
+        "personal_dead": false,
+        "terminal_evidence": [],
+        "notices": [
+          "Мифический дракон",
+          "Начать бой может ветеран клана и выше"
+        ],
+        "at": 1795127628.474027
+      }
+    ],
+    "observed_combat": true,
+    "energy_ceiling": 1805,
+    "hp_ceiling": 1309,
+    "event_totals_exact": false,
+    "personal_death_confirmed": true,
+    "death_observed": true,
+    "observed_damage": 323,
+    "observed_healing": 0,
+    "observed_log_entries": [
+      "Ты ударил  дракона на 323"
+    ],
+    "boss_hp": null
+  }
 }
