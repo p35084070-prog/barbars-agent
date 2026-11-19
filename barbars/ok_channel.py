@@ -246,6 +246,24 @@ class OkGame(Game):
         self._last_url: str = ""
 
     # ------------------------------------------------------------------ сессия
+    def _proxy(self) -> dict[str, str] | None:
+        """Прокси для браузера (нужен, если VPN-туннель режет ok.ru).
+
+        Задаётся переменной окружения OK_PROXY или ключом ok_channel.proxy
+        в конфиге. В CI не задан — там прокси не нужен.
+        """
+        import os
+
+        server = os.environ.get("OK_PROXY", "").strip()
+        if not server:
+            server = str(self.config.get("ok_channel", {}).get("proxy", "")).strip()
+        if not server:
+            return None
+        if "://" not in server:
+            server = f"http://{server}"
+        print(f"[ОК] прокси: {server}")
+        return {"server": server}
+
     def _session(self) -> tuple[list[dict], str]:
         if self.session_raw:
             return load_session(self.session_raw)
@@ -372,6 +390,7 @@ class OkGame(Game):
             locale="ru-RU",
             timezone_id="Europe/Moscow",
             extra_http_headers=MOBILE_HEADERS,
+            proxy=self._proxy(),
             args=["--disable-blink-features=AutomationControlled", "--touch-events=enabled"],
         )
         self._context.set_default_timeout(20_000)

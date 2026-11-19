@@ -71,14 +71,18 @@ def log(msg: str) -> None:
 def has_session(ctx) -> bool:
     """Есть ли авторизованная сессия.
 
-    Одной cookie sid/domain_sid мало: их ОК ставит и анонимным посетителям.
-    Признак входа — remixerp/user_id (по ним профиль авторизован).
+    ОК кладёт разные маркеры в зависимости от версии вёрстки: у одних
+    аккаунтов после входа появляются remixerp/user_id, у других — AUTHCODE.
+    Одной cookie sid/domain_sid мало: её ОК ставит и анонимным посетителям.
+    Без этой проверки удачный вход в CI считался бы провалом, и агент не
+    доехал бы до игры.
     """
     try:
-        names = {c["name"] for c in ctx.cookies()}
+        cookies = ctx.cookies()
     except Exception:  # noqa: BLE001
         return False
-    return bool({"remixerp", "user_id"} & names)
+    names = {c["name"] for c in cookies}
+    return bool({"remixerp", "user_id", "AUTHCODE"} & names)
 
 
 def find_login_form(page) -> bool:

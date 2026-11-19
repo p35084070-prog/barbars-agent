@@ -64,7 +64,11 @@ jobs:
             exit 0
           fi
           mkdir -p state logs
-          python -u tools/ok_auto_login.py --out state --timeout 120
+          # Неудачный автовход не должен ронять job: ниже сессия берётся
+          # из OK_SESSION_B64. Иначе при капче/подтверждении ОК агент
+          # не доехал бы до игры вовсе.
+          python -u tools/ok_auto_login.py --out state --timeout 120 \
+            || echo 'автовход не прошёл — берём сессию из OK_SESSION_B64'
           echo "::add-mask::$(printf '%s' "$OK_PASSWORD" | head -c 2)"
 
       - name: Восстановить сессию ОК
