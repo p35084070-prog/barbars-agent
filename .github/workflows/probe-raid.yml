@@ -45,12 +45,17 @@ jobs:
           KEIS_PASS: ${{ secrets.BARBARS_KEIS_PASSWORD }}
           FW_LOGIN: ${{ secrets.BARBARS_FIREWHITE_LOGIN }}
           FW_PASS: ${{ secrets.BARBARS_FIREWHITE_PASSWORD }}
+          PD_LOGIN: ${{ secrets.BARBARS_PANDEI_LOGIN }}
+          PD_PASS: ${{ secrets.BARBARS_PANDEI_PASSWORD }}
           OK_SESSION_B64: ${{ secrets.OK_SESSION_B64 }}
           OK2_SESSION_B64: ${{ secrets.OK2_SESSION_B64 }}
         run: |
           mkdir -p credentials state/ok2
           printf '%s\n%s\n' "$KEIS_LOGIN" "$KEIS_PASS" > credentials/keis.txt
           printf '%s\n%s\n' "$FW_LOGIN" "$FW_PASS" > credentials/firewhite.txt
+          if [ -n "$PD_LOGIN" ]; then
+            printf '%s\n%s\n' "$PD_LOGIN" "$PD_PASS" > credentials/pandei.txt
+          fi
           chmod 600 credentials/*.txt
           if [ -n "$OK_SESSION_B64" ]; then
             printf '%s' "$OK_SESSION_B64" > state/ok-session.b64
@@ -70,6 +75,10 @@ jobs:
       - name: Зал — keis
         continue-on-error: true
         run: python -u tools/probe_raid_room.py --config deploy/config-actions-keis.json --label keis
+
+      - name: Зал — pandei
+        continue-on-error: true
+        run: python -u tools/probe_raid_room.py --config deploy/config-actions-pandei.json --label pandei
 
       - name: Зал — fire white ii
         continue-on-error: true
