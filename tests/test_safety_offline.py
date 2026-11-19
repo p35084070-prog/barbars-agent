@@ -1057,6 +1057,10 @@ def respawn_agent(tmp_path, name=CONFIGS[0]):
     # но алгоритм рейда должен остаться рабочим — тесты включают его явно.
     a.config["raid"]["every_respawn"] = True
     a.config["raid"]["enabled"] = True
+    # Ожидание силы в зале проверяется отдельным тестом; здесь старт должен
+    # происходить сразу, как только наш отряд готов.
+    a.config["raid"]["min_room_size"] = 0
+    a.config["raid"]["strength_wait_sec"] = 0
     return a
 
 
