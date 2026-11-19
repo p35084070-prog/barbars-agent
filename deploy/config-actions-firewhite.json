@@ -40,7 +40,7 @@
     "repeat_min": 30,
     "stay_sec": 780,
     "min_party": 5,
-    "can_start": false,
+    "can_start": true,
     "max_fights_per_day": 0,
     "max_turns": 400,
     "lone_wait_sec": 300,
@@ -112,7 +112,11 @@
     "respawn_lead_sec": 300,
     "stuck_grace_sec": 600,
     "assembly_max_sec": 1800,
-    "assembly_return_sec": 300
+    "assembly_return_sec": 300,
+    "starters": [
+      "keis",
+      "firewhite"
+    ]
   },
   "tower_farm": {
     "enabled": true,

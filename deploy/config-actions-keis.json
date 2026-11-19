@@ -109,7 +109,11 @@
     "respawn_lead_sec": 300,
     "stuck_grace_sec": 600,
     "assembly_max_sec": 1800,
-    "assembly_return_sec": 300
+    "assembly_return_sec": 300,
+    "starters": [
+      "keis",
+      "firewhite"
+    ]
   },
   "tower_farm": {
     "enabled": true,

@@ -327,7 +327,7 @@ def room(ids=PARTY_IDS, ready=True):
 def test_cloud_policies(name):
     c = config(name)
     assert c["raid"]["min_party"] == 5
-    assert c["raid"]["can_start"] == (c["account"] == "keis")
+    assert c["raid"]["can_start"] == (c["account"] in ("keis", "firewhite"))
     assert c["raid"]["leader"] == "keis"
     assert {p["id"] for p in c["raid"]["party"]} == set(PARTY_IDS)
     assert sum(1 for p in c["raid"]["party"] if p.get("role") == "medic") == 1
@@ -822,8 +822,10 @@ def test_confirmed_result_counted_once(tmp_path):
     assert agent(tmp_path).runtime["last_raid"]["outcome"] == "победа"
 
 
-@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False), (CONFIGS[3], False)])
-def test_only_leader_starts_with_actual_party(tmp_path, name, starts):
+@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], True), (CONFIGS[2], False), (CONFIGS[3], False)])
+def test_only_starters_start_with_actual_party(tmp_path, name, starts):
+    # Начать бой могут только ветераны клана: keis (лидер) и firewhite
+    # (второй стартер — на случай, если прогоны keis висят в очереди раннеров).
     a = agent(tmp_path, name)
     info = room()
     a.game.raid_room.side_effect = [info, info, {"valid": True, "closed": True, "locked_out": True}]
@@ -1091,8 +1093,8 @@ def test_respawn_mode_ignores_half_hour_windows(tmp_path):
     collect.assert_not_called()
 
 
-@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], False), (CONFIGS[2], False), (CONFIGS[3], False)])
-def test_every_respawn_has_only_one_leader(tmp_path, name, starts):
+@pytest.mark.parametrize("name,starts", [(CONFIGS[0], True), (CONFIGS[1], True), (CONFIGS[2], False), (CONFIGS[3], False)])
+def test_every_respawn_starters_are_limited(tmp_path, name, starts):
     a = respawn_agent(tmp_path, name)
     a.game.raid_room.side_effect = [open_dragon(), open_dragon()] + ([open_dragon()] if starts else []) + [{"valid": True, "closed": True, "reopen_in": "00:10:00"}]
     a._raid_fight = Mock()
@@ -1192,6 +1194,7 @@ def test_live_configs_have_raid_armed_for_five(name):
     assert {p["id"] for p in cfg["raid"]["party"]} == set(PARTY_IDS)
     assert sum(1 for p in cfg["raid"]["party"] if p.get("role") == "medic") == 1
     assert cfg["raid"]["leader"] == "keis"
+    assert cfg["raid"]["starters"] == ["keis", "firewhite"]
 
 
 def test_steelblue_is_in_the_raid_party():
