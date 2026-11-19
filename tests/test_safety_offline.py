@@ -2078,6 +2078,20 @@ def test_known_low_energy_still_waits():
     assert decision.action == "wait_energy"
 
 
+def test_raid_fight_reloads_the_room_before_the_battle_panel(tmp_path):
+    # 20.11: после «Начать бой!» страница остаётся залом («Ты начал бой»),
+    # и агент писал «нет действий» — боевая панель появляется только после
+    # перезагрузки зала (12.11, probe_raid_join2.py).
+    a = agent(tmp_path)
+    a.config["raid"] = {"enabled": True, "url": "https://barbars.ru/game/dragonDungeon"}
+    a.runtime["raid_active"] = {"started_at": 1}
+    a._fight_loop = Mock(return_value="поражение")
+    a._finish_raid = Mock()
+    with patch("barbars.loop.time.sleep"):
+        a._raid_fight()
+    a.game.raid_room.assert_called_once_with("https://barbars.ru/game/dragonDungeon")
+
+
 def test_raid_attacks_without_waiting_for_energy():
     # 19.11 и 20.11: в бою с драконом воин ждал полного заряда меча, а дракон
     # бил на 2759 — наши герои (HP 1300-2300) гибли, не успев ударить.

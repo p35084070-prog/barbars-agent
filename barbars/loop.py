@@ -1362,7 +1362,17 @@ class Agent:
         self.log("рейд: результат " + json.dumps(summary, ensure_ascii=False))
 
     def _raid_fight(self) -> None:
-        outcome = self._fight_loop(force=True, max_turns=int(self.config.get("raid", {}).get("max_turns", 400)))
+        # Боевая панель появляется не сразу: после «Начать бой!» страница
+        # остаётся залом («Ты начал бой»), и только ПЕРЕЗАГРУЗКА зала открывает
+        # панель с «Бить дракона» (проверено 12.11, probe_raid_join2.py).
+        # 20.11 без перезагрузки агент видел «нет действий» и стоял в зале.
+        cfg = self.config.get("raid", {}) or {}
+        url = str(cfg.get("url", "https://barbars.ru/game/dragonDungeon"))
+        try:
+            self.game.raid_room(url)
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"рейд: не удалось перезагрузить зал: {str(exc)[:120]}", "WARN")
+        outcome = self._fight_loop(force=True, max_turns=int(cfg.get("max_turns", 400)))
         if outcome in {"победа", "поражение"}:
             self.fights_done += 1
             self._finish_raid(outcome, getattr(self, "last_boss_hp", None))
