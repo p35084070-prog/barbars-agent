@@ -625,15 +625,35 @@ class Agent:
         # (мифические, не поместившиеся в снаряжение) продаём на витрине клана
         if sell_store and int(counts.get("bag_used", 0) or 0) >= int(counts.get("bag_total", 20) or 20):
             sold += self.game.sell_extra_items(limit=int(gear_cfg.get("sell_limit", 3)))
-        moved = self.game.stash_items(keep=keep)
+        # И рюкзак, и сундук полны, а разбирать мифические вещи нельзя. Место
+        # для дропа всё равно нужно — иначе опыт не растёт. Отдаём лишнее
+        # в клановое хранилище: вещи целы, но рюкзак освобождается.
+        stored = 0
+        bag_full = int(counts.get("bag_used", 0) or 0) >= int(counts.get("bag_total", 20) or 20)
+        chest_full = int(counts.get("chest_used", 0) or 0) >= int(counts.get("chest_total", 20) or 20)
+        if bag_full and chest_full:
+            try:
+                stored = int(self.game.stash_to_clan_storage(
+                    limit=int(gear_cfg.get("chest_free_limit", 10))) or 0)
+            except Exception as exc:  # noqa: BLE001
+                self.log(f"в клановое хранилище не отправили: {exc}", "WARN")
+            if stored:
+                self.log(f"рюкзак: в клановое хранилище {stored}")
+                counts = self.game.bag_counts()
+        # в сундуке оставляем место под дроп: игра пишет «В сундуке мало места!»,
+        # и новый лут (а с ним опыт) не помещается
+        moved = self.game.stash_items(
+            keep=keep,
+            chest_reserve=int(gear_cfg.get("chest_reserve", 2)),
+        )
         counts = self.game.bag_counts()
         self.log(
             f"рюкзак: надето {worn}, разобрано {cracked}, выброшено {dropped}, "
-            f"на витрину {sold}, в сундук {moved}, "
+            f"на витрину {sold}, в сундук {moved}, в хранилище {stored}, "
             f"рюкзак {counts.get('bag_used')}/{counts.get('bag_total')}, "
             f"сундук {counts.get('chest_used')}/{counts.get('chest_total')}"
         )
-        if worn == 0 and cracked == 0 and moved == 0 and sold == 0 and dropped == 0:
+        if worn == 0 and cracked == 0 and moved == 0 and sold == 0 and dropped == 0 and stored == 0:
             # Ничего не изменилось: сундук полон и надеть нечего. Повторять
             # этот шаг бессмысленно — он блокирует фарм, поэтому ставим паузу.
             pause_min = int(gear_cfg.get("pause_min", 10))

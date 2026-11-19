@@ -49,7 +49,12 @@ ATTACK_TEXT_PREFIXES = ("бить", "добивать", "добить", "ата�
 _NUM_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*([kKmMgG]?)")
 
 # Блок вещи в рюкзаке/сундуке: `item/id/2093162597"><span>Сапоги Атланта</span>`
-NAME_BLOCK_RE = re.compile(r"item/id/(\d+)\"><span>([^<]{2,60})</span>", re.S)
+# В канале ОК игра дописывает к ссылке `;jsessionid=...`, поэтому между id и
+# кавычкой может стоять параметр — иначе имя вещи не читается вовсе.
+NAME_BLOCK_RE = re.compile(
+    r"item/id/(\d+)(?:;jsessionid=[A-Za-z0-9]+)?\">\s*<span>([^<]{2,60})</span>",
+    re.S,
+)
 
 # Игра маскирует часть букв латинскими омоглифами: «Версерк» -> «Bepcepк»,
 # «готово» -> «гoтoво», «Север» -> «Cевер», «Этот» -> «nЭтот».
@@ -1826,7 +1831,7 @@ class Game:
         html = self.p.content()
         out: list[dict[str, Any]] = []
         for chunk, index in self._item_blocks(html):
-            m = re.search(r"item/id/(\d+)\"><span>([^<]{2,60})</span>", chunk, re.S)
+            m = NAME_BLOCK_RE.search(chunk)
             text = " ".join(re.sub("<[^>]+>", " ", chunk).split())
             out.append(
                 {
@@ -2347,11 +2352,11 @@ class Game:
                     continue
                 if "Лучше" in chunk:
                     continue  # лучше надетого — сначала надеваем
-                name = re.search(r"item/id/\d+\"><span>([^<]+)</span>", chunk)
+                nm = NAME_BLOCK_RE.search(chunk)
                 item_id = re.search(r"item/id/(\d+)", chunk)
-                if not name or not item_id:
+                if not nm or not item_id:
                     continue
-                slot, _kind = pages.slot_of(name.group(1))
+                slot, _kind = pages.slot_of(nm.group(2))
                 if not slot or slot not in busy:
                     continue
                 target = item_id.group(1)
@@ -2701,6 +2706,25 @@ class Game:
         except Exception:
             return False
 
+    def confirm_text(self, text: str | tuple[str, ...]) -> bool:
+        """Кликнуть по кнопке подтверждения с указанным текстом.
+
+        Отправка в клановое хранилище открывает отдельную панель, где кнопка
+        называется иначе, чем «Да, подтверждаю». Ошибки не роняют шаг:
+        вернётся False, и вещь просто останется на месте.
+
+        Можно передать несколько вариантов подписи — кликнём по первому,
+        который найдётся (с учётом омоглифов игры).
+        """
+        variants = (text,) if isinstance(text, str) else tuple(text)
+        for one in variants:
+            try:
+                if self.click_text(one):
+                    return True
+            except Exception:
+                continue
+        return False
+
     @staticmethod
     def _equip_limit(value: int) -> int:
         """Лимит надевания: 0 или меньше — «без ограничения».
@@ -3026,9 +3050,9 @@ class Game:
         out: list[dict[str, Any]] = []
         for chunk, index in self._item_blocks(html):
             name = ""
-            m = re.search(r'item/id/\d+"><span>([^<]{2,60})</span>', chunk)
+            m = NAME_BLOCK_RE.search(chunk)
             if m:
-                name = m.group(1).strip()
+                name = m.group(2).strip()
             level = 0
             m = re.search(r"(\d+)\s*ур", re.sub("<[^>]+>", " ", chunk))
             if m:
@@ -3123,6 +3147,13 @@ class Game:
             elif kind == "rack":
                 out["moved"] += 1
             else:
+                # Отправка в клановое хранилище открывает панель с
+                # подтверждением — без клика по ней вещь остаётся в сундуке.
+                self.confirm_if_needed()
+                if not self.confirm_text(
+                    ("Отправить", "Отправить в хранилище", "Подтвердить отправку")
+                ):
+                    break  # панель не подтвердилась — дальше кликать бессмысленно
                 out["stored"] += 1
         return out
 
@@ -3238,10 +3269,51 @@ class Game:
         self.goto("https://barbars.ru/user/master")
         return self.click_href("upgradeLink")
 
-    def stash_items(self, keep: int = 4, limit: int = 20) -> int:
+    def stash_to_clan_storage(self, limit: int = 10) -> int:
+        """Переложить вещи из рюкзака в клановое хранилище.
+
+        Когда и рюкзак, и сундук полны, разбирать вещи нельзя (правило игрока:
+        мифические/легендарные/эпические не трогаем), а новый дроп всё равно
+        не помещается — «В сундуке мало места!», и опыт героя не растёт.
+        Выход: отдать лишнее в клановое хранилище (`sendLink`).
+
+        Отправка открывает панель с подтверждением — без клика по ней вещь
+        остаётся в рюкзаке, поэтому проверяем результат по id вещи.
+        """
+        stored = 0
+        for _ in range(max(1, limit)):
+            self.goto("https://barbars.ru/user/rack")
+            html = self.p.content()
+            target: tuple[str, str] | None = None
+            for chunk, index in self._item_blocks(html):
+                if f"items:{index}:sendToGuildStorageLinkPanel:sendLink" not in chunk:
+                    continue
+                item_id = re.search(r"item/id/(\d+)", chunk)
+                if item_id:
+                    target = (index, item_id.group(1))
+                    break
+            if target is None:
+                break
+            index, item_id = target
+            if not self.click_href(f"items:{index}:sendToGuildStorageLinkPanel:sendLink"):
+                break
+            self.confirm_if_needed()
+            self.confirm_text(("Отправить", "Отправить в хранилище", "Подтвердить отправку"))
+            # вещь должна исчезнуть из рюкзака — иначе панель не подтвердилась
+            self.goto("https://barbars.ru/user/rack")
+            if item_id in self.p.content():
+                break
+            stored += 1
+        return stored
+
+    def stash_items(self, keep: int = 4, limit: int = 20, chest_reserve: int = 0) -> int:
         """Сложить лишние вещи в сундук, чтобы освободить рюкзак.
 
         Сначала убираем вещи без пометки «Лучше» (они хуже надетых).
+
+        `chest_reserve` — сколько свободных мест в сундуке оставить. Новый
+        дроп падает в сундук («В сундуке мало места!»), поэтому забивать его
+        под ноль нельзя: иначе освобождённое место сразу занимается обратно.
         """
         moved = 0
         for _ in range(limit):
@@ -3252,8 +3324,10 @@ class Game:
             if used <= keep:
                 break
             m = re.search(r"Открыть сундук\s*\((\d+)\s*/\s*(\d+)\)", text)
-            if m and int(m.group(1)) >= int(m.group(2)):
-                break  # сундук полон
+            if m:
+                chest_used, chest_total = int(m.group(1)), int(m.group(2))
+                if chest_used + 1 > chest_total - max(0, chest_reserve):
+                    break  # сундук полон (или кончился резерв под дроп)
             html = self.p.content()
             target = None
             for chunk, index in self._item_blocks(html):

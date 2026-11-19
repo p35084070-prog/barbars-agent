@@ -1779,6 +1779,7 @@ def _free_chest_game(pages_html, bag_text="Открыть рюкзак (10/20)")
     g.goto = Mock()
     g.click_href = Mock(return_value=True)
     g.confirm_if_needed = Mock(return_value=True)
+    g.confirm_text = Mock(return_value=True)
     g.body_text = Mock(return_value=bag_text)
     return g
 
@@ -1839,6 +1840,117 @@ def test_loop_does_not_touch_chest_with_free_space(tmp_path):
         "bag_used": 2, "bag_total": 20, "chest_used": 11, "chest_total": 20}
     a._do_gear(rules.Decision("gear", params={"crack": False, "crack_chest": False}))
     a.game.free_chest_space.assert_not_called()
+
+
+# ------------------------------- рюкзак и сундук полны: место для дропа не остаётся
+# 19.11: у Pandei шаг снаряжения ходил по кругу — «сундук: освобождено 10
+# (в рюкзак 10)», затем «рюкзак: в сундук 10» — и снова сундук 20/20. Место
+# под новый лут («В сундуке мало места!») исчезало, опыт стоял.
+
+
+def test_stash_items_keeps_room_in_chest_for_drop():
+    # В сундуке свободно 2 места (20/20 после частичной разгрузки) — резерв
+    # под дроп не должен забиваться обратно.
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.content.return_value = '<div class="hr"></div><div></div>'
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    g.body_text = Mock(return_value="Рюкзак (20/20)\nОткрыть сундук (19/20)")
+    assert g.stash_items(keep=4, chest_reserve=2) == 0
+    g.click_href.assert_not_called()
+
+
+def test_stash_items_moves_when_chest_has_room():
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.content.return_value = (
+        '<div class="hr"></div><div>'
+        '<a href="../?wicket:interface=:4:items:0:toStoreLink::ILinkListener::">в сундук</a>'
+        '</div>')
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    # после перекладывания рюкзак пустеет — доходим до keep и останавливаемся
+    g.body_text = Mock(side_effect=[
+        "Рюкзак (20/20)\nОткрыть сундук (10/20)",
+        "Рюкзак (4/20)\nОткрыть сундук (11/20)",
+    ])
+    assert g.stash_items(keep=4, chest_reserve=2) == 1
+
+
+def test_stash_to_clan_storage_moves_item_out_of_bag():
+    # Рюкзак и сундук полны, разбирать мифические вещи нельзя — отдаём их
+    # в клановое хранилище (вещи целы, рюкзак освобождается).
+    html = (
+        '<div class="hr"></div><div>'
+        '<a href="../item/id/555"><span>Огранка Оникса</span></a>'
+        '<a href="../?wicket:interface=:4:items:0:sendToGuildStorageLinkPanel:sendLink::ILinkListener::">в хранилище</a>'
+        '</div>')
+    g = Game({}, ".")
+    g.page = Mock()
+    # 1-я выборка — список рюкзака, 2-я — проверка после отправки: вещи нет
+    g.page.content.side_effect = [html, ""]
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    g.confirm_if_needed = Mock(return_value=True)
+    g.confirm_text = Mock(return_value=True)
+    assert g.stash_to_clan_storage(limit=1) == 1
+    g.click_href.assert_called_with(
+        "items:0:sendToGuildStorageLinkPanel:sendLink")
+
+
+def test_stash_to_clan_storage_skips_item_without_storage_link():
+    # Вещь без ссылки «в хранилище» отправить нельзя — шаг не должен кликать.
+    html = (
+        '<div class="hr"></div><div>'
+        '<a href="../item/id/555"><span>Огранка Оникса</span></a>'
+        '<a href="../?wicket:interface=:4:items:0:toStoreLink::ILinkListener::">в сундук</a>'
+        '</div>')
+    g = Game({}, ".")
+    g.page = Mock()
+    g.page.content.return_value = html
+    g.goto = Mock()
+    g.click_href = Mock(return_value=True)
+    assert g.stash_to_clan_storage(limit=1) == 0
+    g.click_href.assert_not_called()
+
+
+def test_loop_sends_bag_to_clan_storage_when_both_containers_full(tmp_path):
+    a = _gear_agent(tmp_path, "off")
+    a.game.bag_counts.return_value = {
+        "bag_used": 20, "bag_total": 20, "chest_used": 20, "chest_total": 20}
+    a.game.free_chest_space.return_value = {"worn": 0, "moved": 0, "stored": 0}
+    a.game.stash_to_clan_storage.return_value = 3
+    a._do_gear(rules.Decision("gear", params={"crack": False, "crack_chest": False}))
+    a.game.stash_to_clan_storage.assert_called_once()
+
+
+def test_loop_keeps_chest_reserve_when_stashing_back(tmp_path):
+    # Резерв под дроп должен доходить до драйвера: иначе сундук снова полон.
+    a = _gear_agent(tmp_path, "off")
+    a.game.bag_counts.return_value = {
+        "bag_used": 12, "bag_total": 20, "chest_used": 5, "chest_total": 20}
+    a._do_gear(rules.Decision("gear", params={"crack": False, "crack_chest": False}))
+    assert a.game.stash_items.call_args.kwargs.get("chest_reserve", 0) >= 1
+
+
+def test_ok_channel_reads_item_name_with_jsessionid():
+    # В канале ОК игра дописывает `;jsessionid=...` к ссылке на вещь —
+    # без этого имя не читалось и вещи не опознавались по слоту.
+    g = Game({}, ".")
+    g.goto = Mock()
+    g.page = Mock()
+    g.page.content.return_value = (
+        '<div class="hr"></div><div>'
+        '<a href="../item/id/1955965578;jsessionid=8C3CF00F1A6059784C972F9DEAEB784A">'
+        '<span>Огранка Оникса</span></a>'
+        '<span>25 ур, личный</span>'
+        '<a href="../?wicket:interface=:2:items:0:toRackLink::ILinkListener::">в рюкзак</a>'
+        '</div>')
+    items = g._chest_item_blocks()
+    assert len(items) == 1
+    assert items[0]["name"] == "Огранка Оникса"
+    assert items[0]["level"] == 25
 
 
 # ---------------------------------------------------------------- бой: удар
