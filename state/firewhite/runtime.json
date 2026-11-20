@@ -24085,8 +24085,8 @@
   "raid_reopen_at": 1795152163.2554445,
   "raid_published_reopen_at": 1795152163.5703595,
   "hero_maxima": {
-    "max_hp": 867,
-    "max_energy": 1205
+    "max_hp": 442,
+    "max_energy": 442
   },
   "raid_wait_for_closed_since": 0,
   "raid_spawn_witness": {
