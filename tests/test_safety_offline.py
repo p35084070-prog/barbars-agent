@@ -2649,3 +2649,56 @@ def test_auto_replace_swaps_a_quest_without_progress():
     assert decision is not None
     assert decision.action == "cancel_quest"
     assert decision.params["index"] == 1
+
+
+# Клановые задания кончились: «Рейд на драконов» уже держит pandei,
+# а свободные задания без кнопки «Взять задание» (в клане можно держать
+# 4 задания сразу — потом сервер кнопку не показывает).
+FREE_BLOCK_NO_BUTTON = """
+<div><img src="/images/icons/flag.png" width="12" height="12" alt="" border="0">
+<span class="link">Лицом к лицу</span>
+<div class="small">Победи в дуэлях 60 раз</div>
+<div>Награда: <span class="money">4</span></div>
+</div>
+"""
+
+CLAN_QUEST_LIMITED_HTML = re.sub(
+    r'<div><a class="cbtn" href="[^"]*startLink[^"]*">.*?</div>',
+    '<div class="minor small">Выполняет: <span>'
+    '<a class="" href="../../../user/id/11604269"><span>pandei</span></a></span></div>',
+    CLAN_QUEST_HTML,
+    flags=re.S,
+) + FREE_BLOCK_NO_BUTTON
+
+
+def quest_state_from(html, hero_id):
+    state = rules.GameState()
+    state.hero_id = hero_id
+    state.quests = pages.clan_quest_blocks(html)
+    own = pages.own_clan_quest(state.quests, hero_id)
+    state.active_quest = own.title if own else ""
+    return state
+
+
+def test_no_quest_is_taken_when_the_clan_has_no_free_slot():
+    # «Рейд на драконов» уже держит pandei, свободное задание нельзя взять
+    state = quest_state_from(CLAN_QUEST_LIMITED_HTML, 31390082)
+    decision = rules._pick_clan_quest(state, {"clan_quest": {"enabled": True, "replace": "auto"}})
+    assert decision is None
+
+
+def test_own_quest_is_kept_when_the_new_one_cannot_be_taken():
+    # qdal: своё задание без прогресса, но взять другое нельзя —
+    # отменять своё тогда бессмысленно
+    state = quest_state_from(CLAN_QUEST_LIMITED_HTML, 1596900)
+    assert state.active_quest == "Великие свершения"
+    decision = rules._pick_clan_quest(state, {"clan_quest": {"enabled": True, "replace": "auto"}})
+    assert decision is None
+
+
+def test_raid_quest_already_held_by_a_clanmate_is_not_taken():
+    state = quest_state_from(CLAN_QUEST_LIMITED_HTML, 31390082)
+    blocks = {q.title: q for q in state.quests}
+    assert blocks["Рейд на драконов"].holder_id == 11604269
+    assert blocks["Рейд на драконов"].can_take is False
+    assert blocks["Лицом к лицу"].can_take is False
