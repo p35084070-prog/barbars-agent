@@ -1248,14 +1248,15 @@ RAID_CONFIGS = [
 
 
 @pytest.mark.parametrize("name", RAID_CONFIGS)
-def test_live_configs_have_raid_armed_for_five(name):
-    # 20.11: по требованию игрока в рейд вступают все шесть героев:
-    # keis (медик), firewhite, vagojan (аккаунт ok), qdal (аккаунт ok2),
-    # pandei и steel blue ii. Заходим в пещеру сразу, как только дракон
-    # возрождается (`every_respawn`), лидер — keis (он единственный, кто
-    # жмёт «Начать бой!»: в зале это доступно ветерану клана и выше).
+def test_live_configs_have_raid_paused(name):
+    # 20.11 12:20 МСК по требованию игрока походы на дракона остановлены:
+    # у молодых героев разбито снаряжение, купить железо на аукционе и
+    # починить шмотки они могут только прокачавшись. Сначала уровень и
+    # железо — потом рейд. Состав отряда (6 героев, лидер keis, стартеры
+    # keis и firewhite, min_party=6) в конфиге остаётся целым, чтобы
+    # вернуть рейд одним флагом.
     cfg = config(name)
-    assert cfg["raid"]["enabled"] is True
+    assert cfg["raid"]["enabled"] is False
     assert cfg["raid"]["every_respawn"] is True
     assert cfg["raid"]["max_fights_per_day"] == 0
     assert cfg["raid"]["party"], "состав рейда должен остаться в конфиге"
@@ -1270,18 +1271,31 @@ def test_live_configs_have_raid_armed_for_five(name):
 def test_steelblue_is_in_the_raid_party():
     # 20.11 по требованию игрока Steel Blue тоже ходит в рейд: отряд из шести
     # героев (keis — медик, firewhite, vagojan, qdal, pandei, steel blue ii).
+    # Рейд сейчас на паузе, но состав сохранён.
     cfg = config("deploy/config-actions-steelblue.json")
-    assert cfg["raid"]["enabled"] is True
+    assert cfg["raid"]["enabled"] is False
     assert cfg["raid"]["every_respawn"] is True
     assert "31390082" in {p["id"] for p in cfg["raid"]["party"]}
     assert len(cfg["raid"]["party"]) == 6
 
 
 @pytest.mark.parametrize("name", CONFIGS)
-def test_raid_decision_is_offered_when_room_is_open(name):
-    # Рейд включён: при открытом зале планировщик предлагает поход в пещеру.
+def test_raid_decision_is_silent_while_paused(name):
+    # Рейд на паузе: планировщик не предлагает поход в пещеру, даже если
+    # зал открыт и в нём полно наших героев.
     from barbars import rules
     cfg = config(name)
+    decision = rules._pick_raid(
+        rules.GameState(raid={"hp": 100, "ready": [], "waiting": []}), cfg)
+    assert decision is None
+
+
+def test_raid_decision_returns_when_armed_again():
+    # Возврат рейда — одним флагом: с enabled=True поход в пещеру снова
+    # предлагается (состав и min_party=6 проверены выше).
+    from barbars import rules
+    cfg = config(CONFIGS[0])
+    cfg["raid"]["enabled"] = True
     decision = rules._pick_raid(
         rules.GameState(raid={"hp": 100, "ready": [], "waiting": []}), cfg)
     assert decision is not None
@@ -1610,10 +1624,10 @@ def test_auto_equip_requires_explicit_flag():
 
 
 def test_steelblue_config_is_valid_and_keeps_gold_rules():
-    """Конфиг пятого героя: золото не тратим, рейд включён, вклады выключены."""
+    """Конфиг пятого героя: золото не тратим, рейд на паузе, вклады выключены."""
     cfg = json.loads(Path("deploy/config-actions-steelblue.json").read_text(encoding="utf-8"))
     assert cfg["account"] == "steelblue"
-    assert cfg["raid"]["enabled"] is True
+    assert cfg["raid"]["enabled"] is False
     assert cfg["spend"]["clan_donate"]["enabled"] is False
     assert cfg["altar"]["enabled"] is False
     assert cfg["shop"]["enabled"] is False
