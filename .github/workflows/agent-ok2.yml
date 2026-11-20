@@ -149,5 +149,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: logs-ok2-${{ github.run_number }}
-          path: logs/ok2-cloud
+          path: |
+            logs/ok2-cloud
+            logs/ok-autologin-lastpage.html
+            logs/ok-autologin-lastpage.png
+            logs/ok-autologin-challenge.png
           retention-days: 14

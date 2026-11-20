@@ -63,6 +63,24 @@ CHALLENGE_MARKERS = (
     "попасть к злоумышленникам",
 )
 
+# Сообщения об отказе во входе. Их ОК показывает на той же форме, поэтому
+# без явной диагностики нельзя отличить «неверный пароль» от «нужен SMS».
+LOGIN_ERROR_MARKERS = (
+    "неправильн",
+    "неверн",
+    "не существует",
+    "нет такого",
+    "заблокирован",
+    "слишком много попыток",
+    "попыток входа",
+    "ошибка входа",
+    "вы не можете войти",
+    "подтвердите номер",
+    "укажите номер",
+    "телефон",
+    "мы не знаем такого",
+)
+
 
 def log(msg: str) -> None:
     print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
@@ -106,6 +124,35 @@ def challenge_on_page(page) -> str:
         if marker in text:
             return marker
     return ""
+
+
+def login_error_on_page(page) -> str:
+    """Какая именно ошибка входа показана на странице (если показана)."""
+    try:
+        text = " ".join(page.inner_text("body").split()).lower()
+    except Exception:  # noqa: BLE001
+        return ""
+    for marker in LOGIN_ERROR_MARKERS:
+        idx = text.find(marker)
+        if idx >= 0:
+            return text[max(0, idx - 60): idx + 120]
+    return ""
+
+
+def login_kind(login: str) -> str:
+    """Формат логина без раскрытия самого значения.
+
+    ОК принимает e-mail, телефон или ник. Если в секрете лежит, например,
+    телефон без '+' или ник вместо почты, ОК не пустит — и это видно сразу.
+    """
+    value = (login or "").strip()
+    if not value:
+        return "пусто"
+    if "@" in value:
+        return "e-mail"
+    if re.fullmatch(r"\+?\d[\d\s\-()]{6,}", value):
+        return "телефон (с кодом страны или без)"
+    return "ник/иное"
 
 
 def do_login(page, login: str, password: str) -> str:
@@ -189,6 +236,7 @@ def main() -> int:
         return 2
 
     out_dir = Path(args.out)
+    log(f"логин в формате: {login_kind(args.login)}")
     with sync_playwright() as pw:
         ctx = pw.chromium.launch_persistent_context(
             user_data_dir=str(ROOT / args.profile),
@@ -204,7 +252,7 @@ def main() -> int:
         )
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         try:
-            for url in ("https://m.ok.ru/", "https://ok.ru/"):
+            for url in ("https://m.ok.ru/", "https://ok.ru/", "https://m.ok.ru/login"):
                 log(f"открываю {url}")
                 try:
                     page.goto(url, wait_until="domcontentloaded", timeout=60_000)
@@ -240,6 +288,9 @@ def main() -> int:
                             pass
                         ctx.close()
                         return 3
+                    err_text = login_error_on_page(page)
+                    if err_text:
+                        log("❌ отказ во входе: " + err_text[:300])
                 else:
                     log("вход не завершился за отведённое время")
                     try:
@@ -249,6 +300,11 @@ def main() -> int:
                         (ROOT / "logs").mkdir(parents=True, exist_ok=True)
                         (ROOT / "logs" / "ok-autologin-lastpage.html").write_text(
                             page.content(), encoding="utf-8")
+                        try:
+                            page.screenshot(path=str(ROOT / "logs" / "ok-autologin-lastpage.png"),
+                                            full_page=True)
+                        except Exception:  # noqa: BLE001
+                            pass
                     except Exception:  # noqa: BLE001
                         pass
                     ctx.close()
