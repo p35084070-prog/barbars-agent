@@ -331,7 +331,7 @@ def room(ids=PARTY_IDS, ready=True):
 @pytest.mark.parametrize("name", CONFIGS)
 def test_cloud_policies(name):
     c = config(name)
-    assert c["raid"]["min_party"] == 5
+    assert c["raid"]["min_party"] == 6
     assert c["raid"]["can_start"] == (c["account"] in ("keis", "firewhite"))
     assert c["raid"]["leader"] == "keis"
     assert {p["id"] for p in c["raid"]["party"]} == set(PARTY_IDS)
@@ -666,10 +666,10 @@ def test_fight_loop_marks_long_operation(tmp_path):
 
 @pytest.mark.parametrize("ids,allowed", [
     (PARTY_IDS, True),
-    # минус Steel Blue: пятерых достаточно (медик + 4 бойца)
-    (("905853", "31389504", "1286381", "1596900", "11604269"), True),
+    # минус Steel Blue: пятерых уже недостаточно (ждём всех шестерых)
+    (("905853", "31389504", "1286381", "1596900", "11604269"), False),
     # минус Pandei: тоже пятеро
-    (("905853", "31389504", "1286381", "1596900", "31390082"), True),
+    (("905853", "31389504", "1286381", "1596900", "31390082"), False),
     (("905853", "31389504", "1286381", "1596900"), False),
     (("905853", "31389504", "1286381"), False),
     (("905853", "31389504"), False),
@@ -681,11 +681,14 @@ def test_exact_party(ids, allowed):
     assert party_ready(room(ids), config()["raid"]) is allowed
 
 
-def test_party_starts_without_one_fighter_but_needs_the_medic():
-    """Один боец не дошёл — бой всё равно начинается, но наш медик обязателен."""
+def test_party_waits_for_all_six_but_needs_the_medic():
+    """По требованию игрока бой начинается, только когда в зале все шестеро."""
     cfg = config()["raid"]
+    assert cfg["min_party"] == 6
     five = room(("905853", "31389504", "1286381", "1596900", "11604269"))
-    assert party_ready(five, cfg) is True
+    assert party_ready(five, cfg) is False
+    # все шестеро на месте — начинаем
+    assert party_ready(room(PARTY_IDS), cfg) is True
     # без нашего медика (вместо keis — чужой герой) бой не начинаем
     without_medic = room(("31389504", "1286381", "1596900", "11604269", "31390082"))
     assert party_ready(without_medic, cfg) is False
@@ -1256,7 +1259,7 @@ def test_live_configs_have_raid_armed_for_five(name):
     assert cfg["raid"]["every_respawn"] is True
     assert cfg["raid"]["max_fights_per_day"] == 0
     assert cfg["raid"]["party"], "состав рейда должен остаться в конфиге"
-    assert cfg["raid"]["min_party"] == 5
+    assert cfg["raid"]["min_party"] == 6
     assert len(cfg["raid"]["party"]) == 6
     assert {p["id"] for p in cfg["raid"]["party"]} == set(PARTY_IDS)
     assert sum(1 for p in cfg["raid"]["party"] if p.get("role") == "medic") == 1
@@ -1283,7 +1286,7 @@ def test_raid_decision_is_offered_when_room_is_open(name):
         rules.GameState(raid={"hp": 100, "ready": [], "waiting": []}), cfg)
     assert decision is not None
     assert decision.action == "raid"
-    assert decision.params["min_party"] == 5
+    assert decision.params["min_party"] == 6
 
 
 @pytest.mark.parametrize("icon,tier", [

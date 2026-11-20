@@ -36,7 +36,7 @@
     "check_interval_min": 1,
     "repeat_min": 30,
     "stay_sec": 780,
-    "min_party": 5,
+    "min_party": 6,
     "can_start": true,
     "max_fights_per_day": 0,
     "max_turns": 400,
