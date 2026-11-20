@@ -155,6 +155,44 @@ def login_kind(login: str) -> str:
     return "ник/иное"
 
 
+def dismiss_overlays(page) -> None:
+    """Убрать баннеры, перекрывающие форму входа.
+
+    На мобильной странице ОК поверх полей висят два баннера: cookie-баннер
+    («Мы используем cookie-файлы…») и синий («Информация о контенте на
+    платформе»). Они перехватывают клики, и форма остаётся пустой: вход
+    выглядит как «завис», хотя кнопку «Войти» нажать не удалось.
+    """
+    for sel in (
+        "button:has-text('Разрешить все')",
+        "button:has-text('Разрешить все'):visible",
+        "[data-marker='cookie-accept']",
+        "button[aria-label*='Закрыть']",
+        "[aria-label*='Закрыть']",
+        "button.close",
+    ):
+        try:
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible():
+                loc.click(timeout=3000)
+                time.sleep(0.5)
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        page.keyboard.press("Escape")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def fields_filled(page, login: str, password: str) -> bool:
+    """Поля формы всё ещё содержат введённые значения."""
+    try:
+        return (page.locator("input[name='st.email']").first.input_value() == login
+                and page.locator("input[name='st.password']").first.input_value() == password)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def do_login(page, login: str, password: str) -> str:
     """Заполнить форму и отправить. Возвращает '' при успехе, иначе — причину.
 
@@ -163,14 +201,14 @@ def do_login(page, login: str, password: str) -> str:
     отправки, клик с обходом перекрытий и Enter в поле пароля.
     """
     try:
+        dismiss_overlays(page)
         page.fill("input[name='st.email']", login, timeout=15000)
         page.fill("input[name='st.password']", password, timeout=15000)
         page.press("input[name='st.password']", "Tab", timeout=5000)
         # A React hydration can replace the first form just after fill().
         # Verify both fields before submitting; never print their values.
         for _ in range(2):
-            if (page.locator("input[name='st.email']").first.input_value() == login
-                    and page.locator("input[name='st.password']").first.input_value() == password):
+            if fields_filled(page, login, password):
                 break
             page.fill("input[name='st.email']", login, timeout=5000)
             page.fill("input[name='st.password']", password, timeout=5000)
@@ -271,6 +309,7 @@ def main() -> int:
                     log(err)
                     continue
                 deadline = time.time() + args.timeout
+                resubmitted = False
                 while time.time() < deadline:
                     time.sleep(2)
                     if has_session(ctx):
@@ -291,6 +330,18 @@ def main() -> int:
                     err_text = login_error_on_page(page)
                     if err_text:
                         log("❌ отказ во входе: " + err_text[:300])
+                    # Форма на месте, но поля пустые — значит отправка не прошла
+                    # (перекрытие баннером или перерисовка). Пробуем ещё раз.
+                    elif not resubmitted and find_login_form(page) and not fields_filled(page, args.login, args.password):
+                        resubmitted = True
+                        log("поля формы пусты — повторяем отправку (Enter)")
+                        try:
+                            dismiss_overlays(page)
+                            page.fill("input[name='st.email']", args.login, timeout=8000)
+                            page.fill("input[name='st.password']", args.password, timeout=8000)
+                            page.press("input[name='st.password']", "Enter", timeout=8000)
+                        except Exception as exc:  # noqa: BLE001
+                            log("повторная отправка не удалась: " + str(exc).splitlines()[0])
                 else:
                     log("вход не завершился за отведённое время")
                     try:
