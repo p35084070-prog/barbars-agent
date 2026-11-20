@@ -398,7 +398,17 @@
   "account": "keis",
   "paths_relative_to": "repository",
   "clan_quest": {
-    "enabled": true
+    "enabled": true,
+    "prefer": [
+      "Усиленная прокачка",
+      "Рейд на драконов",
+      "Лицом к лицу",
+      "Покорение турниров",
+      "Кровавая арена",
+      "Выжить любой ценой",
+      "Великие свершения"
+    ],
+    "replace": false
   },
   "personal_quest": {
     "enabled": true,

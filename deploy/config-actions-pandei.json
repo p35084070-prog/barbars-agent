@@ -391,7 +391,17 @@
   },
   "paths_relative_to": "repository",
   "clan_quest": {
-    "enabled": true
+    "enabled": true,
+    "prefer": [
+      "Рейд на драконов",
+      "Усиленная прокачка",
+      "Лицом к лицу",
+      "Покорение турниров",
+      "Кровавая арена",
+      "Выжить любой ценой",
+      "Великие свершения"
+    ],
+    "replace": "auto"
   },
   "personal_quest": {
     "enabled": true,

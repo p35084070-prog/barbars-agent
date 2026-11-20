@@ -2519,3 +2519,133 @@ def test_dungeon_entry_uses_the_cave_name_link_not_the_voyti_label():
     g.human = Mock()
     assert g._click_first_game_link(skip_texts=("клановые", "общие", "испытания")) is True
     assert clicked == ["Пещерный стражник"]
+
+# ------------------------------------------------------- клановые задания (страница)
+
+# Разметка взята с реальной страницы /guild/quests/0/16675:
+# свободное задание, чужое активное и наше активное.
+CLAN_QUEST_HTML = """
+<div><img src="/images/icons/flag.png" width="12" height="12" alt="" border="0">
+<span class="link">Рейд на драконов</span>
+<div class="small">Убей 10 боссов в клановых пещерах</div>
+<div>Награда: <img src="/images/icons/mifrilbar.png"><span class="money">4</span>
+<span class="money">30.0M КО</span></div>
+<div><a class="cbtn" href="../../../?wicket:interface=:3:quests:0:startLink::ILinkListener::">
+<span class="be"><span class="bc minor">Взять задание</span></span></a></div>
+</div>
+<div><img src="/images/icons/flag.png" width="12" height="12" alt="" border="0">
+<span class="link">Великие свершения</span>
+<div class="small">Убей 60 врагов в великих битвах</div>
+<div class="small">Прогресс: 0 из 60</div>
+<div class="minor small">Выполняет: <span><img src="/images/icons/blue_warrior.png">
+<a class="" href="../../../user/id/1596900"><span>qdal</span></a></span></div>
+<div><a class="cbtn" href="../../../?wicket:interface=:3:quests:1:cancelLink::ILinkListener::">
+<span class="be"><span class="bc minor">Отменить задание</span></span></a></div>
+</div>
+<div><img src="/images/icons/flag.png" width="12" height="12" alt="" border="0">
+<span class="link">Усиленная прокачка</span>
+<div class="small">Заработай 100.0M опыта</div>
+<div class="small">Прогресс: 7.36M из 100.0M</div>
+<div class="minor small">Выполняет: <span><img src="/images/icons/blue_warrior.png">
+<a class="" href="../../../user/id/905853"><span>keis</span></a></span></div>
+<div><a class="cbtn" href="../../../?wicket:interface=:3:quests:2:cancelLink::ILinkListener::">
+<span class="be"><span class="bc minor">Отменить задание</span></span></a></div>
+</div>
+"""
+
+
+def quest_state(hero_id):
+    """Состояние героя после сбора состояния (как в rules.collect_state)."""
+    state = rules.GameState()
+    state.hero_id = hero_id
+    state.quests = pages.clan_quest_blocks(CLAN_QUEST_HTML)
+    own = pages.own_clan_quest(state.quests, hero_id)
+    state.active_quest = own.title if own else ""
+    state.quest_progress = own.progress_cur if own else None
+    state.quest_progress_total = own.progress_total if own else None
+    return state
+
+
+def test_clan_quest_blocks_parse_holders_and_actions():
+    blocks = pages.clan_quest_blocks(CLAN_QUEST_HTML)
+    assert [q.title for q in blocks] == ["Рейд на драконов", "Великие свершения", "Усиленная прокачка"]
+    assert [q.index for q in blocks] == [0, 1, 2]
+    assert blocks[0].can_take is True
+    assert blocks[0].free is True
+    assert blocks[0].holder_id is None
+    assert "30.0M" in blocks[0].reward_text
+    assert blocks[1].holder_id == 1596900
+    assert blocks[1].holder_nick == "qdal"
+    assert blocks[2].holder_id == 905853
+    assert blocks[2].progress_cur == 7_360_000
+    assert blocks[2].progress_total == 100_000_000
+
+
+def test_own_clan_quest_is_ours_not_a_clanmates():
+    blocks = pages.clan_quest_blocks(CLAN_QUEST_HTML)
+    assert pages.own_clan_quest(blocks, 905853).title == "Усиленная прокачка"
+    assert pages.own_clan_quest(blocks, 11604269) is None
+
+
+def test_raid_quest_is_taken_when_we_hold_nothing():
+    # Раньше агент видел на странице чужое «Прогресс:» и думал, что задание
+    # уже есть, — поэтому «Рейд на драконов» никто не брал.
+    state = quest_state(11604269)
+    assert state.active_quest == ""
+    decision = rules._pick_clan_quest(state, {"clan_quest": {"enabled": True}})
+    assert decision is not None
+    assert decision.action == "quest"
+    assert decision.target == "Рейд на драконов"
+    assert decision.params["index"] == 0
+
+
+def test_own_quest_is_kept_when_replace_is_off():
+    state = quest_state(905853)
+    decision = rules._pick_clan_quest(state, {"clan_quest": {"enabled": True}})
+    assert decision is None
+
+
+def test_own_quest_is_replaced_when_replace_is_on():
+    state = quest_state(905853)
+    decision = rules._pick_clan_quest(state, {"clan_quest": {"enabled": True, "replace": True}})
+    assert decision is not None
+    assert decision.action == "cancel_quest"
+    # номер блока «Усиленная прокачки» — отменяем именно своё задание
+    assert decision.params["index"] == 2
+
+
+def test_prefer_list_keeps_the_quest_we_already_hold():
+    state = quest_state(905853)
+    config = {"clan_quest": {"enabled": True, "prefer": ["Усиленная прокачка", "Рейд на драконов"]}}
+    assert rules._pick_clan_quest(state, config) is None
+
+
+def test_expiry_is_detected_on_our_quest_only():
+    html = CLAN_QUEST_HTML.replace("Прогресс: 0 из 60", "Время истекло")
+    blocks = pages.clan_quest_blocks(html)
+    assert blocks[1].expired is True
+    assert blocks[2].expired is False
+    assert blocks[0].expired is False
+
+
+def test_clan_quest_progress_is_not_a_clanmates_progress():
+    state = quest_state(11604269)
+    assert state.quest_progress is None
+    assert state.quest_progress_total is None
+
+
+def test_auto_replace_keeps_a_quest_with_progress():
+    # keis: «Усиленная прокачка» — 7.36M из 100.0M, бросать жалко
+    state = quest_state(905853)
+    config = {"clan_quest": {"enabled": True, "replace": "auto"}}
+    assert rules._pick_clan_quest(state, config) is None
+
+
+def test_auto_replace_swaps_a_quest_without_progress():
+    # qdal: «Великие свершения» — 0 из 60, прогресса нет — можно поменять
+    state = quest_state(1596900)
+    config = {"clan_quest": {"enabled": True, "replace": "auto"}}
+    decision = rules._pick_clan_quest(state, config)
+    assert decision is not None
+    assert decision.action == "cancel_quest"
+    assert decision.params["index"] == 1

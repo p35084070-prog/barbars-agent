@@ -55,6 +55,8 @@ class GameState:
     targets: list[pages.FightTarget] = field(default_factory=list)
     quests: list[pages.ClanQuest] = field(default_factory=list)
     active_quest: str = ""
+    # id нашего героя — по нему узнаём, какое клановое задание держим мы
+    hero_id: int | None = None
     # личные (ежедневные) задания: за выполненное дают опыт
     personal_quests: list[pages.PersonalQuest] = field(default_factory=list)
     # прогресс активного задания (единственный точный счётчик опыта:
@@ -207,11 +209,18 @@ def collect_state(game: Game, config: dict[str, Any]) -> GameState:
     # 5. Клановые задания.
     if game.guild_id:
         game.goto(f"https://barbars.ru/guild/quests/0/{game.guild_id}")
-        state.active_quest = pages.active_clan_quest(game)
-        state.quests = pages.clan_quests(game)
+        state.hero_id = game.hero_id
+        blocks = pages.clan_quests(game)
+        state.quests = blocks
+        # «своё» задание — по id героя в ссылке «Выполняет: <ник>».
+        # Раньше брали первое «Прогресс:» на странице — это было чужое задание,
+        # из-за чего наши герои никогда не брали новые задания клана.
+        own = pages.own_clan_quest(blocks, game.hero_id)
+        state.active_quest = own.title if own else ""
         # просроченное задание надо отменить, иначе новое не взять
-        state.quest_expired = pages.quest_expired(game)
-        state.quest_progress, state.quest_progress_total = pages.quest_progress(game)
+        state.quest_expired = bool(own and own.expired)
+        state.quest_progress = own.progress_cur if own else None
+        state.quest_progress_total = own.progress_total if own else None
 
     # 6. Личные (ежедневные) задания — награда за них и есть опыт героя.
     if config.get("personal_quest", {}).get("enabled"):
@@ -301,14 +310,19 @@ def decide(state: GameState, config: dict[str, Any]) -> Decision:
     if state.talent_points > 0:
         return Decision("talent", reason=f"не потрачено очков талантов: {state.talent_points}")
 
-    # 5. Клановое задание — если активного нет, берём подходящее.
+    # 5. Клановое задание — берём нужное, а ненужное отменяем.
     #    Просроченное («Время истекло») сначала отменяем: иначе новое не взять.
     if config.get("clan_quest", {}).get("enabled", True):
-        if state.quest_expired:
-            return Decision("cancel_quest", reason="задание просрочено — отменяем, чтобы взять новое")
-        if not state.active_quest and state.quests:
-            wanted = _pick_quest(state)
-            return Decision("quest", target=wanted, params={"index": wanted.index}, reason="берём клановое задание")
+        if state.quest_expired and state.active_quest:
+            return Decision(
+                "cancel_quest",
+                target=state.active_quest,
+                params={"index": _quest_index(state, state.active_quest)},
+                reason="наше задание просрочено — отменяем, чтобы взять новое",
+            )
+        quest_decision = _pick_clan_quest(state, config)
+        if quest_decision is not None:
+            return quest_decision
 
     # 5a. Личное задание: готовая награда — это опыт, забираем сразу.
     personal_quest_cfg = config.get("personal_quest", {})
@@ -1111,22 +1125,87 @@ def _repair_cost(config: dict[str, Any]) -> int | None:
     return config.get("fight", {}).get("repair_reserve", None)
 
 
-def _pick_quest(state: GameState) -> pages.ClanQuest:
-    """Приоритет: задания, которые мы реально выполняем текущими боями."""
-    priority = (
-        "Усиленная прокачка",
-        "Рейд на драконов",
-        "Лицом к лицу",
-        "Покорение турниров",
-        "Кровавая арена",
-        "Выжить любой ценой",
-        "Великие свершения",
-    )
-    for want in priority:
+# Приоритет клановых заданий. «Рейд на драконов» — наш главный: за 10 убитых
+# боссов в клановых пещерах клану дают 4 мифрила + 30.0M КО + 1-5 звёзд.
+CLAN_QUEST_PRIORITY = (
+    "Рейд на драконов",
+    "Усиленная прокачка",
+    "Лицом к лицу",
+    "Покорение турниров",
+    "Кровавая арена",
+    "Выжить любой ценой",
+    "Великие свершения",
+)
+
+
+def _quest_index(state: GameState, title: str) -> int:
+    """Номер блока задания на странице (по нему кликаем «Отменить задание»)."""
+    for q in state.quests:
+        if q.title == title:
+            return q.index
+    return 0
+
+
+def _pick_clan_quest(state: GameState, config: dict[str, Any]) -> Decision | None:
+    """Какое клановое задание взять — или какое своё отменить.
+
+    На странице заданий видны ВСЕ задания клана, в том числе чужие активные.
+    Поэтому «своё» задание определяем по id героя в ссылке «Выполняет: <ник>».
+    Иначе агент считал, что у него уже есть задание (чужое!), и никогда не
+    брал новое — «Рейд на драконов» так и оставался не взятым.
+
+    Настройки: clan_quest.prefer (приоритет названий) и clan_quest.replace
+    (менять ли своё задание на более приоритетное).
+    """
+    cfg = config.get("clan_quest", {})
+    prefer = cfg.get("prefer") or list(CLAN_QUEST_PRIORITY)
+    replace = cfg.get("replace", False)
+
+    ours = pages.own_clan_quest(state.quests, state.hero_id)
+
+    wanted = None
+    for want in prefer:
         for q in state.quests:
-            if want.lower() in (q.title + " " + q.description).lower():
-                return q
-    return state.quests[0]
+            if want.lower() not in (q.title + " " + q.description).lower():
+                continue
+            if q.holder_id in (None, state.hero_id):
+                wanted = q
+                break
+        if wanted is not None:
+            break
+    if wanted is None:
+        for q in state.quests:
+            if q.free and q.can_take:
+                wanted = q
+                break
+    if wanted is None:
+        return None
+
+    if ours is not None:
+        if ours.index == wanted.index:
+            return None          # уже держим нужное задание
+        if replace == "auto":
+            # «auto» — меняем задание только если по нему нет прогресса:
+            # жалко бросать начатое (у keis, например, 7.36M из 100.0M опыта).
+            if ours.progress_cur:
+                return None
+        elif not replace:
+            return None          # своё задание не трогаем
+        return Decision(
+            "cancel_quest",
+            target=ours.title,
+            params={"index": ours.index},
+            reason=f"своё задание «{ours.title}» меняем на «{wanted.title}»",
+        )
+
+    if wanted.can_take:
+        return Decision(
+            "quest",
+            target=wanted.title,
+            params={"index": wanted.index},
+            reason=f"берём клановое задание «{wanted.title}»",
+        )
+    return None
 
 
 # Режим личного задания → тип боя (для «выполнить задание» со ссылкой на

@@ -1202,37 +1202,71 @@ class Game:
             repaired = True
         return repaired
 
-    def take_clan_quest(self, index: int = 0) -> bool:
-        """Взять клановое задание по порядковому номеру.
+    def _quest_link(self, kind: str, index: int | None = None):
+        """Ссылка задания по её виду: startLink / cancelLink / helpLink.
 
-        После клика проверяем страницу: задание считается взятым, если
-        появилось «Выполняет: <ник>» — клик иногда проходит, но ответ
-        приходит слишком поздно и клик выглядит неудачным.
+        Номер в ссылке (quests:N:...) совпадает с порядковым номером блока
+        задания на странице — по нему и выбираем нужное задание, а не первое
+        подряд: чужие задания на странице тоже имеют «Отменить задание».
         """
-        locator = self.p.locator("a:has-text('Взять задание'), button:has-text('Взять задание')")
-        if locator.count() == 0:
+        locator = self.p.locator(f"a[href*='{kind}']")
+        try:
+            count = locator.count()
+        except Exception:  # noqa: BLE001
+            return None
+        fallback = None
+        for i in range(count):
+            link = locator.nth(i)
+            try:
+                href = link.get_attribute("href") or ""
+            except Exception:  # noqa: BLE001
+                continue
+            match = re.search(rf"quests:(\d+):{kind}", href)
+            if not match:
+                continue
+            if index is None:
+                fallback = fallback or link
+            elif int(match.group(1)) == index:
+                return link
+        return fallback
+
+    def take_clan_quest(self, index: int = 0) -> bool:
+        """Взять клановое задание с порядковым номером index на странице.
+
+        Ссылка «Взять задание» лежит внутри блока задания, её номер
+        quests:N:startLink совпадает с номером блока.
+        """
+        link = self._quest_link("startLink", index)
+        if link is None:
             return False
         try:
-            locator.nth(min(index, locator.count() - 1)).click(timeout=8000)
-        except Exception:
-            pass
+            link.scroll_into_view_if_needed(timeout=3000)
+            link.click(timeout=8000)
+        except Exception:  # noqa: BLE001
+            return False
         self._settle()
-        try:
-            if "Выполняет:" in self.body_text():
-                return True
-        except Exception:
-            pass
         return True
 
-    def cancel_clan_quest(self) -> bool:
-        """Отменить текущее задание («Отменить задание»)."""
-        locator = self.p.locator(
-            "a:has-text('Отменить задание'), button:has-text('Отменить задание')")
-        if locator.count() == 0:
+    def cancel_clan_quest(self, index: int | None = None) -> bool:
+        """Отменить задание (по умолчанию — наше, а не чужое)."""
+        if index is None:
+            from . import pages
+
+            try:
+                blocks = pages.clan_quest_blocks(self.p.content())
+            except Exception:  # noqa: BLE001
+                return False
+            own = pages.own_clan_quest(blocks, self.hero_id)
+            if own is None:
+                return False
+            index = own.index
+        link = self._quest_link("cancelLink", index)
+        if link is None:
             return False
         try:
-            locator.first.click(timeout=8000)
-        except Exception:
+            link.scroll_into_view_if_needed(timeout=3000)
+            link.click(timeout=8000)
+        except Exception:  # noqa: BLE001
             return False
         self._settle()
         return True

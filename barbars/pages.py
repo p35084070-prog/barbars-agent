@@ -21,10 +21,39 @@ class FightTarget:
 
 @dataclass
 class ClanQuest:
+    """Клановое задание со страницы /guild/quests/0/<id>.
+
+    Разметка блока задания:
+        <span class="link">Рейд на драконов</span>
+        <div class="small">Убей 10 боссов в клановых пещерах</div>
+        [<div class="small">Прогресс: 3 из 10</div>]
+        [<div class="minor small">Выполняет: <a href="../../../user/id/905853">keis</a></div>]
+        [<a href="...:quests:0:startLink...">Взять задание</a>]
+
+    Номер блока на странице совпадает с номером в ссылке wicket
+    (quests:N:startLink / quests:N:cancelLink) — по нему и кликаем.
+    """
+
     title: str
     description: str = ""
     reward_text: str = ""
     index: int = 0
+    # кто держит задание (id героя из ссылки «Выполняет: <ник>»)
+    holder_id: int | None = None
+    holder_nick: str = ""
+    progress_cur: int | None = None
+    progress_total: int | None = None
+    # есть ссылка «Взять задание» — задание доступно
+    can_take: bool = False
+    # это наше задание — есть ссылка «Отменить задание»
+    can_cancel: bool = False
+    # задание просрочено («Время истекло»)
+    expired: bool = False
+
+    @property
+    def free(self) -> bool:
+        """Задание никем не взято."""
+        return self.holder_id is None
 
 
 @dataclass
@@ -162,73 +191,107 @@ def dungeon_list(game: Game) -> list[FightTarget]:
     return out
 
 
-def clan_quests(game: Game) -> list[ClanQuest]:
-    """Задания клана на /guild/quests/0/<id>. Активное задание не возвращается."""
+_FLAG_RE = re.compile(r'<img src="/images/icons/flag\.png"', re.IGNORECASE)
+
+
+def clan_quest_blocks(html: str) -> list[ClanQuest]:
+    """Все блоки заданий клана со страницы /guild/quests/0/<id>.
+
+    Блок задания начинается с флажка (/images/icons/flag.png) — по нему режем
+    страницу. Внутри блока: название, описание, награда, прогресс, кто выполняет
+    («Выполняет: <ник>» со ссылкой user/id/<id>) и ссылка действия
+    (quests:N:startLink / quests:N:cancelLink / quests:N:helpLink).
+    """
     quests: list[ClanQuest] = []
-    lines = [line.strip() for line in game.body_text().splitlines()]
-    verbs = ("Убей", "Победи", "Выживи", "Заработай")
-    title = ""
-    index = 0
-    for position, line in enumerate(lines):
-        if line.startswith(verbs):
-            description = line
-            reward = ""
-            active = False
-            for follow in lines[position + 1 : position + 6]:
-                if follow.startswith("Награда:"):
-                    reward = follow[len("Награда:") :].strip()
-                    break
-                if follow.startswith("Прогресс:") or follow.startswith("Выполняет:"):
-                    active = True
-            if not active and title:
-                quests.append(
-                    ClanQuest(
-                        title=title,
-                        description=description,
-                        reward_text=reward,
-                        index=index,
-                    )
-                )
-                index += 1
-            title = ""
-        elif line and not line.startswith(("Награда:", "Прогресс:", "Выполняет:", "Осталось:", "Подробная", "Клановое")):
-            title = line
+    for index, part in enumerate(_FLAG_RE.split(html)[1:]):
+        m = re.search(r'<span class="link">(.*?)</span>', part, re.S)
+        if not m:
+            continue
+        title = _strip_tags(m.group(1))
+        if not title:
+            continue
+        desc_m = re.search(r'<div class="small">(.*?)</div>', part, re.S)
+        description = _strip_tags(desc_m.group(1)) if desc_m else ""
+        reward_m = re.search(r"Награда:(.*?)</div>", part, re.S)
+        reward_text = _strip_tags(reward_m.group(1)) if reward_m else ""
+        cur = total = None
+        pm = re.search(r"Прогресс:\s*([\d.,]+[KkMmG]?)\s*из\s*([\d.,]+[KkMmG]?)", part)
+        if pm:
+            cur, total = parse_amount(pm.group(1)), parse_amount(pm.group(2))
+        holder_id: int | None = None
+        holder_nick = ""
+        hm = re.search(r"Выполняет:.*?user/id/(\d+)\"[^>]*>(?:<[^>]+>)*([^<]{0,40})", part, re.S)
+        if hm:
+            holder_id = int(hm.group(1))
+            holder_nick = _strip_tags(hm.group(2))
+        quests.append(
+            ClanQuest(
+                title=title,
+                description=description,
+                reward_text=reward_text,
+                index=index,
+                holder_id=holder_id,
+                holder_nick=holder_nick,
+                progress_cur=cur,
+                progress_total=total,
+                can_take=bool(re.search(rf"quests:{index}:startLink", part)),
+                can_cancel=bool(re.search(rf"quests:{index}:cancelLink", part)),
+                expired="Время истекло" in part,
+            )
+        )
     return quests
 
 
-def active_clan_quest(game: Game) -> str:
-    """Название уже взятого задания (пусто, если заданий нет)."""
-    lines = [line.strip() for line in game.body_text().splitlines()]
-    for position, line in enumerate(lines):
-        if line.startswith("Прогресс:") or line.startswith("Выполняет:"):
-            for back in range(position - 1, -1, -1):
-                candidate = lines[back]
-                if candidate and not candidate.startswith(("Клановые задания", "Выполни задание")):
-                    return candidate
-    return ""
+def clan_quests(game: Game) -> list[ClanQuest]:
+    """Задания клана со страницы /guild/quests/0/<id> — все, с метаданными."""
+    try:
+        html = game.p.content()
+    except Exception:  # noqa: BLE001
+        return []
+    return clan_quest_blocks(html)
 
 
-def quest_expired(game: Game) -> bool:
-    """Активное задание просрочено («Время истекло»).
+def own_clan_quest(quests: list[ClanQuest], hero_id: int | None) -> ClanQuest | None:
+    """Задание, которое держит именно наш герой.
+
+    Раньше брали первое «Прогресс:»/«Выполняет:» на странице — а это ЧУЖОЕ
+    задание, из-за чего наши герои никогда не брали новые (в том числе
+    «Рейд на драконов», за который дают 4 мифрила и 30.0M КО).
+    """
+    if not hero_id:
+        return None
+    for quest in quests:
+        if quest.holder_id == hero_id:
+            return quest
+    return None
+
+
+def active_clan_quest(game: Game, hero_id: int | None = None) -> str:
+    """Название задания, которое держит наш герой (пусто, если нет)."""
+    quest = own_clan_quest(clan_quests(game), hero_id)
+    return quest.title if quest else ""
+
+
+def quest_expired(game: Game, hero_id: int | None = None) -> bool:
+    """Наше задание просрочено («Время истекло»).
 
     Такое задание надо отменить, иначе агент не возьмёт новое — и не будет
-    ни награды, ни опыта за задание.
+    ни награды, ни опыта за задание. Чужое просроченное задание нас не касается.
     """
-    text = " ".join(game.body_text().split())
-    return "Время истекло" in text
+    quest = own_clan_quest(clan_quests(game), hero_id)
+    return bool(quest and quest.expired)
 
 
-def quest_progress(game: Game) -> tuple[int | None, int | None]:
-    """Прогресс активного задания: ('Прогресс: 29.2K из 100.0M').
+def quest_progress(game: Game, hero_id: int | None = None) -> tuple[int | None, int | None]:
+    """Прогресс НАШЕГО задания: ('Прогресс: 29.2K из 100.0M').
 
     Это единственный ТОЧНЫЙ счётчик опыта: на странице героя значение
     округлено до 0.01G, поэтому рост опыта там не виден.
     """
-    text = " ".join(game.body_text().split())
-    m = re.search(r"Прогресс:\s*([\d.,]+[KkMmG]?)\s*из\s*([\d.,]+[KkMmG]?)", text, re.IGNORECASE)
-    if not m:
+    quest = own_clan_quest(clan_quests(game), hero_id)
+    if quest is None:
         return None, None
-    return parse_amount(m.group(1)), parse_amount(m.group(2))
+    return quest.progress_cur, quest.progress_total
 
 
 def _strip_tags(html: str) -> str:

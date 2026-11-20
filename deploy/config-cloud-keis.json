@@ -306,7 +306,17 @@
   "daily_file": "state/keis/daily.json",
   "account": "keis",
   "clan_quest": {
-    "enabled": true
+    "enabled": true,
+    "prefer": [
+      "Усиленная прокачка",
+      "Рейд на драконов",
+      "Лицом к лицу",
+      "Покорение турниров",
+      "Кровавая арена",
+      "Выжить любой ценой",
+      "Великие свершения"
+    ],
+    "replace": false
   },
   "personal_quest": {
     "enabled": true,

@@ -444,7 +444,7 @@ class Agent:
         elif decision.action == "personal_quest_claim":
             self._do_personal_quest_claim(decision)
         elif decision.action == "cancel_quest":
-            self._do_cancel_quest()
+            self._do_cancel_quest(decision)
         elif decision.action == "fight":
             self._do_fight(decision)
         elif decision.action == "donate":
@@ -2215,14 +2215,23 @@ class Agent:
         self.log("не удалось потратить очко таланта — вернусь к талантам позже")
         self.talent_blocked_until = time.time() + 1800
 
-    def _do_cancel_quest(self) -> None:
-        """Отменить просроченное клановое задание — иначе новое не взять."""
+    def _do_cancel_quest(self, decision: rules.Decision | None = None) -> None:
+        """Отменить клановое задание — иначе новое не взять.
+
+        Отменяем именно СВОЁ задание (по номеру блока на странице): у чужих
+        заданий на той же странице тоже есть ссылка «Отменить задание».
+        """
         if not self.game.guild_id:
             self.log("нет клана — отменять нечего")
             return
+        index = None
+        if decision is not None:
+            raw = decision.params.get("index")
+            if raw is not None:
+                index = int(raw)
         self.game.goto(f"guild/quests/0/{self.game.guild_id}")
-        if self.game.cancel_clan_quest():
-            self.log("задание просрочено — отменили, берём новое")
+        if self.game.cancel_clan_quest(index):
+            self.log(f"задание «{decision.target if decision else ''}» отменено")
         else:
             self.log("отменить не удалось (похоже, задание уже отменено)", "WARN")
 
