@@ -11671,8 +11671,8 @@
     "reopen_at": 1795162528.2506995
   },
   "hero_maxima": {
-    "max_hp": 994,
-    "max_energy": 1244
+    "max_hp": 2844,
+    "max_energy": 3086
   },
   "raid_wait_for_closed_since": 0,
   "raid_assembly_since": 1795166095.8965228,
