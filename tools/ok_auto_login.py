@@ -45,6 +45,12 @@ MOBILE_HEADERS = {
     "Sec-CH-UA-Mobile": "?1",
     "Sec-CH-UA-Platform": '"Android"',
 }
+# Десктопная версия ОК: на ней форма входа работает надёжнее, чем в мобильной
+# (в мобильной после отправки ОК уводит на «Этой страницы нет в OK»).
+DESKTOP_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/141.0.0.0 Safari/537.36"
+)
 
 # Куки, которые реально нужны для сессии ОК (как в ok_export_cookies.py).
 ESSENTIAL = {"domain_sid", "sid", "JSESSIONID", "ENVOY_JSESSIONID", "remixerp",
@@ -244,12 +250,12 @@ def do_login(page, login: str, password: str) -> str:
     return "не удалось отправить форму: " + " | ".join(errors[:3])
 
 
-def export(ctx, out_dir: Path) -> tuple[int, int]:
+def export(ctx, out_dir: Path, ua: str = IPHONE_UA) -> tuple[int, int]:
     """Сохранить сессию в формате ok_export_cookies.py."""
     cookies = ctx.cookies()
     session = {c["name"]: c for c in cookies
                if "ok.ru" in c["domain"] or c["name"] in ESSENTIAL}
-    payload = {"ua": IPHONE_UA, "cookies": list(session.values()),
+    payload = {"ua": ua, "cookies": list(session.values()),
                "at": datetime.now().isoformat(timespec="seconds")}
     out_dir.mkdir(parents=True, exist_ok=True)
     raw = json.dumps(payload, ensure_ascii=False, indent=1).encode()
@@ -267,6 +273,8 @@ def main() -> int:
     ap.add_argument("--profile", default="profile-ok-autologin")
     ap.add_argument("--timeout", type=int, default=120)
     ap.add_argument("--headed", dest="headless", action="store_false", default=True)
+    ap.add_argument("--desktop", action="store_true",
+                    help="десктопная версия ОК: форма входа на ней работает надёжнее")
     args = ap.parse_args()
 
     if not args.login or not args.password:
@@ -275,22 +283,32 @@ def main() -> int:
 
     out_dir = Path(args.out)
     log(f"логин в формате: {login_kind(args.login)}")
-    with sync_playwright() as pw:
-        ctx = pw.chromium.launch_persistent_context(
-            user_data_dir=str(ROOT / args.profile),
-            headless=args.headless,
-            viewport={"width": 390, "height": 844},
-            user_agent=IPHONE_UA,
+    ua = DESKTOP_UA if args.desktop else IPHONE_UA
+    viewport = {"width": 1280, "height": 800} if args.desktop else {"width": 390, "height": 844}
+    launch_kwargs = dict(
+        user_data_dir=str(ROOT / args.profile),
+        headless=args.headless,
+        viewport=viewport,
+        user_agent=ua,
+        locale="ru-RU",
+    )
+    if args.desktop:
+        launch_kwargs["extra_http_headers"] = {"Accept-Language": "ru-RU,ru;q=0.9"}
+    else:
+        launch_kwargs.update(
             is_mobile=True,
             has_touch=True,
             device_scale_factor=3,
-            locale="ru-RU",
             extra_http_headers=MOBILE_HEADERS,
             args=["--disable-blink-features=AutomationControlled", "--touch-events=enabled"],
         )
+    with sync_playwright() as pw:
+        ctx = pw.chromium.launch_persistent_context(**launch_kwargs)
         page = ctx.pages[0] if ctx.pages else ctx.new_page()
         try:
-            for url in ("https://m.ok.ru/", "https://ok.ru/", "https://m.ok.ru/login"):
+            urls = (("https://ok.ru/", "https://ok.ru/login") if args.desktop
+                    else ("https://m.ok.ru/", "https://ok.ru/", "https://m.ok.ru/login"))
+            for url in urls:
                 log(f"открываю {url}")
                 try:
                     page.goto(url, wait_until="domcontentloaded", timeout=60_000)
@@ -358,14 +376,14 @@ def main() -> int:
                             pass
                     except Exception:  # noqa: BLE001
                         pass
-                    ctx.close()
-                    return 4
+                    # Ещё остались адреса — пробуем следующий (например, ok.ru/login).
+                    continue
 
             if not has_session(ctx):
                 log("❌ сессия не получена")
                 ctx.close()
                 return 4
-            count, size = export(ctx, out_dir)
+            count, size = export(ctx, out_dir, ua)
             log(f"✅ сессия сохранена: {count} cookie, base64+gz {size} байт")
             ctx.close()
         except Exception as exc:  # noqa: BLE001

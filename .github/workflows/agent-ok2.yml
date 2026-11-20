@@ -65,7 +65,15 @@ jobs:
           mkdir -p state logs
           # Неудачный автовход не должен валить job: шаг ниже возьмёт сессию из секрета.
           python -u tools/ok_auto_login.py --out state/ok2 --profile profile-ok2-autologin --timeout 120 \
-            || echo 'автовход не прошёл — берём сессию из OK2_SESSION_B64'
+            || echo 'автовход (мобильный) не прошёл — берём сессию из OK2_SESSION_B64'
+          # Запасной путь: десктопная версия ОК — на ней форма входа работает
+          # надёжнее (в мобильной после отправки ОК уводит на 404).
+          if [ ! -s state/ok2/ok-session.b64 ]; then
+            echo 'пробуем вход через десктопную версию ОК'
+            python -u tools/ok_auto_login.py --out state/ok2 --profile profile-ok2-desktop \
+              --desktop --timeout 120 \
+              || echo 'автовход (десктоп) не прошёл — берём сессию из OK2_SESSION_B64'
+          fi
           echo "::add-mask::$(printf '%s' "$OK_PASSWORD" | head -c 2)"
 
       - name: Восстановить сессию ОК
