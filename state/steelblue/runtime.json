@@ -3,7 +3,7 @@
     "max_hp": 1320,
     "max_energy": 1816
   },
-  "tower_paused": false,
+  "tower_paused": true,
   "raid_wait_for_closed": false,
   "raid_wait_for_closed_since": 0,
   "raid_roster": [
