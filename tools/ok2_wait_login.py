@@ -38,9 +38,10 @@ MOBILE_HEADERS = {
     "Sec-CH-UA-Mobile": "?1",
     "Sec-CH-UA-Platform": '"Android"',
 }
-# Настоящая авторизация. Одной cookie sid не хватает: её ОК ставит и
-# анонимным посетителям (тогда страница отдаёт «Вход в ОК»).
-AUTH_MARKERS = ("remixerp", "user_id", "AUTHCODE")
+# Настоящая авторизация. Одной cookie sid/AUTHCODE не хватает: их ОК ставит и
+# анонимным посетителям (тогда страница отдаёт «Вход в ОК»). Признак входа —
+# cookie _userIds/_suserIds (или remixerp/user_id у новых версий).
+AUTH_MARKERS = ("_userIds", "_suserIds", "remixerp", "user_id")
 ESSENTIAL = {"domain_sid", "sid", "JSESSIONID", "ENVOY_JSESSIONID", "remixerp",
               "user_id", "lp", "__last_online", "fpId", "tkn", "bci"}
 
@@ -83,10 +84,14 @@ def main() -> int:
             log(f"ошибка перехода: {str(exc).splitlines()[0]}")
         log("окно ОК открыто — войдите под аккаунтом Qdle (qdal)")
         deadline = time.time() + args.timeout
+        announced = False
         while time.time() < deadline:
             if authorized(ctx):
                 log("✅ авторизация видна — сохраняю сессию")
                 break
+            if not announced:
+                log("(ждём реального входа: cookie _userIds появляются только после входа)")
+                announced = True
             time.sleep(2)
         else:
             log("❌ вход не завершён за отведённое время")
