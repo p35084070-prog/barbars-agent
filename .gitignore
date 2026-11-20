@@ -15,10 +15,15 @@ credentials-*.json
 
 # Живая сессия Одноклассников — это и есть пароль от аккаунта.
 # В репозиторий она попадать не должна ни в каком виде.
+# Шаблоны покрывают и ok2-канал (qdal): state/ok2-session.b64 и .json.
 state/ok-session.json
 state/ok-session.b64
+state/ok*-session.json
+state/ok*-session.b64
 ok-session*.json
 ok-session*.b64
+ok*-session*.json
+ok*-session*.b64
 
 # Локальные конфиги (с путями к рабочему столу) — в облаке свои
 config.json
