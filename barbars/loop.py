@@ -1148,6 +1148,7 @@ class Agent:
         url = str(cfg.get("url", "https://barbars.ru/game/dragonDungeon"))
         check = max(2, int(cfg.get("room_check_sec", 8)))
         deadline = time.time() + int(cfg.get("assembly_sec", 600))
+        waited_in_place = 0
         self.in_long_op = True
         try:
             if self.runtime.get("raid_active"):
@@ -1198,6 +1199,21 @@ class Agent:
                     self.runtime["raid_wait_for_closed_since"] = 0
                     self.runtime["raid_roster"] = []
                     self._schedule_respawn_check(info)
+                    # Окно, когда пещера открыта, короткое (замер 20.11:
+                    # открыто ~2-3 минуты каждые ~5). Если откат скоро истекает —
+                    # ждём на месте, а не уходим в другие дела: иначе отряд
+                    # проскакивает окно и бой просто не начинается.
+                    # Ожидание включается настройкой `wait_open_sec` (0 — выключено).
+                    wait_open = int(cfg.get("wait_open_sec", 0) or 0)
+                    seconds = respawn_seconds(str(info.get("reopen_in", "")))
+                    if wait_open > 0 and seconds is not None and 0 < seconds <= wait_open:
+                        waited_in_place += min(check, max(5, seconds))
+                        if waited_in_place >= wait_open:
+                            self.log("рейд: окно ожидания вышло — возвращаемся к делам")
+                            return
+                        self.log(f"рейд: пещера откроется через {seconds} с — ждём на месте")
+                        time.sleep(min(check, max(5, seconds)))
+                        continue
                     self.log(f"рейд: ждём возрождения, таймер сервера {info.get('reopen_in') or 'неизвестен'}")
                     return
                 if (self.runtime.get("raid_wait_for_closed") and info.get("hp") is not None and info["hp"] > 0

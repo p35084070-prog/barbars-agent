@@ -944,6 +944,12 @@ def _pick_raid(state: GameState, config: dict[str, Any]) -> Decision | None:
     if not info:
         return None
     interval = int(cfg.get("repeat_min", 30)) * 60
+    if cfg.get("every_respawn"):
+        # В режиме «каждый откат» окно короткое (2-3 минуты каждые ~5), поэтому
+        # возвращаться в пещеру надо часто — иначе отряд проскакивает окно.
+        # `repeat_min` при этом остаётся 30: он задаёт ОКНО рейда (raid_window),
+        # и его уменьшение растягивает окно на всё время сессии.
+        interval = max(30, int(cfg.get("check_interval_min", 1) or 1) * 60)
     if state.raid_last_at and (time.time() - state.raid_last_at) < interval:
         return None
     # `max_fights_per_day: 0` в конфигах означает «без ограничения» (как

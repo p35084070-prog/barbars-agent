@@ -708,8 +708,13 @@ def test_readiness_does_not_bleed_across_rows():
 
 def test_shared_windows():
     for name in CONFIGS:
-        assert raid_window(config(name)["raid"], 18000) == (10, 18600, True)
-        assert raid_window(config(name)["raid"], 18601)[2] is False
+        cfg = config(name)["raid"]
+        window, end, due = raid_window(cfg, 18000)
+        # окно общее для всех наших героев: они собираются в одно время
+        assert window == 10 and due is True
+        # и закрывается в конце сборки — после этого рейд не планируется
+        assert raid_window(cfg, end)[2] is False
+        assert raid_window(cfg, end - 1)[2] is True
 
 
 @pytest.mark.parametrize("fatigue", [None, -1, -15, -36, 1])
@@ -1188,7 +1193,8 @@ def test_same_spawn_is_not_started_twice_after_restart(tmp_path):
     a._do_respawn_raid()
     a.game.raid_start.assert_not_called()
     a.game.raid_room.return_value = {"valid": True, "closed": True, "reopen_in": "00:02:00"}
-    a._do_respawn_raid()
+    with patch("barbars.loop.time.sleep"):
+        a._do_respawn_raid()
     assert not a.runtime["raid_wait_for_closed"]
     a.game.raid_room.side_effect = [open_dragon(), open_dragon(), open_dragon()]
     a._raid_fight = Mock()
