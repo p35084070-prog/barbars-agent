@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-20",
+  "date": "2026-11-21",
   "sold": 0,
   "exp": 0,
   "gift": false,
@@ -10,6 +10,5 @@
   "market_bought": [],
   "shop_buy_ids": [],
   "shop_slots": [],
-  "shop_bought": [],
-  "raid": 14
+  "shop_bought": []
 }
